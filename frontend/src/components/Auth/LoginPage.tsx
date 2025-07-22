@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Github, Loader, Sun, Moon } from 'lucide-react';
-import { apiServiceFacade } from '../../services';
+import { Github, Loader, Sun, Moon, Server } from 'lucide-react';
+import { apiServiceFacade, ApiType } from '../../services';
 import { User } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -16,6 +16,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiMode, setApiMode] = useState<ApiType>(apiServiceFacade.getCurrentApiType());
+
+  const handleApiModeChange = (mode: ApiType) => {
+    setApiMode(mode);
+    apiServiceFacade.switchService(mode);
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -33,8 +39,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center relative`}>
-      {/* Theme and Language Controls */}
+      {/* Theme, Language and API Mode Controls */}
       <div className="absolute top-6 right-6 flex items-center space-x-4">
+        {/* API Mode Toggle */}
+        <div className="flex items-center space-x-1">
+          <div className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+            isDark ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-700 border border-gray-300'
+          }`}>
+            <div className="flex items-center space-x-1">
+              <Server className="w-3 h-3" />
+              <span className="text-xs">{t('settings.apiMode')}:</span>
+            </div>
+          </div>
+          {(['MOCK', 'API'] as const).map(modeOption => (
+            <button
+              key={modeOption}
+              onClick={() => handleApiModeChange(modeOption)}
+              className={`px-2 py-2 text-xs rounded-lg transition-colors ${
+                apiMode === modeOption
+                  ? 'bg-blue-600 text-white'
+                  : `${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'}`
+              }`}
+              title={t(`settings.${modeOption === 'MOCK' ? 'mockMode' : 'httpMode'}`)}
+            >
+              {modeOption}
+            </button>
+          ))}
+        </div>
+
         {/* Theme Toggle */}
         <div className="flex items-center space-x-1">
           {(['light', 'dark'] as const).map(themeOption => (
@@ -73,7 +105,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-blue-400 mb-2">SigTrading</h1>
+          <h1 className="text-4xl font-bold text-blue-400 mb-2">Signal Trading</h1>
           <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} text-lg`}>Focus on AI Trading Platform</p>
           <p className={`${isDark ? 'text-gray-500' : 'text-gray-500'} text-sm mt-4`}>{t('auth.loginDescriptionGoogle')}</p>
         </div>

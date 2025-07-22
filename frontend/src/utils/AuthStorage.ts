@@ -4,7 +4,7 @@ import { User } from '../types';
 // Generate AES key based on current domain hash
 const generateAESKey = (): string => {
   const domain = window.location.hostname || 'localhost';
-  return CryptoJS.SHA256(domain + '@sigtrading-security').toString();
+  return CryptoJS.SHA256(domain + '@signal-trading-security').toString();
 };
 
 // User session interface with permissions

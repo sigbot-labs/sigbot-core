@@ -111,7 +111,11 @@
     "trading": "交易",
     "exchanges": "交易所",
     "security": "安全",
-    "notifications": "通知"
+    "notifications": "通知",
+    "apiMode": "API 模式",
+    "mockMode": "模拟模式",
+    "httpMode": "HTTP 模式",
+    "apiModeDescription": "切换 API 服务模式"
   },
   "nodeConfig": {
     "systemPrompt": "系统提示词",

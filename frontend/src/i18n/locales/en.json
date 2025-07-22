@@ -109,7 +109,11 @@
     "trading": "Trading",
     "exchanges": "Exchanges",
     "security": "Security",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "apiMode": "API Mode",
+    "mockMode": "Mock Mode",
+    "httpMode": "HTTP Mode",
+    "apiModeDescription": "Switch API service mode"
   },
   "nodeConfig": {
     "systemPrompt": "System Prompt",

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { BarChart3, Settings, Activity, LogOut, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { apiServiceFacade } from '../services';
+import { BarChart3, Settings, Activity, LogOut, User, ChevronLeft, ChevronRight, Server } from 'lucide-react';
+import { apiServiceFacade, ApiType } from '../services';
 import { User as UserType } from '../types';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
@@ -34,6 +34,12 @@ export const Layout: React.FC<LayoutProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [internalSidebarCollapsed, setInternalSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [apiMode, setApiMode] = useState<ApiType>(apiServiceFacade.getCurrentApiType());
+
+  const handleApiModeChange = (mode: ApiType) => {
+    setApiMode(mode);
+    apiServiceFacade.switchService(mode);
+  };
 
   // Use API service to fetch notification data
   const [notifications, setNotifications] = useState<
@@ -242,7 +248,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="flex items-center space-x-3">
               <SignalTradingIcon size="large" />
               <div>
-                <h1 className="text-xl font-bold text-blue-400">SigTrading</h1>
+                <h1 className="text-xl font-bold text-blue-400">Signal Trading</h1>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>Focus on AI Trading</p>
               </div>
             </div>
@@ -560,7 +566,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       </div>
 
                       {/* Quick Language Toggle */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-2">
                         <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('settings.language')}</span>
                         <div className="flex items-center space-x-1">
                           {(['en', 'zh'] as const).map(langOption => (
@@ -576,6 +582,29 @@ export const Layout: React.FC<LayoutProps> = ({
                               }`}
                             >
                               {langOption === 'en' ? 'EN' : '中'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Quick API Mode Toggle */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('settings.apiMode')}</span>
+                        <div className="flex items-center space-x-1">
+                          {(['MOCK', 'API'] as const).map(modeOption => (
+                            <button
+                              key={modeOption}
+                              onClick={() => handleApiModeChange(modeOption)}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                apiMode === modeOption
+                                  ? 'bg-blue-600 text-white'
+                                  : `${
+                                      isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`
+                              }`}
+                              title={t(`settings.${modeOption === 'MOCK' ? 'mockMode' : 'httpMode'}`)}
+                            >
+                              {modeOption}
                             </button>
                           ))}
                         </div>

@@ -4,7 +4,6 @@ By default, this template supports JSX syntax with Tailwind CSS classes, React h
 
 Use icons from lucide-react for logos.
 
-
 我需要设计一款基于ai的链上trading 套利service，
 
 总体要求如下：
@@ -16,7 +15,7 @@ Use icons from lucide-react for logos.
 四类：Async Collector 异步收集交易执行结果(tx状态和最终滑点)
 3，要求后端用nextjs或python实现(考虑到这是黑客PoC项目你觉得那种好)，要求生成完整不要有任何省略，前端用react vite
 
-前端详细要求如下：
+前端详细逻辑/要求：
 4，新增支持 github 的登录页面，之后所有如Workflow配置操作都应该关联用户
 5，请生成 api_service.ts mock_service.ts http_service.ts，并在右上角支持切换（默认暂时先为 mock）
 6，第一个菜单应该叫 Dashboard（即 Live Monitor）

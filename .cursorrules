@@ -22,4 +22,4 @@ DO NOT GIVE ME HIGH LEVEL SHIT, IF I ASK FOR FIX OR EXPLANATION, I WANT ACTUAL C
 - When you changed the UI, always take a screenshot at the end and make sure that everything works and is displayed correctly.
 - Always check that there are no errors in the console.
 - When you are building something interactive, always open a browser and try to use it by simulating clicks on the elements
-- Fix console warnings starting with [Vue warn]
+- Fix console warnings starting with [React,JS,TS,Vite warn]
