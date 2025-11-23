@@ -1,7 +1,8 @@
 package com.wl4g.signaltrading.poc.service.strategy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wl4g.signaltrading.poc.config.SignalTradingConfiguration.SignalTradingProperties;
-import com.wl4g.signaltrading.poc.model.TradeStrategy;
+import com.wl4g.signaltrading.poc.model.StrategyInfo;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
@@ -18,18 +19,25 @@ import static java.lang.String.format;
 @RequiredArgsConstructor
 public class DefaultStrategyService implements IStrategyService {
     private final SignalTradingProperties config;
+    private final List<StrategyInfo> strategies;
+
+    public DefaultStrategyService(SignalTradingProperties config) {
+        this.config = config;
+        this.strategies = config.getDefaultStrategies();
+    }
 
     @Override
-    public TradeStrategy get(String id) {
+    public StrategyInfo get(Long strategyId) {
         return getAll().stream()
-                .filter(s -> s.getStrategy().getId().equals(id))
+                .filter(s -> s.getId().equals(strategyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(format("Could not get trade strategy with %s", id)));
+                .orElseThrow(() -> new IllegalArgumentException(format("Could not get trade strategy with %s", strategyId)));
     }
 
     @Override
-    public List<TradeStrategy> getAll() {
-        return config.getStrategies();
+    public List<StrategyInfo> getAll() {
+        return strategies;
     }
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 }

@@ -1,10 +1,11 @@
 package com.wl4g.signaltrading.poc.strategy;
 
 import com.wl4g.signaltrading.poc.config.SignalTradingConfiguration.SignalTradingProperties;
-import com.wl4g.signaltrading.poc.model.TradeStrategy.MJSMAStrategyInfo;
-import com.wl4g.signaltrading.poc.service.trading.IExchangeService.ExchangeProvider;
-import com.wl4g.signaltrading.poc.service.trading.TradeSignal;
-import com.wl4g.signaltrading.poc.service.trading.TradingService;
+import com.wl4g.signaltrading.poc.model.StrategyInfo.MJSMAStrategySpec;
+import com.wl4g.signaltrading.poc.strategy.mj.MJSMAStrategyHandler;
+import com.wl4g.signaltrading.poc.trading.IExchangeClient.ExchangeProvider;
+import com.wl4g.signaltrading.poc.trading.types.TradeSignal;
+import com.wl4g.signaltrading.poc.trading.TradingEngine;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -23,30 +24,30 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 
 public class MJSMAStrategyHandlerTest {
-    private TradingService tradingService;
+    private TradingEngine tradingEngine;
     private ExchangeProvider exchangeProvider;
-    private MJSMAStrategyInfo strategyInfo;
+    private MJSMAStrategySpec strategyInfo;
     private MJSMAStrategyHandler handler;
 
     @Before
     public void setUp() {
-        tradingService = Mockito.mock(TradingService.class);
+        tradingEngine = Mockito.mock(TradingEngine.class);
         exchangeProvider = Mockito.mock(ExchangeProvider.class);
-        strategyInfo = Mockito.mock(MJSMAStrategyInfo.class);
+        strategyInfo = Mockito.mock(MJSMAStrategySpec.class);
         handler = new MJSMAStrategyHandler(Mockito.mock(SignalTradingProperties.class),
-                tradingService, exchangeProvider, strategyInfo);
+                tradingEngine, exchangeProvider, strategyInfo);
     }
 
     @Test
     public void makeSignal_ReturnsNull_WhenCurrentPriceIsNull() {
-        Mockito.when(tradingService.getCurrentPrice(any(), anyString())).thenReturn(null);
+        Mockito.when(tradingEngine.getCurrentPrice(any(), anyString())).thenReturn(null);
         Mockito.when(strategyInfo.getSymbol()).thenReturn("BTCUSDT");
         assertNull(handler.makeSignal("BTCUSDT"));
     }
 
     @Test
     public void makeSignal_ReturnsNull_WhenMAFilterEnabledAndMAIsNull() {
-        Mockito.when(tradingService.getCurrentPrice(any(), anyString())).thenReturn(100.0);
+        Mockito.when(tradingEngine.getCurrentPrice(any(), anyString())).thenReturn(100.0);
         Mockito.when(strategyInfo.getSymbol()).thenReturn("BTCUSDT");
         Mockito.when(strategyInfo.getUseMaFilter()).thenReturn(true);
         Mockito.when(handler.calculateMA(any(), anyString(), anyInt(), anyString())).thenReturn(null);
@@ -55,7 +56,7 @@ public class MJSMAStrategyHandlerTest {
 
     @Test
     public void makeSignal_ReturnsSignal_WhenMAFilterDisabled() {
-        Mockito.when(tradingService.getCurrentPrice(any(), anyString())).thenReturn(100.0);
+        Mockito.when(tradingEngine.getCurrentPrice(any(), anyString())).thenReturn(100.0);
         Mockito.when(strategyInfo.getSymbol()).thenReturn("BTCUSDT");
         Mockito.when(strategyInfo.getUseMaFilter()).thenReturn(false);
         Mockito.when(strategyInfo.getStopLossPercent()).thenReturn(0.01);
@@ -63,15 +64,15 @@ public class MJSMAStrategyHandlerTest {
         Mockito.when(strategyInfo.getQuantity()).thenReturn(1.0);
         TradeSignal signal = handler.makeSignal("BTCUSDT");
         assertNotNull(signal);
-        assertEquals("BTCUSDT", signal.getOpenPosition().getSymbol());
-        assertEquals(1.0, signal.getOpenPosition().getQuantity(), 0.0001);
+        assertEquals("BTCUSDT", signal.getOpenPos().getSymbol());
+        assertEquals(1.0, signal.getOpenPos().getQuantity(), 0.0001);
     }
 
     @Test
     public void calculateMA_ReturnsNull_WhenKlinesIsNullOrInsufficient() {
-        Mockito.when(tradingService.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(null);
+        Mockito.when(tradingEngine.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(null);
         assertNull(handler.calculateMA(exchangeProvider, "BTCUSDT", 5, "1m"));
-        Mockito.when(tradingService.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(Collections.emptyList());
+        Mockito.when(tradingEngine.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(Collections.emptyList());
         assertNull(handler.calculateMA(exchangeProvider, "BTCUSDT", 5, "1m"));
     }
 
@@ -83,7 +84,7 @@ public class MJSMAStrategyHandlerTest {
         List<Object> k4 = Arrays.asList(0, 0, 0, 0, "40");
         List<Object> k5 = Arrays.asList(0, 0, 0, 0, "50");
         List<List<Object>> klines = Arrays.asList(k1, k2, k3, k4, k5, k5);
-        Mockito.when(tradingService.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(klines);
+        Mockito.when(tradingEngine.getKlines(any(), anyString(), anyString(), anyInt())).thenReturn(klines);
         Double ma = handler.calculateMA(exchangeProvider, "BTCUSDT", 5, "1m");
         assertEquals(38.0, ma, 0.0001);
     }

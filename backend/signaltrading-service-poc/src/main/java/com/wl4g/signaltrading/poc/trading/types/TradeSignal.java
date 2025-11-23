@@ -1,4 +1,4 @@
-package com.wl4g.signaltrading.poc.service.trading;
+package com.wl4g.signaltrading.poc.trading.types;
 
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
@@ -25,27 +25,27 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TradeSignal {
-    // Trading exchange provider
-    private IExchangeService.ExchangeProvider provider;
-
     // Trading entry position.
     @Valid
-    private @NotNull TradeSignal.OpenPosition openPosition;
+    private @NotNull OpenPosition openPos;
 
     // Trading stop loss.
     @Valid
-    private @Nullable TradeSignal.StopPosition stopLoss;
+    private @Nullable StopPosition stopLoss;
 
     // Trading stop take profit.
     @Valid
-    private @Nullable TradeSignal.StopPosition stopProfit;
+    private @Nullable StopPosition stopProfit;
+
+    // Trading signal description.
+    private @Nullable String description;
 
     @SuppressWarnings("unused")
     public void validate() {
-        if (isNull(openPosition)) {
+        if (isNull(openPos)) {
             throw new IllegalArgumentException("Open position cannot be null");
         }
-        openPosition.validate();
+        openPos.validate();
         if (nonNull(stopLoss)) {
             stopLoss.validate();
         }
@@ -59,15 +59,20 @@ public class TradeSignal {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class OpenPosition {
+        // Trading signal referenced k-line price time.
+        private @NotNull Long refTime;
         private @NotBlank String symbol;
         private @NotNull Direction side;
-        private @Nullable Double price;
-        private @Min(0) double quantity;
         @Builder.Default
         private @NotNull OrderType type = OrderType.MARKET;
+        private @Nullable Double price;
+        private @Min(0) double quantity;
         private boolean makerOnly;
 
         public void validate() {
+            if (isNull(refTime)) {
+                throw new IllegalArgumentException("Open position order must have referenced time");
+            }
             if (isBlank(symbol)) {
                 throw new IllegalArgumentException("Open position order must have symbol");
             }
@@ -78,11 +83,11 @@ public class TradeSignal {
                 throw new IllegalArgumentException("Open position order must be quantity > 0");
             }
             if (type == OrderType.MARKET) {
-                if (price != null) {
+                if (nonNull(price)) {
                     throw new IllegalArgumentException("Market order cannot have price");
                 }
             } else if (type == OrderType.LIMITED) {
-                if (price == null) {
+                if (isNull(price)) {
                     throw new IllegalArgumentException("Limited order must have price");
                 }
                 if (price <= 0) {
@@ -97,6 +102,8 @@ public class TradeSignal {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class StopPosition {
+        // Trading signal referenced k-line price time.
+        private @NotNull Long refTime;
         private @NotBlank String symbol;
         private @NotNull Direction side;
         @Builder.Default
@@ -105,6 +112,9 @@ public class TradeSignal {
         private @Min(0) float quantityPercent;
 
         public void validate() {
+            if (isNull(refTime)) {
+                throw new IllegalArgumentException("Stop position order must have referenced time");
+            }
             if (isBlank(symbol)) {
                 throw new IllegalArgumentException("Stop position order must have symbol");
             }
@@ -114,14 +124,14 @@ public class TradeSignal {
             if (quantityPercent <= 0) {
                 throw new IllegalArgumentException("Stop position order must be quantityPercent > 0");
             }
-            if (type == null) {
+            if (isNull(type)) {
                 throw new IllegalArgumentException("Stop position order must have type");
             } else if (type == OrderType.MARKET) {
-                if (price != null) {
+                if (nonNull(price)) {
                     throw new IllegalArgumentException("Market order cannot have price");
                 }
             } else if (type == OrderType.LIMITED) {
-                if (price == null) {
+                if (isNull(price)) {
                     throw new IllegalArgumentException("Limited order must have price");
                 }
                 if (price <= 0) {

@@ -1,6 +1,6 @@
-package com.wl4g.signaltrading.poc.service;
+package com.wl4g.signaltrading.poc.strategy;
 
-import com.wl4g.signaltrading.poc.service.trading.TradeSignal;
+import com.wl4g.signaltrading.poc.trading.types.TradeSignal;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,11 +38,11 @@ public class TradeStatisticsService {
         }
 
         // Update symbol statistics.
-        SymbolStatistics stats = symbolStats.computeIfAbsent(signal.getOpenPosition().getSymbol(), k -> new SymbolStatistics());
+        SymbolStatistics stats = symbolStats.computeIfAbsent(signal.getOpenPos().getSymbol(), k -> new SymbolStatistics());
         stats.totalTrades.incrementAndGet();
 
         log.info("Recorded - symbol={}, side={}, entryPrice={}, totalTrades={}",
-                signal.getOpenPosition().getSymbol(), signal.getOpenPosition().getSide(), signal.getOpenPosition(), stats.totalTrades.get());
+                signal.getOpenPos().getSymbol(), signal.getOpenPos().getSide(), signal.getOpenPos(), stats.totalTrades.get());
     }
 
     // Update traded result. (take profit and stop loss)
@@ -52,7 +52,7 @@ public class TradeStatisticsService {
                 if (record.getEntryOrderId().equals(entryOrderId)) {
                     record.setResult(isWin ? "WIN" : "LOSS");
                     record.setResultTimestamp(System.currentTimeMillis());
-                    final var stats = symbolStats.get(record.getSignal().getOpenPosition().getSymbol());
+                    final var stats = symbolStats.get(record.getSignal().getOpenPos().getSymbol());
                     if (stats != null) {
                         if (isWin) {
                             stats.winningTrades.incrementAndGet();
@@ -61,7 +61,7 @@ public class TradeStatisticsService {
                         }
                     }
                     log.info("Updated trade result - orderId={}, result={}, winRate={}",
-                            entryOrderId, record.getResult(), getWinRate(record.getSignal().getOpenPosition().getSymbol()));
+                            entryOrderId, record.getResult(), getWinRate(record.getSignal().getOpenPos().getSymbol()));
                     break;
                 }
             }

@@ -1,6 +1,6 @@
 package com.wl4g.signaltrading.poc.service.strategy;
 
-import com.wl4g.signaltrading.poc.model.TradeStrategy;
+import com.wl4g.signaltrading.poc.model.StrategyInfo;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ import java.util.List;
  * @since v1.0
  */
 public interface IStrategyService {
-    TradeStrategy get(String id);
+    StrategyInfo get(Long strategyId);
 
-    List<TradeStrategy> getAll();
+    List<StrategyInfo> getAll();
 }

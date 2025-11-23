@@ -1,4 +1,4 @@
-package com.wl4g.signaltrading.poc.service.trading;
+package com.wl4g.signaltrading.poc.trading.types;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,13 +15,10 @@ import lombok.NoArgsConstructor;
 public class TradeResult {
     // Trading executed result.
     private boolean success;
-
     // Trading executed order ID.
     private Long orderId;
-
     // Trading executed message.
     private String message;
-
     // Trading signal.
     private TradeSignal signal;
 }

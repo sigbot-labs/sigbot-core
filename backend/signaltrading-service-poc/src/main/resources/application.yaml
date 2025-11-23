@@ -81,37 +81,33 @@ logging:
     org:
       springframework: INFO
       apache: INFO
-    feign: DEBUG
+    feign: INFO
     com:
-      wl4g.signaltrading: DEBUG
+      wl4g.signaltrading: INFO
 
-signal-trading:
-  exchanges:
-    binance:
-      mainnet-spot-api-endpoint: https://api.binance.com
-      mainnet-spot-ws-endpoint: wss://fstream.binance.com
-      mainnet-derivatives-api-endpoint: https://fapi.binance.com
-      testnet-spot-api-endpoint: https://testnet.binance.vision
-      testnet-spot-ws-endpoint: wss://testnet.binance.vision
-      testnet-derivatives-api-endpoint: https://testnet.binancefuture.com
-  strategies:
-    - type: "MJSMA"
-      name: "MJSMA-1"
-      description: "First SMA Strategy by HBot/@摸金探长"
-      strategy:
-        # 交易对
-        symbol: BTCUSDT
-        # 交易数量
-        quantity: 0.001
-        # 盈亏比（止盈/止损），设置为2.0表示盈亏比2:1
-        risk-reward-ratio: 2.0
-        # 止损百分比（例如0.01表示1%）
+trading:
+  default-exchanges:
+    - id: 1
+      provider: BINANCE
+      name: defaultBinance
+      description: "The default Binance Exchange configuration instance."
+      configuration:
+        mainnet-spot-api-endpoint: https://api.binance.com
+        mainnet-spot-ws-endpoint: wss://fstream.binance.com
+        mainnet-derivatives-api-endpoint: https://fapi.binance.com
+        testnet-spot-api-endpoint: https://testnet.binance.vision
+        testnet-spot-ws-endpoint: wss://testnet.binance.vision
+        testnet-derivatives-api-endpoint: https://testnet.binancefuture.com
+  default-strategies:
+    - id: 1
+      provider: MJSMA
+      name: MJSMA_1
+      description: "A MJ-SMA Strategy by HBot/@摸金探长"
+      parameters:
+        symbol: "ETHUSDT"
+        quantity: 0.01
+        risk-reward-ratio: 2
         stop-loss-percent: 0.01
-        # 是否使用均线过滤
         use-ma-filter: true
-        # 均线配置
-        ma:
-          # 均线周期
-          periods: 20
-          # K线间隔（1m表示1分钟）
-          interval: 1m
+        ma-periods: 20
+        ma-interval: "1m"
