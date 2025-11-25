@@ -1,0 +1,129 @@
+x-shared-env: &shared-api-worker-env
+  RUST_BACKTRACE: full
+  SWAGGER__ENABLED: ${SWAGGER_ENABLED:-true}
+  LOGGING__MODE: ${LOGGING_MODE:-JSON}
+  LOGGING__LEVEL: ${LOGGING_LEVEL:-DEBUG}
+  CACHE__PROVIDER: ${CACHE_PROVIDER:-Redis}
+  CACHE__REDIS__NODES: ${REDIS_NODES:-redis://127.0.0.1:6379}
+  CACHE__REDIS__PASSWORD: ${REDIS_PASSWORD:-}
+  DATABASE__SYSTEMDB__HOST: ${POSTGRES_HOST:-pgvector}
+  DATABASE__SYSTEMDB__PORT: ${POSTGRES_PORT:-5432}
+  DATABASE__SYSTEMDB__USER: ${POSTGRES_USER:-postgres}
+  DATABASE__SYSTEMDB__PASSWORD: ${POSTGRES_PASSWORD:-changeit}
+  DATABASE__SYSTEMDB__DATABASE: ${POSTGRES_DATABASE:-sigbot}
+  DATABASE__SYSTEMDB__MIN_CONNECTION: ${POSTGRES_MIN_CONNECTION:-1}
+  DATABASE__SYSTEMDB__MAX_CONNECTION: ${POSTGRES_MAX_CONNECTION:-10}
+  DATABASE__PGVECTOR__HOST: ${POSTGRES_HOST:-pgvector}
+  DATABASE__PGVECTOR__PORT: ${POSTGRES_PORT:-5432}
+  DATABASE__PGVECTOR__USER: ${POSTGRES_USER:-postgres}
+  DATABASE__PGVECTOR__PASSWORD: ${POSTGRES_PASSWORD:-changeit}
+  DATABASE__PGVECTOR__DATABASE: ${POSTGRES_DATABASE:-sigbot}
+  DATABASE__PGVECTOR__MIN_CONNECTION: ${POSTGRES_MIN_CONNECTION:-1}
+  DATABASE__PGVECTOR__MAX_CONNECTION: ${POSTGRES_MAX_CONNECTION:-10}
+  SIGBOT__LLM__EMBEDDING__API_KEY: ${SIGBOT_LLM_EMBEDDING_API_KEY}
+  SIGBOT__LLM__EMBEDDING__MODEL: ${SIGBOT_LLM_EMBEDDING_MODEL}
+  SIGBOT__LLM__GENERATE__API_KEY: ${SIGBOT_LLM_GENERATE_API_KEY}
+  SIGBOT__LLM__GENERATE__MODEL: ${SIGBOT_LLM_GENERATE_MODEL}
+  SIGBOT__FORWARDER__MAX_BODY_BYTES: ${SIGBOT_FORWADER_MAX_BODY_BYTES:-65535}
+  SIGBOT__FORWARDER__CONNECT_TIMEOUT: ${SIGBOT_FORWADER_CONNECT_TIMEOUT:-5}
+  SIGBOT__FORWARDER__READ_TIMEOUT: ${SIGBOT_FORWADER_READ_TIMEOUT:-10}
+  SIGBOT__FORWARDER__TOTAL_TIMEOUT: ${SIGBOT_FORWADER_TOTAL_TIMEOUT:-15}
+
+services:
+  systemdb:
+    image: registry.cn-shenzhen.aliyuncs.com/wl4g/pgvector_pgvector:pg16
+    profiles:
+      - pgvector
+    restart: unless-stopped
+    environment:
+      PGUSER: ${DATABASE__SYSTEMDB__USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE__SYSTEMDB__PASSWORD:-changeit}
+      POSTGRES_DB: ${DATABASE__SYSTEMDB__DATABASE:-sigbot_sysdb}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /Volumes/disk1/sigbot/systemdb/data:/var/lib/postgresql/data
+    networks:
+      - sigbot
+    healthcheck:
+      test: [ 'CMD', 'pg_isready' ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  pgvector:
+    image: registry.cn-shenzhen.aliyuncs.com/wl4g/pgvector_pgvector:pg16
+    profiles:
+      - pgvector
+    restart: unless-stopped
+    environment:
+      PGUSER: ${DATABASE__PGVECTOR__USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE__PGVECTOR__PASSWORD:-changeit}
+      POSTGRES_DB: ${DATABASE__PGVECTOR__DATABASE:-sigbot_vecdb}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /Volumes/disk1/sigbot/vectordb/data:/var/lib/postgresql/data
+    networks:
+      - sigbot
+    healthcheck:
+      test: [ 'CMD', 'pg_isready' ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest
+    restart: unless-stopped
+    command: server
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      <<: *x-shared-env
+    ports:
+      - 9000:9000
+    depends_on:
+      - pgvector
+      - redis
+    volumes:
+      # Mount the storage directory to the container, for example system tmp and storing user files.
+      - /Volumes/disk1/sigbot/storage:/var/lib/sigbot/storage
+    networks:
+      - sigbot
+
+  executor:
+    image: registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest
+    restart: unless-stopped
+    command: executor
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      <<: *x-shared-env
+    depends_on:
+      - pgvector
+      - redis
+    volumes:
+      # Mount the storage directory to the container, for example system tmp and storing user files.
+      - /Volumes/disk1/sigbot/storage:/var/lib/sigbot/storage
+    networks:
+      - sigbot
+
+  backtest:
+    image: registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest
+    restart: unless-stopped
+    command: executor
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      <<: *x-shared-env
+    depends_on:
+      - pgvector
+      - redis
+    volumes:
+      # Mount the storage directory to the container, for example system tmp and storing user files.
+      - /Volumes/disk1/sigbot/storage:/var/lib/sigbot/storage
+    networks:
+      - sigbot
+
+networks:
+  sigbot:
+    driver: bridge
+    internal: true

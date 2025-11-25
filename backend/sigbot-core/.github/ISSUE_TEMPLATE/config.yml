@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: SigBot Community Slack
+    url: https://wl4g.com/slack
+    about: Get free help from the SigBot community
+  - name: SigBot Community Discussion
+    url: https://github.com/wl4g/sigbot/discussions
+    about: Get free help from the SigBot community

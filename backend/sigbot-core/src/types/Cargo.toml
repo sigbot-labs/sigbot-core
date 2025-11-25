@@ -1,0 +1,24 @@
+[package]
+name = "sigbot-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Other modules dependencies.
+common-makestruct.workspace = true
+sigbot-utils.workspace = true
+
+# Thirdparty dependencies.
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+utoipa = { workspace = true, features = ["chrono"] }
+validator.workspace = true
+chrono.workspace = true
+hyper.workspace = true
+anyhow.workspace = true
+sqlx.workspace = true

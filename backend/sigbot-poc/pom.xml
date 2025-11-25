@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.7</version>
+        <relativePath/>
+    </parent>
+    <groupId>com.wl4g</groupId>
+    <artifactId>signaltrading-service-poc</artifactId>
+    <version>1.0.0</version>
+    <name>signaltrading-service-poc</name>
+    <description>PoC for Quant Trading</description>
+    <url/>
+    <licenses>
+        <license/>
+    </licenses>
+    <developers>
+        <developer/>
+    </developers>
+    <scm>
+        <connection/>
+        <developerConnection/>
+        <tag/>
+        <url/>
+    </scm>
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+        <!-- <dependency>-->
+        <!--     <groupId>com.vladmihalcea</groupId>-->
+        <!--     <artifactId>hibernate-types-60</artifactId>-->
+        <!--     <version>2.21.1</version>-->
+        <!-- </dependency>-->
+        <!-- <dependency>-->
+        <!--     <groupId>io.hypersistence</groupId>-->
+        <!--     <artifactId>hypersistence-utils-hibernate-55</artifactId>-->
+        <!--     <version>3.5.2</version>-->
+        <!-- </dependency>-->
+        <!-- <dependency>-->
+        <!--     <groupId>org.mybatis.spring.boot</groupId>-->
+        <!--     <artifactId>mybatis-spring-boot-starter</artifactId>-->
+        <!-- </dependency>-->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.wl4g</groupId>
+            <artifactId>infra-common</artifactId>
+            <version>3.1.72</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+        </dependency>
+        <!-- see:https://springdoc.org/#spring-native-support -->
+        <!-- <dependency>-->
+        <!--     <groupId>org.springdoc</groupId>-->
+        <!--     <artifactId>springdoc-openapi-native</artifactId>-->
+        <!--     <version>1.6.11</version>-->
+        <!-- </dependency>-->
+        <!-- <dependency>-->
+        <!--     <groupId>org.springdoc</groupId>-->
+        <!--     <artifactId>springdoc-openapi-ui</artifactId>-->
+        <!--     <version>1.6.14</version>-->
+        <!-- </dependency>-->
+        <!-- <dependency>-->
+        <!--     <groupId>io.swagger.core.v3</groupId>-->
+        <!--     <artifactId>swagger-annotations</artifactId>-->
+        <!--     <version>2.2.7</version>-->
+        <!-- </dependency>-->
+        <!-- https://mvnrepository.com/artifact/io.github.binance/binance-connector-java -->
+        <dependency>
+            <groupId>io.github.binance</groupId>
+            <artifactId>binance-common</artifactId>
+            <version>2.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.binance</groupId>
+            <artifactId>binance-connector-java</artifactId>
+            <version>3.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.binance</groupId>
+            <artifactId>binance-derivatives-trading-usds-futures</artifactId>
+            <version>6.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- <dependency>-->
+        <!--     <groupId>io.projectreactor</groupId>-->
+        <!--     <artifactId>reactor-test</artifactId>-->
+        <!--     <scope>test</scope>-->
+        <!-- </dependency>-->
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!--            <plugin>-->
+            <!--                <groupId>org.graalvm.buildtools</groupId>-->
+            <!--                <artifactId>native-maven-plugin</artifactId>-->
+            <!--                <version>0.11.2</version>-->
+            <!--            </plugin>-->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.5.7</version>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>graalvm</id>
+            <name>GraalVM Plugin Repository</name>
+            <url>https://repo.graalvm.org/maven2</url>
+        </pluginRepository>
+    </pluginRepositories>
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>mvn repository</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
+    </repositories>
+</project>

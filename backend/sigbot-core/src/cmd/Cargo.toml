@@ -1,0 +1,62 @@
+[package]
+name = "sigbot-cmd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Other modules dependencies.
+common-macro = { workspace = true }
+common-error = { workspace = true }
+common-mem-prof = { workspace = true, optional = true }
+common-pprof = { workspace = true, optional = true }
+common-telemetry = { workspace = true, features = [
+    "deadlock_detection",
+] }
+sigbot-server.workspace = true
+sigbot-executor.workspace = true
+sigbot-backtest.workspace = true
+sigbot-types.workspace = true
+sigbot-utils.workspace = true
+
+# Thirdparty dependencies.
+#mimalloc.workspace = true
+axum-macros.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+axum.workspace = true
+axum-prometheus.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tower-cookies.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+prometheus.workspace = true
+once_cell.workspace = true
+
+[[bin]]
+name = "sigbot"
+path = "src/bin/sigbot.rs"
+
+[build-dependencies]
+chrono.workspace = true
+
+[target.'cfg(not(windows))'.dependencies]
+tikv-jemalloc-ctl = { version = "0.6.0", features = ["use_std", "stats"] }
+tikv-jemallocator = "0.6.0"
+
+[features]
+# default = ["common-mem-prof", "common-pprof"]
+profiling-mem-prof = ["dep:common-mem-prof"]
+profiling-pprof = ["dep:common-pprof"]
+profiling-tokio-console = ["common-telemetry/profiling-tokio-console"]
+profiling-pyroscope = ["common-telemetry/profiling-pyroscope"]
