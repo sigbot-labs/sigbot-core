@@ -19,10 +19,10 @@
 // This includes modifications and derived works.
 
 // use openai::chat::{ChatCompletion, ChatCompletionMessage, ChatCompletionMessageRole};
-use super::executor_base::{SigBotAccessEvent, ISigBotExecutor};
+use super::executor_base::{ISigBotExecutor, SigbotAccessEvent};
 use async_trait::async_trait;
-use sigbot_server::{config::config::ExecutorProperties, modules::llm::handler::llm_base::LLMManager};
 use common_telemetry::info;
+use sigbot_core::{config::config::ExecutorProperties, llm::handler::llm_base::LLMManager};
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -63,7 +63,7 @@ impl SimpleLLMExecutor {
     }
 
     #[allow(unused)]
-    async fn fetch_events(&self, page_index: i64, page_size: i64) -> Vec<SigBotAccessEvent> {
+    async fn fetch_events(&self, page_index: i64, page_size: i64) -> Vec<SigbotAccessEvent> {
         todo!()
     }
 }

@@ -21,7 +21,7 @@
 use crate::apm;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
-use sigbot_server::{config::config::AppConfig, mgmt};
+use sigbot_core::{config::config::AppConfig, mgmt};
 use common_telemetry::info;
 use std::sync::Arc;
 use tokio::{sync::oneshot, task::JoinHandle};

@@ -4180,25 +4180,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "modsecurity"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50b4daaabbc0c2d3f12958bc808e8a0b5288b02897c78c1134323f296ebc6bbe"
-dependencies = [
- "lazy_static",
- "modsecurity-sys",
-]
-
-[[package]]
-name = "modsecurity-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ff4f1a5f76a1e95d3ae42a68b4a5d867f46d78f2530804ee1848befb9e15e94"
-dependencies = [
- "pkg-config",
-]
-
-[[package]]
 name = "moka"
 version = "0.12.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6895,7 +6876,6 @@ dependencies = [
  "hyper 1.6.0",
  "langchain-rust",
  "lazy_static",
- "modsecurity",
  "moka",
  "openai",
  "pgvector",
@@ -6904,7 +6884,7 @@ dependencies = [
  "reqwest 0.12.15",
  "serde",
  "serde_json",
- "sigbot-server",
+ "sigbot-core",
  "sigbot-types",
  "sigbot-utils",
  "sqlx",
@@ -6941,8 +6921,8 @@ dependencies = [
  "serde_json",
  "serde_yaml 0.9.34+deprecated",
  "sigbot-backtest",
+ "sigbot-core",
  "sigbot-executor",
- "sigbot-server",
  "sigbot-types",
  "sigbot-utils",
  "snafu",
@@ -6956,45 +6936,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sigbot-executor"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.3",
- "chrono",
- "clap 4.5.34",
- "common-telemetry",
- "config",
- "dotenv",
- "hyper 1.6.0",
- "langchain-rust",
- "lazy_static",
- "modsecurity",
- "moka",
- "openai",
- "pgvector",
- "redis",
- "regex",
- "reqwest 0.12.15",
- "serde",
- "serde_json",
- "sigbot-server",
- "sigbot-types",
- "sigbot-utils",
- "sqlx",
- "thiserror 2.0.12",
- "tokio",
- "tokio-cron-scheduler",
- "tower 0.5.2",
- "tracing",
- "tracing-subscriber",
- "url",
- "validator",
-]
-
-[[package]]
-name = "sigbot-server"
+name = "sigbot-core"
 version = "1.0.0"
 dependencies = [
  "anyhow",
@@ -7019,7 +6961,6 @@ dependencies = [
  "langchain-rust",
  "lazy_static",
  "mime_guess",
- "modsecurity",
  "moka",
  "mongodb",
  "oauth2",
@@ -7060,6 +7001,43 @@ dependencies = [
  "utoipa-swagger-ui",
  "validator",
  "zip 2.3.0",
+]
+
+[[package]]
+name = "sigbot-executor"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.3",
+ "chrono",
+ "clap 4.5.34",
+ "common-telemetry",
+ "config",
+ "dotenv",
+ "hyper 1.6.0",
+ "langchain-rust",
+ "lazy_static",
+ "moka",
+ "openai",
+ "pgvector",
+ "redis",
+ "regex",
+ "reqwest 0.12.15",
+ "serde",
+ "serde_json",
+ "sigbot-core",
+ "sigbot-types",
+ "sigbot-utils",
+ "sqlx",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-cron-scheduler",
+ "tower 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "validator",
 ]
 
 [[package]]

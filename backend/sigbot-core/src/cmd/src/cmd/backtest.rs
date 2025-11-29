@@ -22,11 +22,11 @@ use crate::cmd::management::ManagementServer;
 use axum::Router;
 use clap::Command;
 use sigbot_backtest::backtest_base::SigBotVerifierManager;
-use sigbot_server::config::config::AppConfig;
-use sigbot_server::context::state::SigBotState;
-use sigbot_server::mgmt::health::init as health_router;
-use sigbot_server::modules::llm::handler::llm_base::LLMManager;
-use sigbot_server::{
+use sigbot_core::config::config::AppConfig;
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::llm::handler::llm_base::LLMManager;
+use sigbot_core::mgmt::health::init as health_router;
+use sigbot_core::{
     config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
@@ -74,7 +74,7 @@ impl SigBotVerifierServer {
         LLMManager::init().await;
         SigBotVerifierManager::init().await;
 
-        let app_state = SigBotState::new(&config).await;
+        let app_state = SigbotState::new(&config).await;
 
         let bind_addr = config.server.get_bind_addr();
         tracing::info!("Starting SigBot Verifier server on {}", bind_addr);
@@ -115,6 +115,7 @@ impl SigBotVerifierServer {
   \ \ \L\ \/\ \L\.\_/\ \__/\ \ \\`\    \ \ \_/\  __//\__, `\\ \ \_ 
    \ \____/\ \__/.\_\ \____\\ \_\ \_\   \ \__\ \____\/\____/ \ \__\
     \/___/  \/__/\/_/\/____/ \/_/\/_/    \/__/\/____/\/___/   \/__/
+
                                                    (Sigbot Backtest)
  "#;
         eprintln!("");

@@ -21,7 +21,7 @@
 use super::backtest_base::ISigBotVerifier;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_server::config::config::BacktestProperties;
+use sigbot_core::config::config::BacktestProperties;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -89,7 +89,7 @@ impl ISigBotVerifier for SimpleExecuteBasedVerifier {
 mod tests {
     #[allow(unused)]
     use super::*;
-    use sigbot_server::config::config::AppConfigProperties;
+    use sigbot_core::config::config::AppConfigProperties;
 
     #[tokio::test]
     async fn test_verify() {

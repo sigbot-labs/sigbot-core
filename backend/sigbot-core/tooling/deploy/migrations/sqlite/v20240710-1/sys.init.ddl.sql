@@ -38,9 +38,9 @@ create table if not exists sys_user (
     ethers_address varchar(64) null, -- 'Ethers Wallet 地址, 来自签名认证'
     lang varchar(64) null,
     status integer null default 0,
-    create_by varchar(64) null,
-    create_time integer default current_timestamp,
-    update_by varchar(64) null,
-    update_time integer default current_timestamp,
+    created_by varchar(64) null,
+    created_time integer default current_timestamp,
+    updated_by varchar(64) null,
+    updated_time integer default current_timestamp,
     del_flag integer not null default 0
 );

@@ -21,10 +21,10 @@
 use crate::executor_simple_llm::SimpleLLMExecutor;
 use anyhow::Error;
 use async_trait::async_trait;
-use sigbot_server::config::config;
 use common_telemetry::info;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use sigbot_core::config::config;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -105,7 +105,7 @@ impl SigBotExecutorManager {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct SigBotAccessEvent {
+pub struct SigbotAccessEvent {
     // Request information.
     pub method: String,
     pub scheme: Option<String>,

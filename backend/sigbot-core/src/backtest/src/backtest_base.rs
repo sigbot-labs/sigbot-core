@@ -23,7 +23,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
 use lazy_static::lazy_static;
-use sigbot_server::config::config;
+use sigbot_core::config::config;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},

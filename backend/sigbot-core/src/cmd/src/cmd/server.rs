@@ -28,14 +28,14 @@ use axum::{
 };
 use clap::Command;
 use common_telemetry::{debug, error, info};
-use sigbot_server::{
+use sigbot_core::{
     config::{
         config::{self, AppConfig, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
         swagger,
     },
-    context::state::SigBotState,
+    context::state::SigbotState,
     mgmt::{apm, health::init as health_router},
-    modules::llm::handler::llm_base::LLMManager,
+    llm::handler::llm_base::LLMManager,
     sys::route::{
         auth_router::{auth_middleware, init as auth_router},
         user_router::init as user_router,
@@ -50,7 +50,7 @@ use tower_http::trace::TraceLayer;
 pub struct WebServer {}
 
 pub type MiddlewareFunction =
-    fn(State<SigBotState>, Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response<Body>> + Send + 'static>>;
+    fn(State<SigbotState>, Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response<Body>> + Send + 'static>>;
 
 impl WebServer {
     pub const COMMAND_NAME: &'static str = "server";
@@ -89,12 +89,12 @@ impl WebServer {
     pub async fn start(
         config: &Arc<AppConfig>,
         verbose: bool,
-        addition_router: Option<Router<SigBotState>>,
+        addition_router: Option<Router<SigbotState>>,
         addition_middleware: Option<MiddlewareFunction>,
     ) {
         LLMManager::init().await;
 
-        let app_state = SigBotState::new(&config).await;
+        let app_state = SigbotState::new(&config).await;
 
         // 1. Merge the biz modules routes.
         debug!("Register Web server app routers ...");

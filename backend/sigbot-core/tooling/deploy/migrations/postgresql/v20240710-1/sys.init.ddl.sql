@@ -54,9 +54,9 @@ CREATE TABLE IF NOT EXISTS sys_user (
     -- 'Ethers Wallet 地址, 来自签名认证'
     lang VARCHAR(64) NULL,
     status INTEGER NULL default 0,
-    create_by VARCHAR(64) NULL,
-    create_time TIMESTAMPTZ default current_timestamp,
-    update_by VARCHAR(64) NULL,
-    update_time TIMESTAMPTZ default current_timestamp,
+    created_by VARCHAR(64) NULL,
+    created_time TIMESTAMPTZ default current_timestamp,
+    updated_by VARCHAR(64) NULL,
+    updated_time TIMESTAMPTZ default current_timestamp,
     del_flag INTEGER NOT NULL default 0,
 );

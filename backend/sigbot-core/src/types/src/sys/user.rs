@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::{BaseBean, PageResponse};
+use crate::{EntityBase, PageResponse};
 use common_makestruct::MakeStructWith;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -30,7 +30,7 @@ use validator::Validate;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct User {
     #[serde(flatten)]
-    pub base: BaseBean,
+    pub base: EntityBase,
     pub name: Option<String>,
     pub email: Option<String>,
     pub phone: Option<String>,
@@ -51,7 +51,7 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         User {
-            base: BaseBean::new_empty(),
+            base: EntityBase::new_empty(),
             name: None,
             email: None,
             phone: None,
@@ -75,7 +75,7 @@ impl Default for User {
 impl<'r> FromRow<'r, SqliteRow> for User {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
         Ok(User {
-            base: BaseBean::from_row(row).unwrap(),
+            base: EntityBase::from_row(row).unwrap(),
             name: row.try_get("name")?,
             email: row.try_get("email")?,
             phone: row.try_get("phone")?,
@@ -100,7 +100,7 @@ impl<'r> FromRow<'r, SqliteRow> for User {
 impl<'r> FromRow<'r, PgRow> for User {
     fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
         Ok(User {
-            base: BaseBean::from_row(row)?,
+            base: EntityBase::from_row(row)?,
             name: row.try_get("name")?,
             email: row.try_get("email")?,
             phone: row.try_get("phone")?,
@@ -169,7 +169,7 @@ pub struct QueryUserRequest {
 impl QueryUserRequest {
     pub fn to_user(&self) -> User {
         User {
-            base: BaseBean::new_empty(),
+            base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
             email: Some(self.email.clone().unwrap_or_default()),
             phone: self.phone.clone(),
@@ -245,7 +245,7 @@ pub struct SaveUserRequest {
 impl SaveUserRequest {
     pub fn to_user(&self) -> User {
         User {
-            base: BaseBean::new_with_id(self.id),
+            base: EntityBase::new_with_id(self.id),
             name: self.name.clone(), // self.name.as_ref().map(|n| n.to_string())
             email: self.email.clone(),
             phone: self.phone.clone(),

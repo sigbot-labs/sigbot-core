@@ -18,16 +18,17 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::option::Option;
 
 pub fn copy_properties<T: Serialize, U: for<'de> Deserialize<'de>>(
     dst: &mut U,
-    src: &T
+    src: &T,
 ) -> Result<(), serde_json::Error>
-    where U: Serialize + Clone
+where
+    U: Serialize + Clone,
 {
     copy_properties_with_map(dst, src, None)
 }
@@ -35,9 +36,10 @@ pub fn copy_properties<T: Serialize, U: for<'de> Deserialize<'de>>(
 pub fn copy_properties_with_map<T: Serialize, U: for<'de> Deserialize<'de>>(
     dst: &mut U,
     src: &T,
-    fields_map: Option<&HashMap<String, String>>
+    fields_map: Option<&HashMap<String, String>>,
 ) -> Result<(), serde_json::Error>
-    where U: Serialize + Clone
+where
+    U: Serialize + Clone,
 {
     let src_value = serde_json::to_value(src)?;
     let dst_value = serde_json::to_value(&dst)?;
@@ -65,21 +67,21 @@ pub fn copy_properties_with_map<T: Serialize, U: for<'de> Deserialize<'de>>(
 
 #[cfg(test)]
 mod tests {
-    use std::time::{ SystemTime, UNIX_EPOCH };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
 
-    use serde::{ Deserialize, Serialize };
+    use serde::{Deserialize, Serialize};
     use validator::Validate;
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Validate, Default)]
     pub struct TestBaseBean {
         pub id: Option<i64>,
         pub status: Option<i8>,
-        pub create_by: Option<String>,
-        pub create_time: Option<i64>,
-        pub update_by: Option<String>,
-        pub update_time: Option<i64>,
+        pub created_by: Option<String>,
+        pub created_time: Option<i64>,
+        pub updated_by: Option<String>,
+        pub updated_time: Option<i64>,
         #[serde(skip)]
         pub del_flag: Option<i32>,
     }
@@ -186,10 +188,10 @@ mod tests {
             base: TestBaseBean {
                 id: Some(1001),
                 status: Some(1),
-                create_by: Some(String::from("admin")),
-                create_time: Some(now),
-                update_by: Some(String::from("admin")),
-                update_time: Some(now),
+                created_by: Some(String::from("admin")),
+                created_time: Some(now),
+                updated_by: Some(String::from("admin")),
+                updated_time: Some(now),
                 del_flag: Some(0),
             },
             name: "Sally".to_string(),

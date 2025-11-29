@@ -22,13 +22,13 @@ use super::server::WebServer;
 use crate::cmd::management::ManagementServer;
 use clap::Command;
 use sigbot_backtest::backtest_base::SigBotVerifierManager;
-use sigbot_executor::executor_base::SigBotExecutorManager;
-use sigbot_server::config::config::AppConfig;
-use sigbot_server::modules::llm::handler::llm_base::LLMManager;
-use sigbot_server::{
+use sigbot_core::config::config::AppConfig;
+use sigbot_core::llm::handler::llm_base::LLMManager;
+use sigbot_core::{
     config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
+use sigbot_executor::executor_base::SigBotExecutorManager;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use std::sync::Arc;

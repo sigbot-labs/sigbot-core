@@ -21,12 +21,12 @@
 use crate::cmd::management::ManagementServer;
 use axum::Router;
 use clap::Command;
+use sigbot_core::config::config::AppConfig;
+use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::llm::handler::llm_base::LLMManager;
+use sigbot_core::mgmt::{apm, health::init as health_router};
 use sigbot_executor::executor_base::SigBotExecutorManager;
-use sigbot_server::config::config::AppConfig;
-use sigbot_server::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
-use sigbot_server::context::state::SigBotState;
-use sigbot_server::mgmt::{apm, health::init as health_router};
-use sigbot_server::modules::llm::handler::llm_base::LLMManager;
 use sigbot_utils::panics::PanicHelper;
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_signal;
 use std::env;
@@ -71,7 +71,7 @@ impl SigbotExecutorServer {
         LLMManager::init().await;
         SigBotExecutorManager::init().await;
 
-        let app_state = SigBotState::new(&config).await;
+        let app_state = SigbotState::new(&config).await;
 
         let bind_addr = config.server.get_bind_addr();
         tracing::info!("Starting SigBot Executor server on {}", bind_addr);
@@ -112,6 +112,7 @@ impl SigbotExecutorServer {
   \ \ \L\ \/>  <//\  __//\ \__/\ \ \_\ \\ \ \_/\ \L\ \ \ \/ 
    \ \____//\_/\_\ \____\ \____\\ \____/ \ \__\ \____/\ \_\ 
     \/___/ \//\/_/\/____/\/____/ \/___/   \/__/\/___/  \/_/ 
+
                                              (Sigbot Executor)
  "#;
         eprintln!("");

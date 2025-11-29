@@ -10,7 +10,7 @@ workspace = true
 [dependencies]
 # Other modules dependencies.
 common-telemetry.workspace = true
-sigbot-server.workspace = true
+sigbot-core.workspace = true
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
 
@@ -19,7 +19,6 @@ axum.workspace = true
 hyper.workspace = true
 lazy_static.workspace = true
 clap.workspace = true
-modsecurity.workspace = true
 serde.workspace = true
 validator.workspace = true
 tokio.workspace = true

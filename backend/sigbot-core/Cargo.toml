@@ -8,7 +8,7 @@ members = [
     "src/common/pprof",
     "src/common/telemetry",
     "src/cmd",
-    "src/server",
+    "src/core",
     "src/executor",
     "src/backtest",
     "src/types",
@@ -43,7 +43,7 @@ common-mem-prof = { path = "src/common/mem-prof" }
 common-pprof = { path = "src/common/pprof" }
 common-telemetry = { path = "src/common/telemetry" }
 sigbot-cmd = { path = "src/cmd" }
-sigbot-server = { path = "src/server" }
+sigbot-core = { path = "src/core" }
 sigbot-executor = { path = "src/executor" }
 sigbot-backtest = { path = "src/backtest" }
 sigbot-types = { path = "src/types" }
@@ -157,12 +157,6 @@ ethers = "2.0.14"
 # AI/ML libs
 openai = "1.0.0"
 langchain-rust = { version = "4.6.0", features = ["sqlite", "postgres"] }
-
-# ModSecurity libs.
-# Notice: If you use modsecurity-1.0.0, you must rely on libmodsecurity>=3.0.13. For Linux,
-# see: /usr/lib/x86_64-linux-gnu/pkgconfig/modsecurity.pc. Rust-1.85 is the latest version of
-# the default source of debian-12 and only supports libmodsecurity-3.0.9.
-modsecurity = "0.1.2"
 
 # Build dependencies
 criterion = "0.4"

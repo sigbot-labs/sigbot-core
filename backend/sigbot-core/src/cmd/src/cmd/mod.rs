@@ -28,7 +28,7 @@ use backtest::SigBotVerifierServer;
 use clap::{Arg, ArgMatches, Command};
 use executor::SigbotExecutorServer;
 use server::WebServer;
-use sigbot_server::config::config;
+use sigbot_core::config::config;
 use standalone::StandaloneServer;
 use std::{collections::BTreeMap, sync::OnceLock};
 
@@ -77,12 +77,12 @@ pub fn register_subcommand_handles() -> &'static BTreeMap<&'static str, (Subcomm
 }
 
 pub fn execute_commands_app() -> () {
-    let mut app = Command::new("SigBot Rust Serve")
-        .version(sigbot_server::config::config::VERSION.as_str())
+    let mut app = Command::new("Sigbot")
+        .version(sigbot_core::config::config::VERSION.as_str())
         .author("James Wong")
         .about(
             format!(
-                "SigBot - A Mini Open Source AI-driven Bot WAF written in Rust.\n\n{}",
+                "Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust.\n\n{}",
                 config::VERSION.as_str()
             )
             .to_owned(),

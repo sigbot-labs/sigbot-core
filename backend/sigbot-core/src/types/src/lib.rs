@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 pub mod api_v1;
+pub mod llm;
 pub mod modules;
 pub mod sys;
 
@@ -33,37 +34,37 @@ use sigbot_utils::snowflake::SnowflakeIdGenerator;
 // use sqlx::{ Decode, FromRow };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, FromRow, utoipa::ToSchema)]
-pub struct BaseBean {
+pub struct EntityBase {
     #[schema(rename = "id")]
     pub id: Option<i64>,
     #[schema(rename = "status")]
     pub status: Option<i32>,
-    #[sqlx(rename = "create_by")]
+    #[sqlx(rename = "created_by")]
     #[schema(read_only = true)]
     // Notice: Since we are currently using serde serialization to implement custom ORM,
     // the #[serde(rename=xx)] rename will not only take effect on the restful APIs but
     // also on the DB, so for simplicity, we will unifed use underscores.
     //#[serde(rename = "createBy")]
-    pub create_by: Option<String>,
+    pub created_by: Option<String>,
     #[schema(read_only = true)]
-    pub create_time: Option<DateTime<Utc>>,
+    pub created_time: Option<DateTime<Utc>>,
     #[schema(read_only = true)]
-    pub update_by: Option<String>,
+    pub updated_by: Option<String>,
     #[schema(read_only = true)]
-    pub update_time: Option<DateTime<Utc>>,
+    pub updated_time: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub del_flag: Option<i32>,
 }
 
-impl BaseBean {
+impl EntityBase {
     pub fn new_empty() -> Self {
         Self {
             id: None,
             status: None,
-            create_by: None,
-            create_time: None,
-            update_by: None,
-            update_time: None,
+            created_by: None,
+            created_time: None,
+            updated_by: None,
+            updated_time: None,
             del_flag: None,
         }
     }
@@ -73,38 +74,38 @@ impl BaseBean {
         Self {
             id,
             status: Some(0),
-            create_by: None,
-            create_time: Some(now),
-            update_by: None,
-            update_time: Some(now),
+            created_by: None,
+            created_time: Some(now),
+            updated_by: None,
+            updated_time: Some(now),
             del_flag: Some(0),
         }
     }
 
-    pub fn new_with_by(id: Option<i64>, create_by: Option<String>, update_by: Option<String>) -> Self {
+    pub fn new_with_by(id: Option<i64>, created_by: Option<String>, updated_by: Option<String>) -> Self {
         let now = Utc::now();
         Self {
             id,
             status: Some(0),
-            create_by,
-            create_time: Some(now),
-            update_by,
-            update_time: Some(now),
+            created_by: created_by,
+            created_time: Some(now),
+            updated_by: updated_by,
+            updated_time: Some(now),
             del_flag: Some(0),
         }
     }
 
-    pub async fn pre_insert(&mut self, create_by: Option<String>) -> i64 {
+    pub async fn pre_insert(&mut self, created_by: Option<String>) -> i64 {
         self.id = Some(SnowflakeIdGenerator::default_next_jssafe());
-        self.create_by = create_by;
-        self.create_time = Some(Utc::now());
+        self.created_by = created_by;
+        self.created_time = Some(Utc::now());
         self.del_flag = Some(0);
         self.id.unwrap()
     }
 
-    pub async fn pre_update(&mut self, update_by: Option<String>) {
-        self.update_by = update_by;
-        self.update_time = Some(Utc::now());
+    pub async fn pre_update(&mut self, updated_by: Option<String>) {
+        self.updated_by = updated_by;
+        self.updated_time = Some(Utc::now());
         self.del_flag = Some(0);
     }
 }
@@ -114,12 +115,13 @@ pub struct PageRequest {
     #[schema(example = "1")]
     #[validate(range(min = 1, max = 1000))]
     pub num: Option<u32>, // page number.
+    // The per page records count.
     #[schema(example = "10")]
     #[validate(range(min = 1, max = 1000))]
-    pub limit: Option<u32>, // The per page records count.
-                            // For large data of fast-queries cached condition acceleration.
-                            // pub cached_forward_last_min_id: Option<i64>,
-                            // pub cached_backend_last_max_id: Option<i64>,
+    pub limit: Option<u32>,
+    // For large data of fast-queries cached condition acceleration.
+    // pub cached_forward_last_min_id: Option<i64>,
+    // pub cached_backend_last_max_id: Option<i64>,
 }
 
 impl PageRequest {
@@ -152,12 +154,15 @@ impl PageRequest {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct PageResponse {
-    pub total: Option<i64>, // The current conditions snapshot data of total records count.
-    pub num: Option<u32>,   // page number.
-    pub limit: Option<u32>, // The per page records count.
-                            // For large data of fast-queries cached condition acceleration.
-                            // pub cached_forward_last_min_id: Option<i64>,
-                            // pub cached_backend_last_max_id: Option<i64>,
+    // The current conditions snapshot data of total records count.
+    pub total: Option<i64>,
+    // page number.
+    pub num: Option<u32>,
+    // The per page records count.
+    pub limit: Option<u32>,
+    // For large data of fast-queries cached condition acceleration.
+    // pub cached_forward_last_min_id: Option<i64>,
+    // pub cached_backend_last_max_id: Option<i64>,
 }
 
 impl PageResponse {
