@@ -9,10 +9,11 @@ members = [
     "src/common/telemetry",
     "src/cmd",
     "src/core",
-    "src/executor",
-    "src/backtest",
     "src/types",
     "src/utils",
+    "src/exchange",
+    "src/executor",
+    "src/backtest",
 ]
 resolver = "2"
 
@@ -22,7 +23,7 @@ authors = ["James Wong <jameswong1376@gmail.com>"]
 repository = "https://github.com/wl4g/sigbot"
 readme = "README.md"
 license = "GPL-3.0"
-description = "SigBot - A Mini Open Source AI-driven Bot WAF written in Rust."
+description = "Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust."
 keywords = ["AI", "Modsecurity", "Security", "WAF"]
 edition = "2021"
 
@@ -44,10 +45,11 @@ common-pprof = { path = "src/common/pprof" }
 common-telemetry = { path = "src/common/telemetry" }
 sigbot-cmd = { path = "src/cmd" }
 sigbot-core = { path = "src/core" }
-sigbot-executor = { path = "src/executor" }
-sigbot-backtest = { path = "src/backtest" }
 sigbot-types = { path = "src/types" }
 sigbot-utils = { path = "src/utils" }
+sigbot-exchange = { path = "src/exchange" }
+sigbot-executor = { path = "src/executor" }
+sigbot-backtest = { path = "src/backtest" }
 
 # Lang libs
 regex = "1.11.1"

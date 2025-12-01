@@ -1,0 +1,25 @@
+[package]
+name = "sigbot-exchange"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Other modules dependencies.
+common-telemetry.workspace = true
+common-makestruct.workspace = true
+sigbot-utils.workspace = true
+sigbot-types.workspace = true
+sigbot-core.workspace = true
+
+# Thirdparty dependencies.
+async-trait.workspace = true
+lazy_static.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+# see:https://crates.io/crates/binance-sdk
+binance-sdk = { version = "33.0.0", features = ["derivatives_trading_usds_futures", "spot"] }
+rust_decimal = "1.39.0"

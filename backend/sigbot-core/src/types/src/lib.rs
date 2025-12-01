@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod api_v1;
+pub mod api;
 pub mod llm;
 pub mod modules;
 pub mod sys;

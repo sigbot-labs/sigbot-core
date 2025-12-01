@@ -1,6 +1,6 @@
 # SigBot
 
-> SigBot - A Mini Open Source AI-driven Bot WAF written in Rust.
+> Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust.
 
 ## Introduction
 

@@ -18,6 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod exchange;
-pub mod strategy;
-pub mod trading;
+#[derive(Clone, Debug)]
+pub struct KlineResult {
+    // open time in milliseconds
+    pub open_time: u64,
+    pub open_price: f64,
+    pub high_price: f64,
+    pub low_price: f64,
+    pub close_price: f64,
+    pub volume: f64,
+    pub close_time: u64, // close time in milliseconds (optional)
+}
+
+#[derive(Clone, Debug)]
+pub struct PriceResult {
+    pub price: f64,
+    pub time: u64,
+}
