@@ -18,5 +18,4 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest_base;
-pub mod backtest_simple_execution;
+pub mod backtest;

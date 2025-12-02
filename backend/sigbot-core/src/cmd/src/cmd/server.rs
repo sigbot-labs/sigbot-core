@@ -34,8 +34,8 @@ use sigbot_core::{
         swagger,
     },
     context::state::SigbotState,
+    llm::handler::llm_engine::LLMEngine,
     mgmt::{apm, health::init as health_router},
-    llm::handler::llm_base::LLMManager,
     sys::route::{
         auth_router::{auth_middleware, init as auth_router},
         user_router::init as user_router,
@@ -92,7 +92,7 @@ impl WebServer {
         addition_router: Option<Router<SigbotState>>,
         addition_middleware: Option<MiddlewareFunction>,
     ) {
-        LLMManager::init().await;
+        LLMEngine::init().await;
 
         let app_state = SigbotState::new(&config).await;
 

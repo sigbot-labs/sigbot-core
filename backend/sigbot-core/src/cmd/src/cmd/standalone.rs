@@ -21,9 +21,9 @@
 use super::server::WebServer;
 use crate::cmd::management::ManagementServer;
 use clap::Command;
-use sigbot_backtest::backtest_base::SigBotVerifierManager;
+use sigbot_backtest::backtest::backtest_engine::SigbotBacktestEngine;
 use sigbot_core::config::config::AppConfig;
-use sigbot_core::llm::handler::llm_base::LLMManager;
+use sigbot_core::llm::handler::llm_engine::LLMEngine;
 use sigbot_core::{
     config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
@@ -68,9 +68,9 @@ impl StandaloneServer {
 
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
-        LLMManager::init().await;
+        LLMEngine::init().await;
         SigBotExecutorManager::init().await;
-        SigBotVerifierManager::init().await;
+        SigbotBacktestEngine::init().await;
         WebServer::start(config, verbose, None, None).await;
     }
 

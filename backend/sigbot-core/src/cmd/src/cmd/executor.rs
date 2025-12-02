@@ -24,7 +24,7 @@ use clap::Command;
 use sigbot_core::config::config::AppConfig;
 use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::context::state::SigbotState;
-use sigbot_core::llm::handler::llm_base::LLMManager;
+use sigbot_core::llm::handler::llm_engine::LLMEngine;
 use sigbot_core::mgmt::{apm, health::init as health_router};
 use sigbot_executor::executor_base::SigBotExecutorManager;
 use sigbot_utils::panics::PanicHelper;
@@ -68,7 +68,7 @@ impl SigbotExecutorServer {
 
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
-        LLMManager::init().await;
+        LLMEngine::init().await;
         SigBotExecutorManager::init().await;
 
         let app_state = SigbotState::new(&config).await;

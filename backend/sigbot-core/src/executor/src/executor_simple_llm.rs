@@ -22,7 +22,7 @@
 use super::executor_base::{ISigBotExecutor, SigbotAccessEvent};
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::{config::config::ExecutorProperties, llm::handler::llm_base::LLMManager};
+use sigbot_core::{config::config::ExecutorProperties, llm::handler::llm_engine::LLMEngine};
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -47,7 +47,7 @@ impl SimpleLLMExecutor {
         info!("Updating ModSec Rules ...");
 
         // TODO: Unified create the llm handler instance with 'server/src/context/state.rs#llm_handler'
-        let llm_handler = LLMManager::get_default_implementation();
+        let llm_handler = LLMEngine::get_default_implementation();
 
         let prompt = "TODO".to_owned();
         match llm_handler.generate(prompt).await {

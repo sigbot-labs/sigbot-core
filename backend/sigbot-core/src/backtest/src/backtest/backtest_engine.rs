@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::backtest_simple_execution::SimpleExecuteBasedVerifier;
+use crate::backtest::ticker::backtest_ticker::TickerBasedBacktestManager;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -30,31 +30,31 @@ use std::{
 };
 
 #[async_trait]
-pub trait ISigBotVerifier: Send + Sync {
+pub trait ISigbotBacktestManager: Send + Sync {
     async fn init(&self);
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigBotVerifierManager> = RwLock::new(SigBotVerifierManager::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotBacktestEngine> = RwLock::new(SigbotBacktestEngine::new());
 }
 
-pub struct SigBotVerifierManager {
-    pub implementations: HashMap<String, Arc<dyn ISigBotVerifier + Send + Sync>>,
+pub struct SigbotBacktestEngine {
+    pub implementations: HashMap<String, Arc<dyn ISigbotBacktestManager + Send + Sync>>,
 }
 
-impl SigBotVerifierManager {
+impl SigbotBacktestEngine {
     fn new() -> Self {
-        SigBotVerifierManager {
+        SigbotBacktestEngine {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigBotVerifierManager> {
+    pub fn get() -> &'static RwLock<SigbotBacktestEngine> {
         &SINGLE_INSTANCE
     }
 
     pub async fn init() {
-        info!("Register All SigBot executors ...");
+        info!("Register All Sigbot backtesting ...");
 
         for config in &config::get_config().services.backtests {
             if !config.enabled {
@@ -62,23 +62,23 @@ impl SigBotVerifierManager {
                 continue;
             }
             // TODO: Full use similar java spi provider mechanism.
-            if config.kind == SimpleExecuteBasedVerifier::KIND {
+            if config.kind == TickerBasedBacktestManager::KIND {
                 match Self::get()
                     .write() // If acquire fails, then it block until acquired.
                     .unwrap() // If acquire fails, then it should panic.
-                    .register(config.kind.to_owned(), SimpleExecuteBasedVerifier::new(config).await)
+                    .register(config.kind.to_owned(), TickerBasedBacktestManager::new(config).await)
                 {
                     Ok(registered) => {
-                        info!("Initializing SigBot Verifier ...");
+                        info!("Initializing Sigbot backtest ...");
                         let _ = registered.init().await;
                     }
-                    Err(e) => panic!("Failed to register SigBot Verifier: {}", e),
+                    Err(e) => panic!("Failed to register Sigbot backtest: {}", e),
                 }
             }
         }
     }
 
-    fn register<T: ISigBotVerifier + Send + Sync + 'static>(
+    fn register<T: ISigbotBacktestManager + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
@@ -91,9 +91,9 @@ impl SigBotVerifierManager {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigBotVerifier + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotBacktestManager + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigBotVerifierManager::get().read().unwrap();
+        let this = SigbotBacktestEngine::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {

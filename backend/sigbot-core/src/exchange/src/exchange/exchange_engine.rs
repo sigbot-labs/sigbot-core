@@ -23,15 +23,15 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_core::config::config;
-use sigbot_types::modules::trading::trade_market::{KlineResult, PriceResult};
-use sigbot_types::modules::trading::trade_signal::{StopPosition, TradeResult, TradeSignal};
+use sigbot_types::modules::exchange::models::trade_market::{KlineResult, PriceResult};
+use sigbot_types::modules::exchange::models::trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
 #[async_trait]
-pub trait ISigbotExchangeOperator: Send + Sync {
+pub trait ISigbotExchangeManager: Send + Sync {
     async fn init(&self);
     async fn close(&self);
     async fn get_current_price(&self, symbol: &str) -> Result<PriceResult, Error>;
@@ -43,9 +43,17 @@ pub trait ISigbotExchangeOperator: Send + Sync {
         end_time: Option<i64>,
         limit: u32,
     ) -> Result<Vec<KlineResult>, Error>;
-    async fn open_position(&self, signal: TradeSignal) -> Result<TradeResult, Error>;
-    async fn set_stop_loss(&self, original_order_id: u64, position: &StopPosition) -> Result<TradeResult, Error>;
-    async fn set_stop_profit(&self, original_order_id: u64, position: &StopPosition) -> Result<TradeResult, Error>;
+    async fn entry_position(&self, signal: EntryTradeSignal) -> Result<TradeResult, Error>;
+    async fn exit_loss_position(
+        &self,
+        original_order_id: u64,
+        position: &ExitTradePosition,
+    ) -> Result<TradeResult, Error>;
+    async fn exit_profit_position(
+        &self,
+        original_order_id: u64,
+        position: &ExitTradePosition,
+    ) -> Result<TradeResult, Error>;
 }
 
 lazy_static! {
@@ -53,7 +61,7 @@ lazy_static! {
 }
 
 pub struct SigbotExchangeEngine {
-    pub implementations: HashMap<String, Arc<dyn ISigbotExchangeOperator + Send + Sync>>,
+    pub implementations: HashMap<String, Arc<dyn ISigbotExchangeManager + Send + Sync>>,
 }
 
 impl SigbotExchangeEngine {
@@ -92,7 +100,7 @@ impl SigbotExchangeEngine {
         }
     }
 
-    fn register<T: ISigbotExchangeOperator + Send + Sync + 'static>(
+    fn register<T: ISigbotExchangeManager + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
@@ -105,13 +113,13 @@ impl SigbotExchangeEngine {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotExchangeOperator + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotExchangeManager + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotExchangeEngine::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered sigbot operator '{}'.", name);
+            let errmsg = format!("Could not obtain registered sigbot exchange manager '{}'.", name);
             return Err(Error::msg(errmsg));
         }
     }

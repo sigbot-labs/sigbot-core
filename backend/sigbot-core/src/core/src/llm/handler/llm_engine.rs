@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::{config::config, llm::handler::llm_langchain::LangchainLLMHandler};
+use crate::{config::config, llm::handler::llm_langchain::LangchainLLMManager};
 use anyhow::Error;
 use lazy_static::lazy_static;
 use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
@@ -29,28 +29,28 @@ use std::{
 };
 
 #[async_trait::async_trait]
-pub trait ILLMHandler {
+pub trait ILLMManager {
     async fn init(&self);
     async fn embedding(&self, mut info: KnowledgeUploadInfo, file: File) -> Result<KnowledgeUploadInfo, anyhow::Error>;
     async fn generate(&self, prompt: String) -> Result<String, anyhow::Error>;
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<LLMManager> = RwLock::new(LLMManager::new());
+    static ref SINGLE_INSTANCE: RwLock<LLMEngine> = RwLock::new(LLMEngine::new());
 }
 
-pub struct LLMManager {
-    pub implementations: HashMap<String, sync::Arc<dyn ILLMHandler + Send + Sync>>,
+pub struct LLMEngine {
+    pub implementations: HashMap<String, sync::Arc<dyn ILLMManager + Send + Sync>>,
 }
 
-impl LLMManager {
+impl LLMEngine {
     fn new() -> Self {
-        LLMManager {
+        LLMEngine {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<LLMManager> {
+    pub fn get() -> &'static RwLock<LLMEngine> {
         &SINGLE_INSTANCE
     }
 
@@ -62,8 +62,8 @@ impl LLMManager {
             .write() // If acquire fails, then it block until acquired.
             .unwrap() // If acquire fails, then it should panic.
             .register(
-                LangchainLLMHandler::NAME.to_owned(),
-                LangchainLLMHandler::new(config).await,
+                LangchainLLMManager::NAME.to_owned(),
+                LangchainLLMManager::new(config).await,
             ) {
             Ok(registered) => {
                 tracing::info!("Initializing langChain LLM ...");
@@ -73,7 +73,7 @@ impl LLMManager {
         }
     }
 
-    fn register<T: ILLMHandler + Send + Sync + 'static>(
+    fn register<T: ILLMManager + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
@@ -87,9 +87,9 @@ impl LLMManager {
         Ok(handler)
     }
 
-    pub fn get_implementation(name: String) -> Result<Arc<dyn ILLMHandler + Send + Sync>, Error> {
+    pub fn get_implementation(name: String) -> Result<Arc<dyn ILLMManager + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = LLMManager::get().read().unwrap();
+        let this = LLMEngine::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
@@ -98,7 +98,7 @@ impl LLMManager {
         }
     }
 
-    pub fn get_default_implementation() -> Arc<dyn ILLMHandler + Send + Sync> {
-        Self::get_implementation(LangchainLLMHandler::NAME.to_owned()).expect("Failed to get default LLM handler")
+    pub fn get_default_implementation() -> Arc<dyn ILLMManager + Send + Sync> {
+        Self::get_implementation(LangchainLLMManager::NAME.to_owned()).expect("Failed to get default LLM handler")
     }
 }

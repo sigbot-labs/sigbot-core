@@ -20,4 +20,3 @@
 
 pub mod exchange;
 pub mod strategy;
-pub mod trading;

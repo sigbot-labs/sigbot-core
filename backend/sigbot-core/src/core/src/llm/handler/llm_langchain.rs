@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::llm_base::ILLMHandler;
+use super::llm_engine::ILLMManager;
 use crate::config::config::{self, LlmProperties};
 use anyhow::{Ok, Result};
 use langchain_rust::{
@@ -44,12 +44,12 @@ use std::{
 };
 
 /// see:https://github.com/wl4g-ai/langchain-rust/blob/main/examples/conversational_retriever_chain_with_vector_store.rs
-pub struct LangchainLLMHandler {
+pub struct LangchainLLMManager {
     pgvec_store: Arc<Box<dyn VectorStore>>,
     openai_llm: OpenAI<OpenAIConfig>,
 }
 
-impl LangchainLLMHandler {
+impl LangchainLLMManager {
     pub const NAME: &'static str = "LANGCHAIN";
 
     #[allow(unused)]
@@ -127,7 +127,7 @@ impl LangchainLLMHandler {
 }
 
 #[async_trait::async_trait]
-impl ILLMHandler for LangchainLLMHandler {
+impl ILLMManager for LangchainLLMManager {
     async fn init(&self) {}
 
     async fn embedding(&self, mut info: KnowledgeUploadInfo, file: File) -> Result<KnowledgeUploadInfo, anyhow::Error> {

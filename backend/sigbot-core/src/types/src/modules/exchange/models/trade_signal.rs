@@ -19,15 +19,15 @@
 // This includes modifications and derived works.
 
 #[derive(Clone, Debug)]
-pub struct TradeSignal {
-    pub open_pos: OpenPosition,
-    pub stop_loss: Option<StopPosition>,
-    pub stop_profit: Option<StopPosition>,
+pub struct EntryTradeSignal {
+    pub open_pos: EntryPosition,
+    pub stop_loss: Option<ExitTradePosition>,
+    pub stop_profit: Option<ExitTradePosition>,
     pub description: String,
 }
 
-impl TradeSignal {
-    pub fn validate(&self) -> Result<&TradeSignal, String> {
+impl EntryTradeSignal {
+    pub fn validate(&self) -> Result<&EntryTradeSignal, String> {
         self.open_pos.validate()?;
         if let Some(pos) = &self.stop_loss {
             pos.validate()?;
@@ -40,8 +40,8 @@ impl TradeSignal {
 }
 
 #[derive(Clone, Debug)]
-pub struct OpenPosition {
-    pub ref_time: u64, // Trading signal referenced k-line price time.
+pub struct EntryPosition {
+    pub time: u64, // Trading signal referenced k-line price time.
     pub symbol: String,
     pub side: TradeSide,
     pub order_type: OrderType,
@@ -50,8 +50,8 @@ pub struct OpenPosition {
     pub maker_only: bool,
 }
 
-impl OpenPosition {
-    pub fn validate(&self) -> Result<&OpenPosition, String> {
+impl EntryPosition {
+    pub fn validate(&self) -> Result<&EntryPosition, String> {
         if self.symbol.trim().is_empty() {
             return Err("Open position order must have symbol".to_string());
         }
@@ -77,8 +77,8 @@ impl OpenPosition {
 }
 
 #[derive(Clone, Debug)]
-pub struct StopPosition {
-    pub ref_time: u64, // Trading signal referenced k-line price time.
+pub struct ExitTradePosition {
+    pub time: u64, // Trading signal referenced k-line price time.
     pub symbol: String,
     pub side: TradeSide,
     pub order_type: OrderType,
@@ -86,8 +86,8 @@ pub struct StopPosition {
     pub quantity_percent: f64,
 }
 
-impl StopPosition {
-    pub fn validate(&self) -> Result<&StopPosition, String> {
+impl ExitTradePosition {
+    pub fn validate(&self) -> Result<&ExitTradePosition, String> {
         if self.symbol.trim().is_empty() {
             return Err("Stop position order must have symbol".to_string());
         }

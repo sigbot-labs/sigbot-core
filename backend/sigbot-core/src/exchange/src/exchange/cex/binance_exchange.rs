@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::trading::trading_engine::ISigbotExchangeOperator;
+use crate::exchange::exchange_engine::ISigbotExchangeManager;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use binance_sdk::common::websocket::WebsocketStream;
@@ -43,9 +43,9 @@ use rust_decimal::Decimal;
 use sigbot_core::cache::ICache;
 use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
-    modules::trading::{
+    modules::exchange::models::{
         trade_market::{KlineResult, PriceResult},
-        trade_signal::{StopPosition, TradeResult, TradeSignal},
+        trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult},
     },
 };
 use std::collections::HashMap;
@@ -251,7 +251,7 @@ impl SigbotBinanceConfig {
     }
 }
 
-pub struct SigbotBinanceOperator {
+pub struct BinanceExchangeManager {
     config: SigbotBinanceConfig,
     rest_api_client: Arc<Mutex<Option<RestApi>>>,
     rest_market_client: Arc<Mutex<Option<RestApi>>>,
@@ -265,7 +265,7 @@ pub struct SigbotBinanceOperator {
         Arc<Mutex<HashMap<String, Arc<WebsocketStream<KlineCandlestickStreamsResponse>>>>>,
 }
 
-impl SigbotBinanceOperator {
+impl BinanceExchangeManager {
     pub const KIND: &'static str = "BINANCE"; // ExchangeProvider::BINANCE
 
     pub async fn new(config: &SigbotBinanceConfig, kline_store: Box<dyn ICache<Vec<KlineResult>>>) -> Arc<Self> {
@@ -293,9 +293,9 @@ impl SigbotBinanceOperator {
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/rest_api/trade_api/new_order.rs
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/websocket_api/trade_api/new_order.rs
 #[async_trait]
-impl ISigbotExchangeOperator for SigbotBinanceOperator {
+impl ISigbotExchangeManager for BinanceExchangeManager {
     async fn init(&self) {
-        info!("Starting Binance exchange operation with config={}", self.config);
+        info!("Starting Binance exchange manager with config={}", self.config);
 
         if self.config.use_websocket {
             info!("Initializing USDS API WS client with config={}", self.config);
@@ -655,7 +655,7 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
         }
     }
 
-    async fn open_position(&self, signal: TradeSignal) -> Result<TradeResult, Error> {
+    async fn entry_position(&self, signal: EntryTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
 
         let order_type_str = signal.open_pos.order_type.to_str();
@@ -667,21 +667,17 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
         let side = RestNewOrderSideEnum::from_str(signal.open_pos.side.to_side_str())
             .map_err(|e| Error::msg(format!("Invalid order side: {:?}", e)))?;
 
-        let mut builder = NewOrderParams::builder(signal.open_pos.symbol.to_string(), side, order_type_str.to_owned());
+        let mut builder = NewOrderParams::builder(signal.open_pos.symbol.to_string(), side, order_type_str.to_owned())
+            .quantity(Some(
+                Decimal::from_str_exact(&signal.open_pos.quantity.to_string())
+                    .map_err(|e| Error::msg(format!("Invalid quantity value: {}", e)))?,
+            ));
         if let Some(price) = signal.open_pos.price {
-            // Convert f64 to string, then parse to Decimal if needed
-            // Note: binance_sdk requires Decimal, but we work with f64
-            // We'll convert via string to maintain precision
             let price_str = price.to_string();
             builder = builder.price(Some(
                 Decimal::from_str_exact(&price_str).map_err(|e| Error::msg(format!("Invalid price value: {}", e)))?,
             ));
         }
-        let quantity_str = signal.open_pos.quantity.to_string();
-        builder = builder.quantity(Some(
-            Decimal::from_str_exact(&quantity_str).map_err(|e| Error::msg(format!("Invalid quantity value: {}", e)))?,
-        ));
-
         let params = builder.build()?;
 
         let guard = self.rest_api_client.lock().await;
@@ -689,9 +685,21 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
             .as_ref()
             .ok_or_else(|| Error::msg("REST API client not initialized"))?;
 
+        info!(
+            "[OPEN_POS] Opening position - symbol={}, side={}, quantity={}",
+            signal.open_pos.symbol,
+            signal.open_pos.side.to_side_str(),
+            signal.open_pos.quantity
+        );
         let response = rest_client.new_order(params).await.context("Failed to New order")?;
         let data = response.data().await?;
-        let order_id = data.order_id.expect("New Order ID is required");
+        info!(
+            "[OPEN_POS] Opened position - orderId={}, price={}",
+            data.order_id.context("New Order ID is required")?,
+            data.avg_price.context("Average price is required")?
+        );
+
+        let order_id = data.order_id.context("New Order ID is required")?;
         Ok(TradeResult {
             success: true,
             order_id: order_id as u64,
@@ -699,28 +707,39 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
         })
     }
 
-    async fn set_stop_loss(&self, original_order_id: u64, position: &StopPosition) -> Result<TradeResult, Error> {
-        position.validate().map_err(|e| Error::msg(e))?;
+    async fn exit_loss_position(
+        &self,
+        original_order_id: u64,
+        signal: &ExitTradePosition,
+    ) -> Result<TradeResult, Error> {
+        signal.validate().map_err(|e| Error::msg(e))?;
 
-        let side = ModifyOrderSideEnum::from_str(position.side.to_side_str())
+        let side = ModifyOrderSideEnum::from_str(signal.side.to_side_str())
             .map_err(|e| Error::msg(format!("Invalid order side: {:?}", e)))?;
-        let price = position
+        let price = signal
             .price
             .map(|p| {
                 let price_str = p.to_string();
                 Decimal::from_str_exact(&price_str).map_err(|e| Error::msg(format!("Invalid price value: {}", e)))
             })
             .transpose()?;
-        let quantity = Decimal::from_str_exact(&position.quantity_percent.to_string())
+        let quantity = Decimal::from_str_exact(&signal.quantity_percent.to_string())
             .map_err(|e| Error::msg(format!("Invalid quantity value: {}", e)))?;
 
+        info!(
+            "[EXIT_LOSS] Modifying - symbol={}, side={}, quantity={}, original_order_id={}",
+            signal.symbol,
+            signal.side.to_side_str(),
+            signal.quantity_percent,
+            original_order_id
+        );
         let guard = self.rest_api_client.lock().await;
         let response = guard
             .as_ref()
             .ok_or_else(|| Error::msg("REST API client not initialized"))?
             .modify_order(
                 ModifyOrderParams::builder(
-                    position.symbol.to_string(),
+                    signal.symbol.to_string(),
                     side,
                     price.context("Modify the price is required")?,
                     quantity,
@@ -730,6 +749,14 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
             )
             .await
             .context("Failed to Modify order")?;
+        info!(
+            "[EXIT_LOSS] Modified - symbol={}, side={}, quantity={}, original_order_id={}",
+            signal.symbol,
+            signal.side.to_side_str(),
+            signal.quantity_percent,
+            original_order_id
+        );
+
         let order_id = response
             .data()
             .await?
@@ -742,27 +769,38 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
         })
     }
 
-    async fn set_stop_profit(&self, original_order_id: u64, position: &StopPosition) -> Result<TradeResult, Error> {
-        position.validate().map_err(|e| Error::msg(e))?;
+    async fn exit_profit_position(
+        &self,
+        original_order_id: u64,
+        signal: &ExitTradePosition,
+    ) -> Result<TradeResult, Error> {
+        signal.validate().map_err(|e| Error::msg(e))?;
 
-        let side = ModifyOrderSideEnum::from_str(position.side.to_side_str())
+        let side = ModifyOrderSideEnum::from_str(signal.side.to_side_str())
             .map_err(|e| Error::msg(format!("Invalid order side: {:?}", e)))?;
-        let price = position
+        let price = signal
             .price
             .map(|p| {
                 Decimal::from_str_exact(&p.to_string()).map_err(|e| Error::msg(format!("Invalid price value: {}", e)))
             })
             .transpose()?;
-        let quantity = Decimal::from_str_exact(&position.quantity_percent.to_string().to_owned())
+        let quantity = Decimal::from_str_exact(&signal.quantity_percent.to_string().to_owned())
             .map_err(|e| Error::msg(format!("Invalid quantity value: {}", e)))?;
 
+        info!(
+            "[EXIT_PROFIT] Modifying - symbol={}, side={}, quantity={}, original_order_id={}",
+            signal.symbol,
+            signal.side.to_side_str(),
+            signal.quantity_percent,
+            original_order_id
+        );
         let guard = self.rest_api_client.lock().await;
         let response = guard
             .as_ref()
             .ok_or_else(|| Error::msg("REST API client not initialized"))?
             .modify_order(
                 ModifyOrderParams::builder(
-                    position.symbol.to_string(),
+                    signal.symbol.to_string(),
                     side,
                     price.context("Modify the price is required")?,
                     quantity,
@@ -772,6 +810,14 @@ impl ISigbotExchangeOperator for SigbotBinanceOperator {
             )
             .await
             .context("Failed to Modify order")?;
+        info!(
+            "[EXIT_PROFIT] Modified - symbol={}, side={}, quantity={}, original_order_id={}",
+            signal.symbol,
+            signal.side.to_side_str(),
+            signal.quantity_percent,
+            original_order_id
+        );
+
         let order_id = response
             .data()
             .await?

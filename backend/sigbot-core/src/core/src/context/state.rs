@@ -21,7 +21,7 @@
 use crate::{
     cache::{memory::StringMemoryCache, redis::StringRedisCache, CacheContainer},
     config::config::{AppConfig, AppDBType},
-    llm::handler::llm_base::{ILLMHandler, LLMManager},
+    llm::handler::llm_engine::{ILLMManager, LLMEngine},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
         exchange::store::{
@@ -65,7 +65,7 @@ pub struct SigbotState {
     // The Service module repositories.
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
-    pub llm_handler: Arc<dyn ILLMHandler + Send + Sync>,
+    pub llm_handler: Arc<dyn ILLMManager + Send + Sync>,
 }
 
 impl SigbotState {
@@ -169,7 +169,7 @@ impl SigbotState {
             // The Application repositories.
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
-            llm_handler: LLMManager::get_default_implementation(),
+            llm_handler: LLMEngine::get_default_implementation(),
         };
 
         // Build DI container.

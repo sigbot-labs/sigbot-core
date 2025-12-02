@@ -18,21 +18,22 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::backtest_base::ISigBotVerifier;
 use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_core::config::config::BacktestProperties;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
+use crate::backtest::backtest_engine::ISigbotBacktestManager;
+
 #[derive(Clone)]
-pub struct SimpleExecuteBasedVerifier {
+pub struct TickerBasedBacktestManager {
     config: BacktestProperties,
     scheduler: Arc<JobScheduler>,
 }
 
-impl SimpleExecuteBasedVerifier {
-    pub const KIND: &'static str = "SIMPLE_EXECUTE";
+impl TickerBasedBacktestManager {
+    pub const KIND: &'static str = "TICKER";
 
     pub async fn new(config: &BacktestProperties) -> Arc<Self> {
         Arc::new(Self {
@@ -42,13 +43,13 @@ impl SimpleExecuteBasedVerifier {
     }
 
     pub(super) async fn verify(&self) {
-        info!("Simple Execute verifing ...");
-        info!("TODO");
+        info!("Ticker based backtest manager ...");
+        unimplemented!()
     }
 }
 
 #[async_trait]
-impl ISigBotVerifier for SimpleExecuteBasedVerifier {
+impl ISigbotBacktestManager for TickerBasedBacktestManager {
     // start async thread job to re-scaning near real-time recorded access events.
     async fn init(&self) {
         let this = self.clone();
@@ -66,7 +67,7 @@ impl ISigBotVerifier for SimpleExecuteBasedVerifier {
             }
         };
 
-        info!("Starting Verifier handler with cron '{}'", cron);
+        info!("Starting Ticker based backtest handler with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
@@ -79,7 +80,7 @@ impl ISigBotVerifier for SimpleExecuteBasedVerifier {
         self.scheduler.add(job).await.unwrap();
         self.scheduler.start().await.unwrap();
 
-        info!("Started Simple Execute backtest handler.");
+        info!("Started Ticker based backtest handler.");
         // Notice: It's will keep the program running
         // tokio::signal::ctrl_c().await.unwrap();
     }
