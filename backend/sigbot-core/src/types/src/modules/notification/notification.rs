@@ -18,13 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::collections::HashMap;
-
 use crate::{EntityBase, PageResponse};
 use common_makestruct::MakeStructWith;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
+use std::collections::HashMap;
 use validator::Validate;
 
 // ---- Entity ---
@@ -32,56 +31,96 @@ use validator::Validate;
 // Manual impl for decode.
 // #[derive(Serialize, Deserialize, Clone, Debug, sqlx::sqlite::FromRow, sqlx::sqlite::Decode)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct StrategyInfo {
+pub struct NotificationInfo {
     #[serde(flatten)]
     pub base: EntityBase,
     pub name: Option<String>,
-    pub active: Option<bool>,
-    pub provider: Option<String>,
-    pub parameters: Option<HashMap<String, String>>,
+    pub provider: Option<NotificationProvider>,
+    pub plain_configuration: Option<HashMap<String, String>>,
+    pub secret_configuration: Option<HashMap<String, String>>,
     pub description: Option<String>,
 }
 
-impl Default for StrategyInfo {
+impl Default for NotificationInfo {
     fn default() -> Self {
-        StrategyInfo {
+        NotificationInfo {
             base: EntityBase::new_empty(),
             name: None,
-            active: Some(true),
-            provider: None,
-            parameters: None,
+            provider: Some(NotificationProvider::EMAIL),
+            plain_configuration: None,
+            secret_configuration: None,
             description: None,
         }
     }
 }
 
-/// SqliteRow impl for Strategy.
-impl<'r> FromRow<'r, SqliteRow> for StrategyInfo {
+/// SqliteRow impl for Exchange.
+impl<'r> FromRow<'r, SqliteRow> for NotificationInfo {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(StrategyInfo {
+        Ok(NotificationInfo {
             base: EntityBase::from_row(row).unwrap(),
             name: row.try_get("name")?,
-            active: row.try_get("active")?,
-            provider: row.try_get::<Option<String>, _>("provider")?,
+            provider: row
+                .try_get::<Option<String>, _>("provider")?
+                .map(|s| NotificationProvider::of(&s))
+                .transpose()
+                .map_err(|e| {
+                    sqlx::Error::Decode(
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Failed to parse notification provider: {}", e),
+                        )
+                        .into(),
+                    )
+                })?,
             // TODO: auto convert and wrap to Map attribute.
-            parameters: None,
+            plain_configuration: None,
+            secret_configuration: None,
             description: Some(row.try_get("description")?),
         })
     }
 }
 
-/// Postgres Row impl for Strategy.
-impl<'r> FromRow<'r, PgRow> for StrategyInfo {
+/// Postgres Row impl for Exchange.
+impl<'r> FromRow<'r, PgRow> for NotificationInfo {
     fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
-        Ok(StrategyInfo {
+        Ok(NotificationInfo {
             base: EntityBase::from_row(row)?,
             name: row.try_get("name")?,
-            active: row.try_get("active")?,
-            provider: row.try_get::<Option<String>, _>("provider")?,
+            provider: row
+                .try_get::<Option<String>, _>("provider")?
+                .map(|s| NotificationProvider::of(&s))
+                .transpose()
+                .map_err(|e| {
+                    sqlx::Error::Decode(
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Failed to parse notification provider: {}", e),
+                        )
+                        .into(),
+                    )
+                })?,
             // TODO: auto convert and wrap to Map attribute.
-            parameters: None,
+            plain_configuration: None,
+            secret_configuration: None,
             description: Some(row.try_get("description")?),
         })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
+pub enum NotificationProvider {
+    EMAIL,
+    TELEGRAM,
+}
+
+impl NotificationProvider {
+    pub fn of(provider: &str) -> Result<NotificationProvider, String> {
+        match provider.to_uppercase().as_str() {
+            "EMAIL" => Ok(NotificationProvider::EMAIL),
+            "TELEGRAM" => Ok(NotificationProvider::TELEGRAM),
+            _ => Err(format!("Unsupported the notification provider: {}", provider)),
+        }
     }
 }
 
@@ -97,7 +136,7 @@ impl<'r> FromRow<'r, PgRow> for StrategyInfo {
     utoipa::IntoParams, // PageableQueryRequest // Try using macro auto generated pageable query request.
 )]
 #[into_params(parameter_in = Query)]
-pub struct QueryStrategyRequest {
+pub struct QueryNotificationRequest {
     // #[serde(flatten)]
     // #[serde(default)]
     // #[serde(skip)]
@@ -106,33 +145,32 @@ pub struct QueryStrategyRequest {
     // pub page: Option<super::PageRequest>, // It is difficult to pass parameters using http get/query when nested structures.
     #[validate(length(min = 1, max = 32))]
     pub name: Option<String>,
-    pub active: Option<bool>,
     #[validate(length(min = 1, max = 16))]
     pub provider: Option<String>,
 }
 
-impl QueryStrategyRequest {
-    pub fn to_entity(&self) -> StrategyInfo {
-        StrategyInfo {
+impl QueryNotificationRequest {
+    pub fn to_entity(&self) -> NotificationInfo {
+        NotificationInfo {
             base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
-            active: self.active,
-            provider: self.provider.clone(),
-            parameters: None,
+            provider: NotificationProvider::of(self.provider.clone().unwrap_or_default().as_str()).ok(),
+            plain_configuration: None,
+            secret_configuration: None,
             description: None,
         }
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct QueryStrategyResponse {
+pub struct QueryNotificationResponse {
     pub page: Option<PageResponse>,
-    pub data: Option<Vec<StrategyInfo>>,
+    pub data: Option<Vec<NotificationInfo>>,
 }
 
-impl QueryStrategyResponse {
-    pub fn new(page: PageResponse, data: Vec<StrategyInfo>) -> Self {
-        QueryStrategyResponse {
+impl QueryNotificationResponse {
+    pub fn new(page: PageResponse, data: Vec<NotificationInfo>) -> Self {
+        QueryNotificationResponse {
             page: Some(page),
             data: Some(data),
         }
@@ -141,57 +179,58 @@ impl QueryStrategyResponse {
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Validate, utoipa::ToSchema, MakeStructWith)]
 #[excludes(id)]
-// #[smart_copy(target = "SaveStrategyRequestWith")]
-pub struct SaveStrategyRequest {
+// #[smart_copy(target = "SaveNotificationRequestWith")]
+pub struct SaveNotificationRequest {
     pub id: Option<i64>,
     #[validate(length(min = 1, max = 32))]
     pub name: String,
-    pub active: bool,
     #[validate(length(min = 1, max = 16))]
     pub provider: String,
     #[validate(length(min = 1, max = 8192))]
-    pub parameters: Option<HashMap<String, String>>,
+    pub plain_configuration: Option<HashMap<String, String>>,
+    #[validate(length(min = 1, max = 8192))]
+    pub secret_configuration: Option<HashMap<String, String>>,
     #[validate(length(min = 1, max = 256))]
     pub description: Option<String>,
 }
 
-impl SaveStrategyRequest {
-    pub fn to_entity(&self) -> StrategyInfo {
-        StrategyInfo {
+impl SaveNotificationRequest {
+    pub fn to_entity(&self) -> NotificationInfo {
+        NotificationInfo {
             base: EntityBase::new_with_id(self.id),
             name: Some(self.name.clone()),
-            active: Some(self.active),
-            provider: Some(self.provider.clone()),
-            parameters: self.parameters.clone(),
+            provider: NotificationProvider::of(self.provider.clone().as_str()).ok(),
+            plain_configuration: self.plain_configuration.clone(),
+            secret_configuration: self.secret_configuration.clone(),
             description: self.description.clone(),
         }
     }
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct SaveStrategyResponse {
+pub struct SaveNotificationResponse {
     pub id: i64,
 }
 
-impl SaveStrategyResponse {
+impl SaveNotificationResponse {
     pub fn new(id: i64) -> Self {
-        SaveStrategyResponse { id }
+        SaveNotificationResponse { id }
     }
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Validate, utoipa::ToSchema)]
-pub struct DeleteStrategyRequest {
+pub struct DeleteNotificationRequest {
     pub id: i64,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct DeleteStrategyResponse {
+pub struct DeleteNotificationResponse {
     pub count: u64,
 }
 
-impl DeleteStrategyResponse {
+impl DeleteNotificationResponse {
     pub fn new(count: u64) -> Self {
-        DeleteStrategyResponse { count }
+        DeleteNotificationResponse { count }
     }
 }
 

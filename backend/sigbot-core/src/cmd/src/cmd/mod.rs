@@ -18,61 +18,81 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest;
-pub mod executor;
-pub mod management;
-pub mod server;
-pub mod standalone;
+pub mod api_server;
+pub mod backtest_runner;
+pub mod controller_manager;
+pub mod datafeed_runner;
+pub mod internal;
+pub mod standalone_server;
+pub mod strategy_runner;
 
-use backtest::SigBotVerifierServer;
+use api_server::SigbotAPIServer;
+use backtest_runner::SigbotBacktestRunner;
 use clap::{Arg, ArgMatches, Command};
-use executor::SigbotExecutorServer;
-use server::WebServer;
 use sigbot_core::config::config;
-use standalone::StandaloneServer;
-use std::{collections::BTreeMap, sync::OnceLock};
+use standalone_server::StandaloneServer;
+use std::sync::OnceLock;
+use strategy_runner::SigbotStrategyRunner;
+
+use crate::cmd::{controller_manager::SigbotControllerManager, datafeed_runner::SigbotDatafeedRunner};
 
 type SubcommandBuildFn = fn() -> Command;
 type SubcommandHandleFn = fn(&ArgMatches, bool) -> ();
 
-static SUBCOMMAND_MAP: OnceLock<BTreeMap<&'static str, (SubcommandBuildFn, SubcommandHandleFn)>> = OnceLock::new();
+static SUBCOMMAND_MAP: OnceLock<Vec<(&'static str, (SubcommandBuildFn, SubcommandHandleFn))>> = OnceLock::new();
 
-pub fn register_subcommand_handles() -> &'static BTreeMap<&'static str, (SubcommandBuildFn, SubcommandHandleFn)> {
+pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandBuildFn, SubcommandHandleFn))> {
     SUBCOMMAND_MAP.get_or_init(|| {
-        let mut map = BTreeMap::new();
-        map.insert(
-            WebServer::COMMAND_NAME,
+        let mut vec = Vec::new();
+        vec.push((
+            SigbotAPIServer::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                WebServer::build as SubcommandBuildFn,
-                WebServer::run as SubcommandHandleFn,
+                SigbotAPIServer::build as SubcommandBuildFn,
+                SigbotAPIServer::run as SubcommandHandleFn,
             ),
-        );
-        map.insert(
+        ));
+        vec.push((
+            SigbotControllerManager::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotControllerManager::build as SubcommandBuildFn,
+                SigbotControllerManager::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotDatafeedRunner::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotDatafeedRunner::build as SubcommandBuildFn,
+                SigbotDatafeedRunner::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotStrategyRunner::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotStrategyRunner::build as SubcommandBuildFn,
+                SigbotStrategyRunner::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotBacktestRunner::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotBacktestRunner::build as SubcommandBuildFn,
+                SigbotBacktestRunner::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
             StandaloneServer::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
                 StandaloneServer::build as SubcommandBuildFn,
                 StandaloneServer::run as SubcommandHandleFn,
             ),
-        );
-        map.insert(
-            SigbotExecutorServer::COMMAND_NAME,
-            (
-                // Type inference error, forced conversion need.
-                SigbotExecutorServer::build as SubcommandBuildFn,
-                SigbotExecutorServer::run as SubcommandHandleFn,
-            ),
-        );
-        map.insert(
-            SigBotVerifierServer::COMMAND_NAME,
-            (
-                // Type inference error, forced conversion need.
-                SigBotVerifierServer::build as SubcommandBuildFn,
-                SigBotVerifierServer::run as SubcommandHandleFn,
-            ),
-        );
-        map
+        ));
+        vec
     })
 }
 
@@ -110,7 +130,7 @@ pub fn execute_commands_app() -> () {
     // Handling to actual subcommand.
     match matches.subcommand() {
         Some((name, sub_matches)) => {
-            if let Some(&(_, handler)) = subcommand_map.get(name) {
+            if let Some((_, (_, handler))) = subcommand_map.iter().find(|(n, _)| *n == name) {
                 tracing::info!("Executing subcommand: {}", name);
                 handler(sub_matches, verbose);
             } else {
@@ -121,7 +141,7 @@ pub fn execute_commands_app() -> () {
         }
         None => {
             tracing::info!("No subcommand was used. Available commands are:");
-            for name in subcommand_map.keys() {
+            for (name, _) in subcommand_map.iter() {
                 tracing::info!("  {}", name);
             }
             tracing::info!("Use <command> --help for more information about a specific command.");

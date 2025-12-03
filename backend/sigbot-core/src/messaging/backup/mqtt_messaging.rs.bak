@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
+//
+// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// James Wong is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
+//
+// IMPORTANT: Any software that fully or partially contains or uses materials
+// covered by this license must also be released under the GNU GPL license.
+// This includes modifications and derived works.
+
+use crate::messaging::messaging_factory::ISigbotMessagingOperation;
+use anyhow::Error;
+use async_trait::async_trait;
+use common_telemetry::{debug, error, info};
+use mqtt_endpoint_tokio::mqtt_ep::{
+    self,
+    role::Client,
+    transport::{connect_helper, TcpTransport},
+};
+use sigbot_types::modules::messaging::messaging::MessagingInfo;
+use std::{process, sync::Arc, time::Duration};
+
+#[derive(Clone)]
+pub struct SigbotMqttConfig {
+    pub id: i64,
+    pub mqtt_server: String,
+    pub mqtt_port: u16,
+    pub mqtt_username: String,
+    pub mqtt_password: String,
+    pub mqtt_client_id: Option<String>,
+    pub mqtt_timeout: Duration,
+    pub mqtt_topic: String,
+    pub mqtt_qos: u8,
+    pub mqtt_retain: bool,
+}
+
+impl std::fmt::Display for SigbotMqttConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SigbotMqttConfig=(
+                    id={}, mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password={:?}),
+            )
+            ",
+            self.id, self.mqtt_server, self.mqtt_port, self.mqtt_username, self.mqtt_password,
+        )
+    }
+}
+
+impl SigbotMqttConfig {
+    pub fn from_messaging(messaging: MessagingInfo) -> Self {
+        let plain_config = messaging.plain_configuration.expect("Plain configuration is required");
+        let secret_config = messaging
+            .secret_configuration
+            .expect("Secret configuration is required");
+        Self {
+            id: messaging.base.id.expect("Messaging ID is required"),
+            mqtt_server: plain_config
+                .get("mqtt_server")
+                .expect("MQTT server is required")
+                .to_string(),
+            mqtt_port: plain_config
+                .get("mqtt_port")
+                .expect("MQTT port is required")
+                .to_string()
+                .parse::<u16>()
+                .expect("MQTT port must be a valid number"),
+            mqtt_username: plain_config
+                .get("mqtt_username")
+                .expect("MQTT username is required")
+                .to_string(),
+            mqtt_password: secret_config
+                .get("mqtt_password")
+                .expect("MQTT password is required")
+                .to_string(),
+            mqtt_client_id: plain_config.get("mqtt_client_id").map(|s| s.to_string()),
+            mqtt_topic: plain_config
+                .get("mqtt_topic")
+                .expect("MQTT topic is required")
+                .to_string(),
+            mqtt_qos: plain_config
+                .get("mqtt_qos")
+                .expect("MQTT QoS is required")
+                .to_string()
+                .parse::<u8>()
+                .expect("MQTT QoS must be a valid number"),
+            mqtt_retain: plain_config
+                .get("mqtt_retain")
+                .expect("MQTT retain is required")
+                .to_string()
+                .parse::<bool>()
+                .expect("MQTT retain must be a valid boolean"),
+            mqtt_timeout: Duration::from_secs(
+                plain_config
+                    .get("mqtt_timeout")
+                    .expect("MQTT timeout is required")
+                    .parse::<u64>()
+                    .expect("MQTT timeout must be a valid number"),
+            ),
+        }
+    }
+}
+
+pub struct SigbotMqttOperation {
+    config: SigbotMqttConfig,
+}
+
+impl SigbotMqttOperation {
+    pub const KIND: &'static str = "MQTT"; // NotificationKind::EMAIL
+
+    pub async fn new(config: &SigbotMqttConfig) -> Arc<Self> {
+        Arc::new(Self {
+            config: config.to_owned(),
+        })
+    }
+}
+
+#[async_trait]
+impl ISigbotMessagingOperation for SigbotMqttOperation {
+    async fn init(&self) {
+        info!("Starting MQTT messaging with config={}", self.config);
+
+        // Create endpoint
+        let endpoint = mqtt_ep::endpoint::Endpoint::<Client>::new(mqtt_ep::Version::V5_0);
+        info!(
+            "Establishing MQTT connection to broker={} with timeout={}...",
+            self.config.mqtt_server,
+            self.config.mqtt_timeout.as_millis()
+        );
+        let transport = TcpTransport::from_stream(
+            connect_helper::connect_tcp(&self.config.mqtt_server, Some(self.config.mqtt_timeout))
+                .await
+                .expect("Failed to connect to MQTT server"),
+        );
+        // Attach the connected transport to the endpoint
+        endpoint
+            .attach(transport, mqtt_endpoint_tokio::mqtt_ep::Mode::Client)
+            .await
+            .expect("Failed to attach transport to endpoint");
+        info!("MQTT transport connected and attached to endpoint successfully!");
+
+        // Send CONNECT packet
+        endpoint
+            .send(
+                mqtt_ep::packet::v5_0::Connect::builder()
+                    .client_id("rust-client")
+                    .unwrap()
+                    .keep_alive(60)
+                    .clean_start(true)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .expect("Failed to send CONNECT packet");
+
+        // Receive CONNACK
+        let connack = endpoint.recv().await.expect("Failed to receive CONNACK packet");
+        info!("Received CONNACK packet: {connack:?}, exit");
+
+        mqtt_ep::packet::v5_0::Publish::builder()
+    }
+
+    async fn close(&self) {
+        info!("Closing MQTT messaging with {}", self.config);
+        unimplemented!();
+    }
+
+    async fn send_message(&self, to: &str, message: &str) -> Result<String, Error> {
+        info!("Sending MQTT message to topic={} with message={}", to, message);
+        unimplemented!();
+    }
+}

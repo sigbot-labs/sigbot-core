@@ -7,13 +7,16 @@ members = [
     "src/common/mem-prof",
     "src/common/pprof",
     "src/common/telemetry",
-    "src/cmd",
-    "src/core",
     "src/types",
     "src/utils",
+    "src/core",
     "src/exchange",
-    "src/executor",
+    "src/notification",
+    "src/messaging",
+    "src/controller",
+    "src/datafeed",
     "src/backtest",
+    "src/cmd",
 ]
 resolver = "2"
 
@@ -48,7 +51,10 @@ sigbot-core = { path = "src/core" }
 sigbot-types = { path = "src/types" }
 sigbot-utils = { path = "src/utils" }
 sigbot-exchange = { path = "src/exchange" }
-sigbot-executor = { path = "src/executor" }
+sigbot-notification = { path = "src/notification" }
+sigbot-messaging = { path = "src/messaging" }
+sigbot-controller = { path = "src/controller" }
+sigbot-datafeed = { path = "src/datafeed" }
 sigbot-backtest = { path = "src/backtest" }
 
 # Lang libs

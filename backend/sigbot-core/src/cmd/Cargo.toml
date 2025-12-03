@@ -16,11 +16,12 @@ common-pprof = { workspace = true, optional = true }
 common-telemetry = { workspace = true, features = [
     "deadlock_detection",
 ] }
-sigbot-core.workspace = true
-sigbot-executor.workspace = true
-sigbot-backtest.workspace = true
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
+sigbot-core.workspace = true
+sigbot-controller.workspace = true
+sigbot-datafeed.workspace = true
+sigbot-backtest.workspace = true
 
 # Thirdparty dependencies.
 #mimalloc.workspace = true

@@ -18,5 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest_factory;
-pub mod ticker;
+pub mod datafeed_factory;
+pub mod market;
+pub mod news;

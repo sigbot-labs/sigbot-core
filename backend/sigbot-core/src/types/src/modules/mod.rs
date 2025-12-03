@@ -19,4 +19,6 @@
 // This includes modifications and derived works.
 
 pub mod exchange;
+pub mod messaging;
+pub mod notification;
 pub mod strategy;

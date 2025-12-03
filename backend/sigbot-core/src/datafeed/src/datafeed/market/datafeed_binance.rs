@@ -18,23 +18,23 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::backtest::backtest_factory::ISigbotBacktestEngine;
+use crate::datafeed::datafeed_factory::ISigbotDatafeedExecutor;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::config::config::BacktestProperties;
+use sigbot_core::config::config::ExecutorProperties;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
-pub struct TickerBasedBacktestEngine {
-    config: BacktestProperties,
+pub struct SigbotBinanceDatafeedExecutor {
+    config: ExecutorProperties,
     scheduler: Arc<JobScheduler>,
 }
 
-impl TickerBasedBacktestEngine {
-    pub const KIND: &'static str = "TICKER_BASED";
+impl SigbotBinanceDatafeedExecutor {
+    pub const KIND: &'static str = "BINANCE_DATAFEED";
 
-    pub async fn new(config: &BacktestProperties) -> Arc<Self> {
+    pub async fn new(config: &ExecutorProperties) -> Arc<Self> {
         Arc::new(Self {
             config: config.to_owned(),
             scheduler: Arc::new(JobScheduler::new_with_channel_size(config.channel_size).await.unwrap()),
@@ -42,17 +42,16 @@ impl TickerBasedBacktestEngine {
     }
 
     pub(super) async fn process(&self) {
-        info!("Processing ticker based backtest ...");
-        // TODO: Implement the logic to process ticker based backtest.
-        // TODO: 1. Start the mock exchange APIs for receiving from strategy runner trade signals (via EMQx pub/sub event-driven).
-        // TODO: 2. Start the ticker data extractor for pushing to strategy runner (via EMQx pub/sub event-driven).
-        // TODO: 3. Start the summarizer for calculating the loss/profit and updating to balances (via EMQx pub/sub event-driven).
+        info!("Processing Binance market gateway ...");
+        // TODO: Implement the logic to process Binance market gateway.
+        // TODO: 1. Start the Binance market websocket subscription and pushing to EMQx(hot data cache).
+        // TODO: 2. Start the consumer to market data to database(cold data persist) from EMQx.
         unimplemented!()
     }
 }
 
 #[async_trait]
-impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
+impl ISigbotDatafeedExecutor for SigbotBinanceDatafeedExecutor {
     async fn init(&self) {
         let this = self.clone();
 
@@ -69,11 +68,11 @@ impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
             }
         };
 
-        info!("Starting Ticker based backtest handler with cron '{}'", cron);
+        info!("Starting Binance market gateway with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Hi I ran", chrono::Utc::now());
+                info!("{:?} Running Binance market gateway ...", chrono::Utc::now());
                 that.process().await;
             })
         })
@@ -82,20 +81,9 @@ impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
         self.scheduler.add(job).await.unwrap();
         self.scheduler.start().await.unwrap();
 
-        info!("Started Ticker based backtest handler.");
+        info!("Started Binance market gateway.");
     }
 }
 
 #[cfg(test)]
-mod tests {
-    #[allow(unused)]
-    use super::*;
-    use sigbot_core::config::config::AppConfigProperties;
-
-    #[tokio::test]
-    async fn test_verify() {
-        #[allow(unused)]
-        let mut config = AppConfigProperties::default();
-        todo!()
-    }
-}
+mod tests {}
