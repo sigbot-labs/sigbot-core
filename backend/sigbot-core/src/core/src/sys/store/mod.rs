@@ -18,6 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod dlock_mongo;
+pub mod dlock_postgres;
+pub mod dlock_sqlite;
 pub mod user_mongo;
 pub mod user_postgres;
 pub mod user_sqlite;

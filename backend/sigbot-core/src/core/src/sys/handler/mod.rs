@@ -19,4 +19,5 @@
 // This includes modifications and derived works.
 
 pub mod auth_handler;
+pub mod dlock_handler;
 pub mod user_handler;

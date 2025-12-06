@@ -62,6 +62,7 @@ impl SigbotControllerFactory {
                 info!("Skipping implementation controller: {}", config.name);
                 continue;
             }
+
             // TODO: Full use similar java spi provider mechanism.
             if config.kind == SigbotStrategyRunnerController::KIND {
                 match Self::get()
@@ -69,7 +70,8 @@ impl SigbotControllerFactory {
                     .unwrap() // If acquire fails, then it should panic.
                     .register(
                         config.kind.to_owned(),
-                        SigbotStrategyRunnerController::new(config).await,
+                        // TODO: Based on configuration?
+                        SigbotStrategyRunnerController::new(None, None).await,
                     ) {
                     Ok(registered) => {
                         info!("Initializing Sigbot Controller ...");

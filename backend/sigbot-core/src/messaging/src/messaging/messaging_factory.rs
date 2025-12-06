@@ -56,6 +56,8 @@ impl SigbotMessagingFactory {
 
     pub async fn init() {
         info!("Register to All Sigbot messaging operations ...");
+        // TODO: Default to register the messaging.
+        unimplemented!()
     }
 
     fn register<T: ISigbotMessagingOperation + Send + Sync + 'static>(

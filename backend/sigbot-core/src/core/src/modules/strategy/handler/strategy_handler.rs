@@ -29,7 +29,7 @@ use sigbot_types::{EntityBase, PageRequest, PageResponse};
 use std::sync::Arc;
 
 #[async_trait]
-pub trait IStrategyInfoHandler: Send {
+pub trait IStrategyInfoHandler: Send + Sync {
     async fn get(&self, id: Option<i64>) -> Result<Option<Arc<StrategyInfo>>, Error>;
 
     async fn find(

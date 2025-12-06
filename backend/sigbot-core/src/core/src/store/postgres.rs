@@ -273,7 +273,7 @@ macro_rules! dynamic_postgres_insert {
                 return Ok(-1);
             }
 
-            // e.g: 'INSERT INTO ch_ethereum_checkpoint ( ID, last_processed_block ) VALUES ( 2, 12345 ) ON CONFLICT ( ID ) DO UPDATE SET updated_time = CURRENT_TIMESTAMP(11) RETURNING ID;'
+            // e.g: 'INSERT INTO sys_user ( id, name ) VALUES ( 2, "John Doe" ) ON CONFLICT ( id ) DO UPDATE SET updated_time = CURRENT_TIMESTAMP(13) RETURNING id;'
             let query = format!("INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {} RETURNING id",
                 $table, fields.join(","), values.join(","), "updated_time = CURRENT_TIMESTAMP(13)");
 

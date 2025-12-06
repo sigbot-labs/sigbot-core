@@ -19,4 +19,5 @@
 // This includes modifications and derived works.
 
 pub mod auth;
+pub mod dlock;
 pub mod user;

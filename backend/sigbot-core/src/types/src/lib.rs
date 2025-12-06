@@ -38,7 +38,7 @@ pub struct EntityBase {
     #[schema(rename = "id")]
     pub id: Option<i64>,
     #[schema(rename = "status")]
-    pub status: Option<i32>,
+    pub status: Option<i8>,
     #[sqlx(rename = "created_by")]
     #[schema(read_only = true)]
     // Notice: Since we are currently using serde serialization to implement custom ORM,
@@ -53,7 +53,7 @@ pub struct EntityBase {
     #[schema(read_only = true)]
     pub updated_time: Option<DateTime<Utc>>,
     #[serde(skip)]
-    pub del_flag: Option<i32>,
+    pub del_flag: Option<i8>,
 }
 
 impl EntityBase {
@@ -133,6 +133,14 @@ impl PageRequest {
             // cached_backend_last_max_id: None,
         }
     }
+
+    pub fn new(num: u32, limit: u32) -> Self {
+        Self {
+            num: Some(num),
+            limit: Some(limit),
+        }
+    }
+
     pub fn get_offset(&self) -> u32 {
         let n = self.num.unwrap_or(1);
         if n < 1 {

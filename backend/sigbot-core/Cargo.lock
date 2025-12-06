@@ -7387,6 +7387,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sigbot-core",
+ "sigbot-messaging",
  "sigbot-types",
  "sigbot-utils",
  "sqlx",

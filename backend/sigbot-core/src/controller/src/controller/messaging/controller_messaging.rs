@@ -21,32 +21,66 @@
 use crate::controller::controller_factory::ISigbotController;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::config::config::ExecutorProperties;
-use std::sync::Arc;
+use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
 pub struct SigbotMessagingController {
-    config: ExecutorProperties,
-    scheduler: Arc<JobScheduler>,
+    schedule_cron: Option<String>,
+    schedule_channels: Option<usize>,
+    scheduler: Arc<Mutex<Option<JobScheduler>>>,
+    dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
 impl SigbotMessagingController {
     pub const KIND: &'static str = "MESSAGING";
+    pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
+    pub const DEFAULT_CHANNELS: usize = 5;
 
-    pub async fn new(config: &ExecutorProperties) -> Arc<Self> {
+    pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
-            scheduler: Arc::new(JobScheduler::new_with_channel_size(config.channel_size).await.unwrap()),
+            schedule_cron,
+            schedule_channels,
+            scheduler: Arc::new(Mutex::new(None)),
+            dlock_handler: None, // TODO: Inject the dlock handler.
         })
     }
 
-    pub(super) async fn process(&self) {
+    pub(super) async fn execute(&self) {
+        info!("Executing Messaging controller  ...");
+
+        // Acquire to distrbuted lock.
+        let dlock_name = "MESSAGING_CONTROLLER";
+        let acquired = self
+            .dlock_handler
+            .clone()
+            .expect("Dlock handler is not injected.")
+            .acquire(dlock_name.to_string(), Duration::from_secs(10))
+            .await;
+        match acquired {
+            Ok(true) => {
+                self.process().await;
+            }
+            Ok(false) => {
+                info!("Unable to acquire distributed lock with {}", dlock_name);
+            }
+            Err(e) => {
+                info!("Failed to acquire distributed lock: {:?}", e.to_string());
+            }
+        }
+
+        info!("Executed Messaging controller.");
+    }
+
+    // TODO: Implement the logic to scan to activate messaging sources.
+    // TODO: 1. Scan the messaging source from the database.
+    // TODO: 2. If the messaging source is activated, then to start the messaging runner instance(pod/container).
+    // TODO: 3. If the messaging source is not activated, then to shutdown the messaging runner instance(pod/container).
+    async fn process(&self) {
         info!("Scanning to activate messaging ...");
-        // TODO: Implement the logic to scan to activate messaging sources.
-        // TODO: 1. Scan the messaging source from the database.
-        // TODO: 2. If the messaging source is activated, then to start the messaging runner instance(pod/container).
-        // TODO: 3. If the messaging source is not activated, then to shutdown the messaging runner instance(pod/container).
+
         unimplemented!()
     }
 }
@@ -55,39 +89,70 @@ impl SigbotMessagingController {
 impl ISigbotController for SigbotMessagingController {
     async fn init(&self) {
         let this = self.clone();
+        let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
+        let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
 
-        // Pre-check the cron expression is valid.
-        let cron = match Job::new_async(self.config.cron.as_str(), |_uuid, _lock| Box::pin(async {})) {
-            Ok(_) => self.config.cron.as_str(),
+        // Validate the cron expression.
+        let cron = match Job::new_async(cron_expression, |_uuid, _lock| Box::pin(async {})) {
+            Ok(_) => cron_expression,
             Err(e) => {
                 tracing::warn!(
-                    "Invalid cron expression '{}': {}. Using default '0/30 * * * * *'",
-                    self.config.cron,
-                    e
+                    "Invalid cron expression '{}': {}. Using default '{}'",
+                    cron_expression,
+                    e,
+                    Self::DEFAULT_CRON_EXPRESSION
                 );
-                "0/30 * * * * *" // every half minute
+                Self::DEFAULT_CRON_EXPRESSION
             }
         };
 
-        info!("Starting Messaging Controller with cron '{}'", cron);
+        info!("Starting Messaging controller with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Running Messaging Controller ...", chrono::Utc::now());
-                that.process().await;
+                info!("{:?} Running Messaging controller ...", chrono::Utc::now());
+                that.execute().await;
             })
         })
-        .unwrap();
+        .expect("Failed to create Messaging controller job");
 
-        self.scheduler.add(job).await.unwrap();
-        self.scheduler.start().await.unwrap();
+        let scheduler = JobScheduler::new_with_channel_size(channel_size)
+            .await
+            .expect("Failed to create scheduler");
+        scheduler
+            .add(job)
+            .await
+            .expect("Failed to add Messaging controller job");
+        scheduler
+            .start()
+            .await
+            .expect("Failed to start Messaging controller scheduler");
 
-        info!("Started Messaging Controller.");
+        *self.scheduler.lock().await = Some(scheduler);
+
+        info!(
+            "Started Messaging controller with cron '{}', channels '{}'",
+            cron, channel_size
+        );
     }
 
     async fn close(&self) {
-        info!("Closing Messaging Controller with cron '{}'", self.config.cron.as_str());
-        unimplemented!();
+        info!(
+            "Closing Messaging controller with cron '{}', channels '{}'",
+            self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
+            self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
+        );
+        if let Some(mut scheduler) = self.scheduler.lock().await.take() {
+            scheduler
+                .shutdown()
+                .await
+                .expect("Failed to shutdown Messaging controller scheduler");
+        }
+        info!(
+            "Closed Messaging controller with cron '{}', channels '{}'",
+            self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
+            self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
+        );
     }
 }
 

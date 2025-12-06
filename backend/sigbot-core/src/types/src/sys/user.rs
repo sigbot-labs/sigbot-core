@@ -72,6 +72,7 @@ impl Default for User {
 }
 
 /// SqliteRow impl for User.
+
 impl<'r> FromRow<'r, SqliteRow> for User {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
         Ok(User {

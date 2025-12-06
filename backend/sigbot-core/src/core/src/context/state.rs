@@ -35,14 +35,15 @@ use crate::{
     },
     store::RepositoryContainer,
     sys::store::{
-        user_mongo::UserMongoRepository, user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
+        dlock_postgres::DLockPostgresRepository, user_mongo::UserMongoRepository,
+        user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
     },
 };
 
 use oauth2::basic::BasicClient;
 use sigbot_types::{
     modules::{exchange::exchange::ExchangeInfo, strategy::strategy::StrategyInfo},
-    sys::user::User,
+    sys::{dlock::DLock, user::User},
 };
 use sigbot_utils::httpclients;
 use std::sync::Arc;
@@ -62,6 +63,7 @@ pub struct SigbotState {
     pub redis_cluster_checker: RedisClusterChecker,
     // The System module repositories.
     pub user_repo: Arc<Mutex<RepositoryContainer<User>>>,
+    pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
     // The Service module repositories.
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
@@ -91,7 +93,8 @@ impl SigbotState {
         // Build tooling http client.
         let http_client = httpclients::build_default();
 
-        // The System module repositories.
+        // --- The System module repositories. ---
+
         let db_config = &config.appdb;
         let user_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -109,8 +112,19 @@ impl SigbotState {
                 _ => None,
             },
         );
+        let lock_repo = RepositoryContainer::new(
+            None,
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    DLockPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            None,
+        );
 
-        // The Service module repositories.
+        // --- The Service module repositories. ---
+
         let exchange_repo = RepositoryContainer::new(
             match db_config.db_type {
                 AppDBType::SQLITE => Some(Box::new(
@@ -166,6 +180,7 @@ impl SigbotState {
             redis_cluster_checker: RedisClusterChecker::new(),
             // The System repositories.
             user_repo: Arc::new(Mutex::new(user_repo)),
+            lock_repo: Arc::new(Mutex::new(lock_repo)),
             // The Application repositories.
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
