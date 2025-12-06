@@ -22,7 +22,6 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_core::config::config;
 use sigbot_types::modules::exchange::models::trade_market::{KlineResult, PriceResult};
 use sigbot_types::modules::exchange::models::trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult};
 use std::{
@@ -78,26 +77,7 @@ impl SigbotExchangeFactory {
     pub async fn init() {
         info!("Register to All Sigbot exchange operators ...");
 
-        for config in &config::get_config().services.executors {
-            //     if !config.enabled {
-            //         info!("Skipping implementation operator: {}", config.name);
-            //         continue;
-            //     }
-            //     // TODO: Full use similar java spi provider mechanism.
-            //     if config.kind == SimpleLLMExecutor::KIND {
-            //         match Self::get()
-            //             .write() // If acquire fails, then it block until acquired.
-            //             .unwrap() // If acquire fails, then it should panic.
-            //             .register(config.kind.to_owned(), SimpleLLMExecutor::new(config).await)
-            //         {
-            //             Ok(registered) => {
-            //                 info!("Initializing Sigbot operator ...");
-            //                 let _ = registered.init().await;
-            //             }
-            //             Err(e) => panic!("Failed to register Sigbot operator: {}", e),
-            //         }
-            //     }
-        }
+        unimplemented!()
     }
 
     fn register<T: ISigbotExchangeOperation + Send + Sync + 'static>(

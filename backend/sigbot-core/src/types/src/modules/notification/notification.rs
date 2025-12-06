@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::{EntityBase, PageResponse};
+use anyhow::Context;
 use common_makestruct::MakeStructWith;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -36,8 +37,8 @@ pub struct NotificationInfo {
     pub base: EntityBase,
     pub name: Option<String>,
     pub provider: Option<NotificationProvider>,
-    pub plain_configuration: Option<HashMap<String, String>>,
-    pub secret_configuration: Option<HashMap<String, String>>,
+    pub configuration: Option<HashMap<String, String>>,
+    pub secrets: Option<HashMap<String, String>>,
     pub description: Option<String>,
 }
 
@@ -46,9 +47,9 @@ impl Default for NotificationInfo {
         NotificationInfo {
             base: EntityBase::new_empty(),
             name: None,
-            provider: Some(NotificationProvider::EMAIL),
-            plain_configuration: None,
-            secret_configuration: None,
+            provider: None,
+            configuration: None,
+            secrets: None,
             description: None,
         }
     }
@@ -74,8 +75,8 @@ impl<'r> FromRow<'r, SqliteRow> for NotificationInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            plain_configuration: None,
-            secret_configuration: None,
+            configuration: None,
+            secrets: None,
             description: Some(row.try_get("description")?),
         })
     }
@@ -85,7 +86,7 @@ impl<'r> FromRow<'r, SqliteRow> for NotificationInfo {
 impl<'r> FromRow<'r, PgRow> for NotificationInfo {
     fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
         Ok(NotificationInfo {
-            base: EntityBase::from_row(row)?,
+            base: <EntityBase as FromRow<PgRow>>::from_row(row)?,
             name: row.try_get("name")?,
             provider: row
                 .try_get::<Option<String>, _>("provider")?
@@ -101,8 +102,8 @@ impl<'r> FromRow<'r, PgRow> for NotificationInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            plain_configuration: None,
-            secret_configuration: None,
+            configuration: None,
+            secrets: None,
             description: Some(row.try_get("description")?),
         })
     }
@@ -110,16 +111,16 @@ impl<'r> FromRow<'r, PgRow> for NotificationInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum NotificationProvider {
-    EMAIL,
-    TELEGRAM,
+    BINANCE,
+    TWITTER,
 }
 
 impl NotificationProvider {
-    pub fn of(provider: &str) -> Result<NotificationProvider, String> {
+    pub fn of(provider: &str) -> Result<NotificationProvider, anyhow::Error> {
         match provider.to_uppercase().as_str() {
-            "EMAIL" => Ok(NotificationProvider::EMAIL),
-            "TELEGRAM" => Ok(NotificationProvider::TELEGRAM),
-            _ => Err(format!("Unsupported the notification provider: {}", provider)),
+            "BINANCE" => Ok(NotificationProvider::BINANCE),
+            "TWITTER" => Ok(NotificationProvider::TWITTER),
+            _ => Err(anyhow::anyhow!("Unsupported the notification provider: {}", provider)),
         }
     }
 }
@@ -137,28 +138,26 @@ impl NotificationProvider {
 )]
 #[into_params(parameter_in = Query)]
 pub struct QueryNotificationRequest {
-    // #[serde(flatten)]
-    // #[serde(default)]
-    // #[serde(skip)]
-    // #[param(style = Form)]
-    // #[param(value_type=Option<String>)]
-    // pub page: Option<super::PageRequest>, // It is difficult to pass parameters using http get/query when nested structures.
     #[validate(length(min = 1, max = 32))]
     pub name: Option<String>,
+    pub active: Option<bool>,
     #[validate(length(min = 1, max = 16))]
     pub provider: Option<String>,
 }
 
 impl QueryNotificationRequest {
-    pub fn to_entity(&self) -> NotificationInfo {
-        NotificationInfo {
+    pub fn to_entity(&self) -> Result<NotificationInfo, anyhow::Error> {
+        Ok(NotificationInfo {
             base: EntityBase::new_empty(),
-            name: Some(self.name.clone().unwrap_or_default()),
-            provider: NotificationProvider::of(self.provider.clone().unwrap_or_default().as_str()).ok(),
-            plain_configuration: None,
-            secret_configuration: None,
+            name: Some(self.name.to_owned().unwrap_or_default()),
+            provider: Some(
+                NotificationProvider::of(self.provider.to_owned().unwrap_or_default().as_str())
+                    .context("Failed to parse notification provider")?,
+            ),
+            configuration: None,
+            secrets: None,
             description: None,
-        }
+        })
     }
 }
 
@@ -195,15 +194,18 @@ pub struct SaveNotificationRequest {
 }
 
 impl SaveNotificationRequest {
-    pub fn to_entity(&self) -> NotificationInfo {
-        NotificationInfo {
+    pub fn to_entity(&self) -> Result<NotificationInfo, anyhow::Error> {
+        Ok(NotificationInfo {
             base: EntityBase::new_with_id(self.id),
             name: Some(self.name.clone()),
-            provider: NotificationProvider::of(self.provider.clone().as_str()).ok(),
-            plain_configuration: self.plain_configuration.clone(),
-            secret_configuration: self.secret_configuration.clone(),
+            provider: Some(
+                NotificationProvider::of(self.provider.to_owned().as_str())
+                    .context("Failed to parse notification provider")?,
+            ),
+            configuration: self.plain_configuration.clone(),
+            secrets: self.secret_configuration.clone(),
             description: self.description.clone(),
-        }
+        })
     }
 }
 

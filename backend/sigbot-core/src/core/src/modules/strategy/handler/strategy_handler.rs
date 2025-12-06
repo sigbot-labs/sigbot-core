@@ -59,7 +59,6 @@ impl<'a> IStrategyInfoHandler for StrategyInfoHandler<'a> {
         let param = StrategyInfo {
             base: EntityBase::new_with_id(id),
             name: None,
-            active: Some(true),
             provider: None,
             parameters: None,
             description: None,

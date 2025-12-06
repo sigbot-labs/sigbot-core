@@ -21,7 +21,11 @@
 use crate::controller::controller_factory::ISigbotController;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use sigbot_core::{
+    modules::messaging::handler::messaging_handler::IMessagingInfoHandler, sys::handler::dlock_handler::IDLockHandler,
+};
+use sigbot_messaging::messaging::messaging_factory::SigbotMessagingFactory;
+use sigbot_types::{modules::messaging::messaging::QueryMessagingRequest, PageRequest, PageResponse};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -31,19 +35,22 @@ pub struct SigbotMessagingController {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
+    messaging_handler: Option<Arc<dyn IMessagingInfoHandler>>,
     dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
 impl SigbotMessagingController {
-    pub const KIND: &'static str = "MESSAGING";
+    pub const NAME: &'static str = "MESSAGING_CONTROLLER";
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
+    pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
 
     pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
         Arc::new(Self {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
+            messaging_handler: None,
             dlock_handler: None, // TODO: Inject the dlock handler.
         })
     }
@@ -79,9 +86,83 @@ impl SigbotMessagingController {
     // TODO: 2. If the messaging source is activated, then to start the messaging runner instance(pod/container).
     // TODO: 3. If the messaging source is not activated, then to shutdown the messaging runner instance(pod/container).
     async fn process(&self) {
-        info!("Scanning to activate messaging ...");
+        info!("Scanning Messaging ...");
 
-        unimplemented!()
+        let mut gatekeeper_counter = 0 as u16;
+        let mut last_page = PageResponse::new(None, None, None);
+        while gatekeeper_counter > Self::DEFAULT_SAFETY_THRESHOLD
+            && (last_page.total.is_none() || last_page.total.unwrap_or(0) > 0)
+        {
+            gatekeeper_counter += 1;
+            info!("Loading Messaging : {}", last_page.num.unwrap_or(1));
+
+            let (current_page, messagings) = self
+                .messaging_handler
+                .clone()
+                .expect("Strategy handler is not injected.")
+                .find(
+                    QueryMessagingRequest {
+                        name: None,
+                        active: None,
+                        provider: None,
+                    },
+                    PageRequest::new(last_page.num.unwrap_or(1) as u32, last_page.limit.unwrap_or(10) as u32),
+                )
+                .await
+                .expect("Failed to find messaging.");
+            last_page = current_page;
+
+            info!("Loaded {} Messaging : {}", messagings.len(), last_page.num.unwrap_or(1));
+
+            for messaging in messagings {
+                let messaging0 = Arc::new(messaging);
+                if messaging0.base.status.unwrap_or(0) == 1 {
+                    info!(
+                        "Initializing Datafeed Runner : {:?}/{:?}",
+                        messaging0.base.id, messaging0.name
+                    );
+                    let result = SigbotMessagingFactory::register(messaging0.to_owned()).await;
+                    match result {
+                        Ok(handler) => {
+                            handler.init().await;
+                            info!(
+                                "Initialized Datafeed Runner : {:?}/{:?}",
+                                messaging0.base.id, messaging0.name
+                            );
+                        }
+                        Err(e) => {
+                            info!(
+                                "Failed to initialize Datafeed Runner : {:?}/{:?}",
+                                messaging0.base.id, messaging0.name
+                            );
+                        }
+                    }
+                } else {
+                    info!(
+                        "Shutting down Datafeed Runner : {:?}/{:?}",
+                        messaging0.base.id, messaging0.name
+                    );
+                    let result =
+                        SigbotMessagingFactory::get_implementation(messaging0.name.to_owned().unwrap_or_default())
+                            .await;
+                    match result {
+                        Ok(handler) => {
+                            handler.shutdown().await;
+                            info!(
+                                "Shutdown Datafeed Runner : {:?}/{:?}",
+                                messaging0.base.id, messaging0.name
+                            );
+                        }
+                        Err(e) => {
+                            info!(
+                                "Failed to shutdown Datafeed Runner : {:?}/{:?}",
+                                messaging0.base.id, messaging0.name
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

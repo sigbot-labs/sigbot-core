@@ -125,8 +125,8 @@ impl std::fmt::Display for SigbotBinanceConfig {
 
 impl SigbotBinanceConfig {
     pub fn from_exchange(exchange: ExchangeInfo) -> Self {
-        let plain_config = exchange.plain_configuration.expect("Plain configuration is required");
-        let secret_config = exchange.secret_configuration.expect("Secret configuration is required");
+        let plain_config = exchange.configuration.expect("Plain configuration is required");
+        let secret_config = exchange.secrets.expect("Secret configuration is required");
         Self {
             id: exchange.base.id.expect("Exchange ID is required"),
             name: exchange.name.expect("Exchange name is required"),

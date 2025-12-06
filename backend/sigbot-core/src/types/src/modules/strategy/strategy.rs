@@ -36,7 +36,6 @@ pub struct StrategyInfo {
     #[serde(flatten)]
     pub base: EntityBase,
     pub name: Option<String>,
-    pub active: Option<bool>,
     pub provider: Option<String>,
     pub parameters: Option<HashMap<String, String>>,
     pub description: Option<String>,
@@ -47,7 +46,6 @@ impl Default for StrategyInfo {
         StrategyInfo {
             base: EntityBase::new_empty(),
             name: None,
-            active: Some(true),
             provider: None,
             parameters: None,
             description: None,
@@ -61,7 +59,6 @@ impl<'r> FromRow<'r, SqliteRow> for StrategyInfo {
         Ok(StrategyInfo {
             base: EntityBase::from_row(row).unwrap(),
             name: row.try_get("name")?,
-            active: row.try_get("active")?,
             provider: row.try_get::<Option<String>, _>("provider")?,
             // TODO: auto convert and wrap to Map attribute.
             parameters: None,
@@ -76,7 +73,6 @@ impl<'r> FromRow<'r, PgRow> for StrategyInfo {
         Ok(StrategyInfo {
             base: EntityBase::from_row(row)?,
             name: row.try_get("name")?,
-            active: row.try_get("active")?,
             provider: row.try_get::<Option<String>, _>("provider")?,
             // TODO: auto convert and wrap to Map attribute.
             parameters: None,
@@ -116,7 +112,6 @@ impl QueryStrategyRequest {
         StrategyInfo {
             base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
-            active: self.active,
             provider: self.provider.clone(),
             parameters: None,
             description: None,
@@ -146,7 +141,6 @@ pub struct SaveStrategyRequest {
     pub id: Option<i64>,
     #[validate(length(min = 1, max = 32))]
     pub name: String,
-    pub active: bool,
     #[validate(length(min = 1, max = 16))]
     pub provider: String,
     #[validate(length(min = 1, max = 8192))]
@@ -160,7 +154,6 @@ impl SaveStrategyRequest {
         StrategyInfo {
             base: EntityBase::new_with_id(self.id),
             name: Some(self.name.clone()),
-            active: Some(self.active),
             provider: Some(self.provider.clone()),
             parameters: self.parameters.clone(),
             description: self.description.clone(),

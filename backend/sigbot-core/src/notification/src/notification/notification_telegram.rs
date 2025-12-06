@@ -47,9 +47,7 @@ impl std::fmt::Display for SigbotTelegramConfig {
 
 impl SigbotTelegramConfig {
     pub fn from_notification(notification: NotificationInfo) -> Self {
-        let plain_config = notification
-            .plain_configuration
-            .expect("Plain configuration is required");
+        let plain_config = notification.configuration.expect("Plain configuration is required");
         Self {
             id: notification.base.id.expect("Notification ID is required"),
             telegram_bot_token: plain_config

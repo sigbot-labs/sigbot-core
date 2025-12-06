@@ -60,8 +60,8 @@ impl<'a> IExchangeInfoHandler for ExchangeInfoHandler<'a> {
             base: EntityBase::new_with_id(id),
             name: None,
             provider: None,
-            plain_configuration: None,
-            secret_configuration: None,
+            configuration: None,
+            secrets: None,
             description: None,
         };
 

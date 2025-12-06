@@ -22,15 +22,18 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use sigbot_types::modules::messaging::messaging::{MessagingInfo, MessagingProvider};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
+use crate::messaging::messaging_mqtt::SigbotMqttOperation;
+
 #[async_trait]
 pub trait ISigbotMessagingOperation: Send + Sync {
     async fn init(&self);
-    async fn close(&self);
+    async fn shutdown(&self);
     async fn publish(&self, to: &str, message: &str) -> Result<String, Error>;
     async fn subscribe(&self, topic: &str) -> Result<String, Error>;
 }
@@ -55,16 +58,30 @@ impl SigbotMessagingFactory {
     }
 
     pub async fn init() {
-        info!("Register to All Sigbot messaging operations ...");
-        // TODO: Default to register the messaging.
         unimplemented!()
     }
 
-    fn register<T: ISigbotMessagingOperation + Send + Sync + 'static>(
+    pub async fn register(
+        messaaging: Arc<MessagingInfo>,
+    ) -> Result<Arc<dyn ISigbotMessagingOperation + Send + Sync>, Error> {
+        info!("Register Sigbot Datafeed ...");
+        let handler: Arc<dyn ISigbotMessagingOperation + Send + Sync> =
+            match messaaging.to_owned().provider.clone().unwrap() {
+                MessagingProvider::MQTT => SigbotMqttOperation::new(messaaging.to_owned()).await,
+            };
+        let name = messaaging.name.clone().unwrap_or_default();
+        let result = {
+            let mut factory = SigbotMessagingFactory::get().write().unwrap();
+            factory.register0(name, handler.to_owned())
+        };
+        result
+    }
+
+    fn register0(
         &mut self,
         name: String,
-        handler: Arc<T>,
-    ) -> Result<Arc<T>, Error> {
+        handler: Arc<dyn ISigbotMessagingOperation + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotMessagingOperation + Send + Sync>, Error> {
         if self.implementations.contains_key(&name) {
             debug!("Already register the sigbot messaging operation '{}'", name);
             return Ok(handler);
@@ -87,7 +104,7 @@ impl SigbotMessagingFactory {
     pub async fn close() {
         let this = SigbotMessagingFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
-            implementation.close().await;
+            implementation.shutdown().await;
         }
     }
 }

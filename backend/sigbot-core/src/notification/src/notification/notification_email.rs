@@ -49,12 +49,8 @@ impl std::fmt::Display for SigbotEmailConfig {
 
 impl SigbotEmailConfig {
     pub fn from_notification(notification: NotificationInfo) -> Self {
-        let plain_config = notification
-            .plain_configuration
-            .expect("Plain configuration is required");
-        let secret_config = notification
-            .secret_configuration
-            .expect("Secret configuration is required");
+        let plain_config = notification.configuration.expect("Plain configuration is required");
+        let secret_config = notification.secrets.expect("Secret configuration is required");
         Self {
             id: notification.base.id.expect("Notification ID is required"),
             smtp_server: plain_config

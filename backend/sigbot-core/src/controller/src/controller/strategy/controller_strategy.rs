@@ -39,7 +39,7 @@ pub struct SigbotStrategyRunnerController {
 }
 
 impl SigbotStrategyRunnerController {
-    pub const KIND: &'static str = "STRATEGY_RUNNER";
+    pub const NAME: &'static str = "STRATEGY_CONTROLLER";
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
@@ -94,7 +94,7 @@ impl SigbotStrategyRunnerController {
             && (last_page.total.is_none() || last_page.total.unwrap_or(0) > 0)
         {
             gatekeeper_counter += 1;
-            info!("Loading active strategies from page {}", last_page.num.unwrap_or(1));
+            info!("Loading strategies : {}", last_page.num.unwrap_or(1));
 
             let (current_page, strategies) = self
                 .strategy_handler
@@ -112,16 +112,21 @@ impl SigbotStrategyRunnerController {
                 .expect("Failed to find active strategies.");
             last_page = current_page;
 
-            info!("Loaded {} active strategies.", strategies.len());
+            info!(
+                "Loaded {} strategies : {}",
+                strategies.len(),
+                last_page.num.unwrap_or(1)
+            );
 
             for strategy in strategies {
                 info!("Starting strategy : {:?}/{:?}", strategy.base.id, strategy.name);
-                if strategy.active.is_none() {
-                    // TODO: Implement the logic to start the strategy runner.
+                if strategy.base.status.unwrap_or(0) == 1 {
+                    info!("Starting Strategy Runner : {:?}/{:?}", strategy.base.id, strategy.name);
+                    unimplemented!()
                 } else {
-                    // TODO: Implement the logic to stop the strategy runner.
+                    info!("Stopping Strategy Runner : {:?}/{:?}", strategy.base.id, strategy.name);
+                    unimplemented!()
                 }
-                unimplemented!()
             }
         }
     }

@@ -21,7 +21,11 @@
 use crate::controller::controller_factory::ISigbotController;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use sigbot_core::{
+    modules::notification::handler::notification_handler::INotificationInfoHandler,
+    sys::handler::dlock_handler::IDLockHandler,
+};
+use sigbot_types::{modules::notification::notification::QueryNotificationRequest, PageRequest, PageResponse};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -31,20 +35,23 @@ pub struct SigbotNotificationController {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
+    notification_handler: Option<Arc<dyn INotificationInfoHandler>>,
     dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
 impl SigbotNotificationController {
-    pub const KIND: &'static str = "NOTIFICATION";
+    pub const NAME: &'static str = "NOTIFICATION_CONTROLLER";
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
+    pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
 
     pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
         Arc::new(Self {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            dlock_handler: None, // TODO: Inject the dlock handler.
+            notification_handler: None, // TODO: Inject the notification handler.
+            dlock_handler: None,        // TODO: Inject the dlock handler.
         })
     }
 
@@ -78,7 +85,58 @@ impl SigbotNotificationController {
     // TODO: 1. Consume the notification from the EMQx messaging topics.
     // TODO: 2. Sending the messing to the notification channel.
     async fn process(&self) {
-        unimplemented!()
+        info!("Scanning Messaging ...");
+
+        let mut gatekeeper_counter = 0 as u16;
+        let mut last_page = PageResponse::new(None, None, None);
+        while gatekeeper_counter > Self::DEFAULT_SAFETY_THRESHOLD
+            && (last_page.total.is_none() || last_page.total.unwrap_or(0) > 0)
+        {
+            gatekeeper_counter += 1;
+            info!("Loading Notification : {}", last_page.num.unwrap_or(1));
+
+            let (current_page, notifications) = self
+                .notification_handler
+                .clone()
+                .expect("Notification handler is not injected.")
+                .find(
+                    QueryNotificationRequest {
+                        name: None,
+                        active: None,
+                        provider: None,
+                    },
+                    PageRequest::new(last_page.num.unwrap_or(1) as u32, last_page.limit.unwrap_or(10) as u32),
+                )
+                .await
+                .expect("Failed to find notification.");
+            last_page = current_page;
+
+            info!(
+                "Loaded {} Notification : {}",
+                notifications.len(),
+                last_page.num.unwrap_or(1)
+            );
+
+            for notification in notifications {
+                info!(
+                    "Starting Notification : {:?}/{:?}",
+                    notification.base.id, notification.name
+                );
+                if notification.base.status.unwrap_or(0) == 1 {
+                    info!(
+                        "Starting Notification Runner : {:?}/{:?}",
+                        notification.base.id, notification.name
+                    );
+                    unimplemented!()
+                } else {
+                    info!(
+                        "Stopping Notification Runner : {:?}/{:?}",
+                        notification.base.id, notification.name
+                    );
+                    unimplemented!()
+                }
+            }
+        }
     }
 }
 

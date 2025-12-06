@@ -21,24 +21,19 @@
 use crate::datafeed::datafeed_factory::ISigbotDatafeedExecutor;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::config::config::ExecutorProperties;
+use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
-use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
 pub struct SigbotTwitterDatafeedExecutor {
-    config: ExecutorProperties,
-    scheduler: Arc<JobScheduler>,
+    config: Arc<DatafeedInfo>,
 }
 
 impl SigbotTwitterDatafeedExecutor {
     pub const KIND: &'static str = "TWITTER_DATAFEED";
 
-    pub async fn new(config: &ExecutorProperties) -> Arc<Self> {
-        Arc::new(Self {
-            config: config.to_owned(),
-            scheduler: Arc::new(JobScheduler::new_with_channel_size(config.channel_size).await.unwrap()),
-        })
+    pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
+        Arc::new(Self { config })
     }
 
     pub(super) async fn process(&self) {
@@ -53,35 +48,11 @@ impl SigbotTwitterDatafeedExecutor {
 #[async_trait]
 impl ISigbotDatafeedExecutor for SigbotTwitterDatafeedExecutor {
     async fn init(&self) {
-        let this = self.clone();
-
-        // Pre-check the cron expression is valid.
-        let cron = match Job::new_async(self.config.cron.as_str(), |_uuid, _lock| Box::pin(async {})) {
-            Ok(_) => self.config.cron.as_str(),
-            Err(e) => {
-                tracing::warn!(
-                    "Invalid cron expression '{}': {}. Using default '0/30 * * * * *'",
-                    self.config.cron,
-                    e
-                );
-                "0/30 * * * * *" // every half minute
-            }
-        };
-
-        info!("Starting Twitter data feed with cron '{}'", cron);
-        let job = Job::new_async(cron, move |_uuid, _lock| {
-            let that = this.clone();
-            Box::pin(async move {
-                info!("{:?} Running Twitter data feed ...", chrono::Utc::now());
-                that.process().await;
-            })
-        })
-        .unwrap();
-
-        self.scheduler.add(job).await.unwrap();
-        self.scheduler.start().await.unwrap();
-
         info!("Started Twitter data feed.");
+    }
+
+    async fn shutdown(&self) {
+        info!("Shut down Twitter data feed.");
     }
 }
 

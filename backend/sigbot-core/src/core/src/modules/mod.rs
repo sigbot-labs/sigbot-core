@@ -18,5 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod datafeed;
 pub mod exchange;
+pub mod messaging;
+pub mod notification;
 pub mod strategy;

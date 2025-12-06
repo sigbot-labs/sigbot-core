@@ -18,20 +18,24 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::datafeed::market::datafeed_binance::SigbotBinanceDatafeedExecutor;
-use anyhow::Error;
+use anyhow::{Error, Ok};
 use async_trait::async_trait;
-use common_telemetry::info;
+use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_core::config::config;
+use sigbot_types::modules::datafeed::datafeed::{DatafeedInfo, DatafeedProvider};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
+use crate::datafeed::{
+    market::datafeed_binance::SigbotBinanceDatafeedExecutor, news::datafeed_twitter::SigbotTwitterDatafeedExecutor,
+};
+
 #[async_trait]
 pub trait ISigbotDatafeedExecutor: Send + Sync {
     async fn init(&self);
+    async fn shutdown(&self);
 }
 
 lazy_static! {
@@ -54,40 +58,36 @@ impl SigbotDatafeedFactory {
     }
 
     pub async fn init() {
-        info!("Register All Sigbot Datafeeds ...");
-
-        for config in &config::get_config().services.executors {
-            if !config.enabled {
-                info!("Skipping implementation datafeed: {}", config.name);
-                continue;
-            }
-            // TODO: Full use similar java spi provider mechanism.
-            if config.kind == SigbotBinanceDatafeedExecutor::KIND {
-                match Self::get()
-                    .write() // If acquire fails, then it block until acquired.
-                    .unwrap() // If acquire fails, then it should panic.
-                    .register(config.kind.to_owned(), SigbotBinanceDatafeedExecutor::new(config).await)
-                {
-                    Ok(registered) => {
-                        info!("Initializing Sigbot Datafeed ...");
-                        let _ = registered.init().await;
-                    }
-                    Err(e) => panic!("Failed to register Sigbot Datafeed: {}", e),
-                }
-            }
-        }
+        unimplemented!()
     }
 
-    fn register<T: ISigbotDatafeedExecutor + Send + Sync + 'static>(
+    pub async fn register(
+        datafeed: Arc<DatafeedInfo>,
+    ) -> Result<Arc<dyn ISigbotDatafeedExecutor + Send + Sync>, Error> {
+        info!("Register Sigbot Datafeed ...");
+        let handler: Arc<dyn ISigbotDatafeedExecutor + Send + Sync> =
+            match datafeed.to_owned().provider.clone().unwrap() {
+                DatafeedProvider::BINANCE => SigbotBinanceDatafeedExecutor::new(datafeed.to_owned()).await,
+                DatafeedProvider::TWITTER => SigbotTwitterDatafeedExecutor::new(datafeed.to_owned()).await,
+            };
+        let name = datafeed.name.clone().unwrap_or_default();
+        let result = {
+            let mut factory = SigbotDatafeedFactory::get().write().unwrap();
+            factory.register0(name, handler.to_owned())
+        };
+        result
+    }
+
+    fn register0(
         &mut self,
         name: String,
-        handler: Arc<T>,
-    ) -> Result<Arc<T>, Error> {
+        handler: Arc<dyn ISigbotDatafeedExecutor + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotDatafeedExecutor + Send + Sync>, Error> {
         if self.implementations.contains_key(&name) {
-            tracing::debug!("Already register the Datafeed '{}'", name);
+            debug!("Already register the Datafeed '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.to_owned());
+        self.implementations.insert(name, handler.clone());
         Ok(handler)
     }
 

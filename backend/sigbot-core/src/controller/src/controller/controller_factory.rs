@@ -18,7 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::controller::strategy::controller_strategy::SigbotStrategyRunnerController;
+use crate::controller::{
+    datafeed::controller_datafeed::SigbotDatafeedRunnerController,
+    messaging::controller_messaging::SigbotMessagingController,
+    notification::controller_notification::SigbotNotificationController,
+    strategy::controller_strategy::SigbotStrategyRunnerController,
+};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -55,31 +60,98 @@ impl SigbotControllerFactory {
     }
 
     pub async fn init() {
-        info!("Register All Sigbot Controllers ...");
+        let config = config::get_config();
 
-        for config in &config::get_config().services.executors {
-            if !config.enabled {
-                info!("Skipping implementation controller: {}", config.name);
-                continue;
-            }
-
-            // TODO: Full use similar java spi provider mechanism.
-            if config.kind == SigbotStrategyRunnerController::KIND {
-                match Self::get()
-                    .write() // If acquire fails, then it block until acquired.
-                    .unwrap() // If acquire fails, then it should panic.
-                    .register(
-                        config.kind.to_owned(),
-                        // TODO: Based on configuration?
-                        SigbotStrategyRunnerController::new(None, None).await,
-                    ) {
-                    Ok(registered) => {
-                        info!("Initializing Sigbot Controller ...");
-                        let _ = registered.init().await;
-                    }
-                    Err(e) => panic!("Failed to register Sigbot Controller: {}", e),
+        if config.services.controllers.datafeed.inner.enabled {
+            info!("Registering Sigbot Datafeed Controller ...");
+            match Self::get()
+                .write() // If acquire fails, then it block until acquired.
+                .unwrap() // If acquire fails, then it should panic.
+                .register(
+                    SigbotDatafeedRunnerController::NAME.to_owned(),
+                    SigbotDatafeedRunnerController::new(
+                        Some(config.services.controllers.datafeed.inner.cron.to_owned()),
+                        Some(config.services.controllers.datafeed.inner.channel_size),
+                    )
+                    .await,
+                ) {
+                Ok(registered) => {
+                    info!("Initializing Sigbot Datafeed Controller ...");
+                    let _ = registered.init().await;
                 }
+                Err(e) => panic!("Failed to register Sigbot Datafeed Controller : {}", e),
             }
+        } else {
+            info!("Disabled the Datafeed Controller.")
+        }
+
+        if config.services.controllers.messaging.inner.enabled {
+            info!("Registering Sigbot Messaging Controller ...");
+            match Self::get()
+                .write() // If acquire fails, then it block until acquired.
+                .unwrap() // If acquire fails, then it should panic.
+                .register(
+                    SigbotMessagingController::NAME.to_owned(),
+                    SigbotMessagingController::new(
+                        Some(config.services.controllers.messaging.inner.cron.to_owned()),
+                        Some(config.services.controllers.messaging.inner.channel_size),
+                    )
+                    .await,
+                ) {
+                Ok(registered) => {
+                    info!("Initializing Sigbot Messaging Controller  ...");
+                    let _ = registered.init().await;
+                }
+                Err(e) => panic!("Failed to register Sigbot Messaging Controller : {}", e),
+            }
+        } else {
+            info!("Disabled the Messaging Controller.")
+        }
+
+        if config.services.controllers.notification.inner.enabled {
+            info!("Registering Sigbot Notification Controller ...");
+            match Self::get()
+                .write() // If acquire fails, then it block until acquired.
+                .unwrap() // If acquire fails, then it should panic.
+                .register(
+                    SigbotNotificationController::NAME.to_owned(),
+                    SigbotNotificationController::new(
+                        Some(config.services.controllers.notification.inner.cron.to_owned()),
+                        Some(config.services.controllers.notification.inner.channel_size),
+                    )
+                    .await,
+                ) {
+                Ok(registered) => {
+                    info!("Initializing Sigbot Notification Controller ...");
+                    let _ = registered.init().await;
+                }
+                Err(e) => panic!("Failed to register Sigbot Notification Controller : {}", e),
+            }
+        } else {
+            info!("Disabled the Notification Controller.")
+        }
+
+        if config.services.controllers.strategy.inner.enabled {
+            info!("Registering Sigbot Strategy Controller ...");
+            match Self::get()
+                .write() // If acquire fails, then it block until acquired.
+                .unwrap() // If acquire fails, then it should panic.
+                .register(
+                    SigbotStrategyRunnerController::NAME.to_owned(),
+                    SigbotStrategyRunnerController::new(
+                        Some(config.services.controllers.strategy.inner.cron.to_owned()),
+                        Some(config.services.controllers.strategy.inner.channel_size),
+                    )
+                    .await,
+                ) {
+                Ok(registered) => {
+                    info!("Initializing Sigbot Strategy Controller ...");
+                    let _ = registered.init().await;
+                }
+                Err(e) => panic!("Failed to register Sigbot Strategy Controller : {}", e),
+            }
+        } else {
+            info!("Disabled the Strategy Controller.")
         }
     }
 

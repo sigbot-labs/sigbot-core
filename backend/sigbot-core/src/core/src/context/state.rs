@@ -24,9 +24,22 @@ use crate::{
     llm::handler::llm_engine::{ILLMManager, LLMEngine},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
+        datafeed::store::{
+            datafeed_mongo::DatafeedInfoMongoRepository, datafeed_postgres::DatafeedInfoPostgresRepository,
+            datafeed_sqlite::DatafeedInfoSQLiteRepository,
+        },
         exchange::store::{
             exchange_mongo::ExchangeInfoMongoRepository, exchange_postgres::ExchangeInfoPostgresRepository,
             exchange_sqlite::ExchangeInfoSQLiteRepository,
+        },
+        messaging::store::{
+            messaging_mongo::MessagingInfoMongoRepository, messaging_postgres::MessagingInfoPostgresRepository,
+            messaging_sqlite::MessagingInfoSQLiteRepository,
+        },
+        notification::store::{
+            notification_mongo::NotificationInfoMongoRepository,
+            notification_postgres::NotificationInfoPostgresRepository,
+            notification_sqlite::NotificationInfoSQLiteRepository,
         },
         strategy::store::{
             strategy_mongo::StrategyInfoMongoRepository, strategy_postgres::StrategyInfoPostgresRepository,
@@ -42,7 +55,10 @@ use crate::{
 
 use oauth2::basic::BasicClient;
 use sigbot_types::{
-    modules::{exchange::exchange::ExchangeInfo, strategy::strategy::StrategyInfo},
+    modules::{
+        datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo,
+        notification::notification::NotificationInfo, strategy::strategy::StrategyInfo,
+    },
     sys::{dlock::DLock, user::User},
 };
 use sigbot_utils::httpclients;
@@ -64,10 +80,13 @@ pub struct SigbotState {
     // The System module repositories.
     pub user_repo: Arc<Mutex<RepositoryContainer<User>>>,
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
+    pub llm_handler: Arc<dyn ILLMManager + Send + Sync>,
     // The Service module repositories.
+    pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
+    pub messaging_repo: Arc<Mutex<RepositoryContainer<MessagingInfo>>>,
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
-    pub llm_handler: Arc<dyn ILLMManager + Send + Sync>,
+    pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
 }
 
 impl SigbotState {
@@ -125,6 +144,46 @@ impl SigbotState {
 
         // --- The Service module repositories. ---
 
+        let datafeed_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    DatafeedInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    DatafeedInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    DatafeedInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
+        let messaging_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    MessagingInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    MessagingInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    MessagingInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
         let exchange_repo = RepositoryContainer::new(
             match db_config.db_type {
                 AppDBType::SQLITE => Some(Box::new(
@@ -165,7 +224,28 @@ impl SigbotState {
                 _ => None,
             },
         );
-
+        let notification_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    NotificationInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    NotificationInfoPostgresRepository::new(&db_config.postgres)
+                        .await
+                        .unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    NotificationInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
         let app_state = SigbotState {
             // Notice: Arc object clone only increments the reference counter, and does not copy the actual data block.
             config: config.clone(),
@@ -181,10 +261,13 @@ impl SigbotState {
             // The System repositories.
             user_repo: Arc::new(Mutex::new(user_repo)),
             lock_repo: Arc::new(Mutex::new(lock_repo)),
+            llm_handler: LLMEngine::get_default_implementation(),
             // The Application repositories.
+            datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
+            messaging_repo: Arc::new(Mutex::new(messaging_repo)),
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
-            llm_handler: LLMEngine::get_default_implementation(),
+            notification_repo: Arc::new(Mutex::new(notification_repo)),
         };
 
         // Build DI container.

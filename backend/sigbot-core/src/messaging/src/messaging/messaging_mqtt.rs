@@ -55,11 +55,12 @@ impl std::fmt::Display for SigbotMqttConfig {
 }
 
 impl SigbotMqttConfig {
-    pub fn from_messaging(messaging: MessagingInfo) -> Self {
-        let plain_config = messaging.plain_configuration.expect("Plain configuration is required");
-        let secret_config = messaging
-            .secret_configuration
-            .expect("Secret configuration is required");
+    pub fn from_messaging(messaging: Arc<MessagingInfo>) -> Self {
+        let plain_config = messaging
+            .configuration
+            .as_ref()
+            .expect("Plain configuration is required");
+        let secret_config = messaging.secrets.as_ref().expect("Secret configuration is required");
         Self {
             id: messaging.base.id.expect("Messaging ID is required"),
             mqtt_server: plain_config
@@ -122,9 +123,9 @@ pub struct SigbotMqttOperation {
 impl SigbotMqttOperation {
     pub const KIND: &'static str = "MQTT"; // NotificationKind::EMAIL
 
-    pub async fn new(config: &SigbotMqttConfig) -> Arc<Self> {
+    pub async fn new(config: Arc<MessagingInfo>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
+            config: SigbotMqttConfig::from_messaging(config),
             client: Arc::new(Mutex::new(None)),
             eventloop: Arc::new(Mutex::new(None)),
             subscription_registrations: Arc::new(Mutex::new(HashMap::new())),
@@ -160,7 +161,7 @@ impl ISigbotMessagingOperation for SigbotMqttOperation {
         info!("Initialized MQTT messaging with clientId={}", client_id);
     }
 
-    async fn close(&self) {
+    async fn shutdown(&self) {
         info!("Closing MQTT messaging with {}", self.config);
         let client = {
             let mut guard = self.client.lock().await;

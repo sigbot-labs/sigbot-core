@@ -439,8 +439,8 @@ pub struct GenerateLLMProperties {
 pub struct ServicesProperties {
     #[serde(rename = "exchanges")]
     pub exchanges: ExchangeProperties,
-    #[serde(rename = "executors")]
-    pub executors: Vec<ExecutorProperties>,
+    #[serde(rename = "controllers")]
+    pub controllers: ControllerProperties,
     #[serde(rename = "backtests")]
     pub backtests: Vec<BacktestProperties>,
 }
@@ -499,14 +499,24 @@ pub struct BinanceProperties {
     pub coin_market_ws_mainnet_endpoint: String,
 }
 
-// Executor Properties.
+// Controller Properties. - The controller components super parameters and default configuration.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExecutorProperties {
+pub struct ControllerProperties {
+    #[serde(rename = "datafeed", default = "DatafeedControllerProperties::default")]
+    pub datafeed: DatafeedControllerProperties,
+    #[serde(rename = "messaging", default = "MessagingControllerProperties::default")]
+    pub messaging: MessagingControllerProperties,
+    #[serde(rename = "notification", default = "NotificationControllerProperties::default")]
+    pub notification: NotificationControllerProperties,
+    #[serde(rename = "strategy", default = "StrategyControllerProperties::default")]
+    pub strategy: StrategyControllerProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScheduledPropertiesBase {
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "kind")]
-    pub kind: String,
     #[serde(rename = "enabled")]
     pub enabled: bool,
     #[serde(rename = "cron")]
@@ -515,7 +525,31 @@ pub struct ExecutorProperties {
     pub channel_size: usize,
 }
 
-// Backtest Properties.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatafeedControllerProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MessagingControllerProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NotificationControllerProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StrategyControllerProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
+}
+
+// Backtest Properties. - The backtest components super parameters and default configuration.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BacktestProperties {
@@ -844,7 +878,7 @@ impl Default for ServicesProperties {
     fn default() -> Self {
         ServicesProperties {
             exchanges: ExchangeProperties::default(),
-            executors: Vec::new(),
+            controllers: ControllerProperties::default(),
             backtests: Vec::new(),
         }
     }
@@ -893,14 +927,56 @@ impl Default for BinanceProperties {
     }
 }
 
-impl Default for ExecutorProperties {
+impl Default for ControllerProperties {
     fn default() -> Self {
-        ExecutorProperties {
+        ControllerProperties {
+            datafeed: DatafeedControllerProperties::default(),
+            messaging: MessagingControllerProperties::default(),
+            notification: NotificationControllerProperties::default(),
+            strategy: StrategyControllerProperties::default(),
+        }
+    }
+}
+
+impl Default for ScheduledPropertiesBase {
+    fn default() -> Self {
+        ScheduledPropertiesBase {
             name: String::from("default"),
-            kind: String::from("SIMPLE_LLM"),
             enabled: true,
             cron: String::from("0/30 * * * * * *"), // Every half minute
             channel_size: 200,
+        }
+    }
+}
+
+impl Default for DatafeedControllerProperties {
+    fn default() -> Self {
+        DatafeedControllerProperties {
+            inner: ScheduledPropertiesBase::default(),
+        }
+    }
+}
+
+impl Default for MessagingControllerProperties {
+    fn default() -> Self {
+        MessagingControllerProperties {
+            inner: ScheduledPropertiesBase::default(),
+        }
+    }
+}
+
+impl Default for NotificationControllerProperties {
+    fn default() -> Self {
+        NotificationControllerProperties {
+            inner: ScheduledPropertiesBase::default(),
+        }
+    }
+}
+
+impl Default for StrategyControllerProperties {
+    fn default() -> Self {
+        StrategyControllerProperties {
+            inner: ScheduledPropertiesBase::default(),
         }
     }
 }
