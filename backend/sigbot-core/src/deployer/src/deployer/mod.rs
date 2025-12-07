@@ -18,4 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod controller_datafeed;
+pub mod deployer_factory;
+pub mod kubernetes;
+pub mod standalone;

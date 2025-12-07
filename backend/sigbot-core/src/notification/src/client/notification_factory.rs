@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use anyhow::Error;
+use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
@@ -27,8 +27,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::client::{notification_email::SigbotEmailClient, notification_telegram::SigbotTelegramClient};
+
 #[async_trait]
 pub trait ISigbotNotificationClient: Send + Sync {
+    fn name(&self) -> &'static str;
     async fn init(&self);
     async fn close(&self);
     async fn send_message(&self, to: &str, message: &str) -> Result<String, Error>;
@@ -54,21 +57,72 @@ impl SigbotNotificationClientFactory {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {
-        info!("Register to All Sigbot notification operations ...");
-        unimplemented!()
+    #[allow(unused_variables)]
+    pub async fn init(
+        matches: &clap::ArgMatches,
+        verbose: bool,
+    ) -> Result<Arc<Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>>>, Error> {
+        // e.g '--provider=email'
+        let notification_provider = matches
+            .try_get_one::<String>("notification")
+            .map(|s| {
+                s.map(|s| s.to_owned())
+                    .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())
+            })
+            .context("Failed to parse the notification provider from the command line arguments.")?;
+
+        info!("Registering Sigbot Notification: {}", &notification_provider);
+
+        let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();
+        for provider in notification_provider.split(',').collect::<Vec<&str>>() {
+            match provider.to_uppercase().as_str() {
+                SigbotEmailClient::NAME => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(
+                            &SigbotEmailClient::NAME.to_owned(),
+                            SigbotEmailClient::new(None).await, // TODO: set up run configuration?
+                        )
+                        .context("Failed to register the Email notification.")?;
+                }
+                SigbotTelegramClient::NAME => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(
+                            &SigbotTelegramClient::NAME.to_owned(),
+                            SigbotTelegramClient::new(None).await, // TODO: set up run configuration?
+                        )
+                        .context("Failed to register the Telegram notification.")?;
+                }
+                _ => panic!("Unsupported sigbot notification provider : '{}'.", provider),
+            };
+
+            let registered = Self::get_implementation(provider.to_owned())
+                .await
+                .context("Failed to get the registered notification.")?;
+
+            info!("Initializing the notification with provider: {}", &provider);
+            registered.init().await;
+            info!("Initialized the notification with provider: {}.", &provider);
+
+            notifications.push(registered.clone());
+        }
+
+        Ok(Arc::new(notifications))
     }
 
-    fn register<T: ISigbotNotificationClient + Send + Sync + 'static>(
+    fn register0(
         &mut self,
-        name: String,
-        handler: Arc<T>,
-    ) -> Result<Arc<T>, Error> {
-        if self.implementations.contains_key(&name) {
-            debug!("Already register the sigbot notification operation '{}'", name);
+        name: &String,
+        handler: Arc<dyn ISigbotNotificationClient + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotNotificationClient + Send + Sync>, Error> {
+        if self.implementations.contains_key(name) {
+            debug!("Already register the Notification '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.to_owned());
+        self.implementations.insert(name.to_owned(), handler.clone());
         Ok(handler)
     }
 
@@ -78,7 +132,7 @@ impl SigbotNotificationClientFactory {
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered sigbot notification operation '{}'.", name);
+            let errmsg = format!("Could not obtain registered sigbot notification client '{}'.", name);
             return Err(Error::msg(errmsg));
         }
     }

@@ -22,6 +22,7 @@ pub mod api_starter;
 pub mod backtest_starter;
 pub mod controller_starter;
 pub mod datafeed_starter;
+pub mod deployer_starter;
 pub mod internal;
 pub mod notification_starter;
 pub mod standalone_starter;
@@ -30,14 +31,15 @@ pub mod strategy_starter;
 use api_starter::SigbotAPIServer;
 use backtest_starter::SigbotBacktestRunnerStarter;
 use clap::{Arg, ArgMatches, Command};
+use common_telemetry::info;
 use sigbot_core::config::config;
-use standalone_starter::StandaloneServer;
+use standalone_starter::SigbotStandaloneStarter;
 use std::sync::OnceLock;
 use strategy_starter::SigbotStrategyRunnerStarter;
 
 use crate::cmd::{
     controller_starter::SigbotControllerManagerStarter, datafeed_starter::SigbotDatafeedIngestorStarter,
-    notification_starter::SigbotNotificationForwarderStarter,
+    deployer_starter::SigbotDeployerManagerStarter, notification_starter::SigbotNotificationForwarderStarter,
 };
 
 type SubcommandBuildFn = fn() -> Command;
@@ -54,6 +56,14 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
                 // Type inference error, forced conversion need.
                 SigbotAPIServer::build as SubcommandBuildFn,
                 SigbotAPIServer::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotDeployerManagerStarter::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotDeployerManagerStarter::build as SubcommandBuildFn,
+                SigbotDeployerManagerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
@@ -97,11 +107,11 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
             ),
         ));
         vec.push((
-            StandaloneServer::COMMAND_NAME,
+            SigbotStandaloneStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                StandaloneServer::build as SubcommandBuildFn,
-                StandaloneServer::run as SubcommandHandleFn,
+                SigbotStandaloneStarter::build as SubcommandBuildFn,
+                SigbotStandaloneStarter::run as SubcommandHandleFn,
             ),
         ));
         vec
@@ -143,7 +153,7 @@ pub fn execute_commands_app() -> () {
     match matches.subcommand() {
         Some((name, sub_matches)) => {
             if let Some((_, (_, handler))) = subcommand_map.iter().find(|(n, _)| *n == name) {
-                tracing::info!("Executing subcommand: {}", name);
+                info!("Executing subcommand: {}", name);
                 handler(sub_matches, verbose);
             } else {
                 // panic!("Unknown subcommand: {}. Use --help for a list of available commands.", name);
@@ -152,11 +162,11 @@ pub fn execute_commands_app() -> () {
             }
         }
         None => {
-            tracing::info!("No subcommand was used. Available commands are:");
+            info!("No subcommand was used. Available commands are:");
             for (name, _) in subcommand_map.iter() {
-                tracing::info!("  {}", name);
+                info!("  {}", name);
             }
-            tracing::info!("Use <command> --help for more information about a specific command.");
+            info!("Use <command> --help for more information about a specific command.");
         }
     }
 }

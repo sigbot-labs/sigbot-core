@@ -21,19 +21,18 @@
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SigbotTwitterDatafeedClient {
-    config: Arc<DatafeedInfo>,
+    // config: Arc<DatafeedInfo>,
 }
 
 impl SigbotTwitterDatafeedClient {
-    pub const KIND: &'static str = "TWITTER_DATAFEED";
+    pub const NAME: &'static str = "TWITTER";
 
-    pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
-        Arc::new(Self { config })
+    pub async fn new() -> Arc<Self> {
+        Arc::new(Self {})
     }
 
     pub(super) async fn process(&self) {
@@ -47,11 +46,15 @@ impl SigbotTwitterDatafeedClient {
 
 #[async_trait]
 impl ISigbotDatafeedClient for SigbotTwitterDatafeedClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Started Twitter data feed.");
     }
 
-    async fn shutdown(&self) {
+    async fn close(&self) {
         info!("Shut down Twitter data feed.");
     }
 }

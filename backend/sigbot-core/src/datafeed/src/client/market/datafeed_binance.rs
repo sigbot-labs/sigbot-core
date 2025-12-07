@@ -21,19 +21,18 @@
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SigbotBinanceDatafeedClient {
-    config: Arc<DatafeedInfo>,
+    // config: Arc<DatafeedInfo>,
 }
 
 impl SigbotBinanceDatafeedClient {
-    pub const KIND: &'static str = "BINANCE_DATAFEED";
+    pub const NAME: &'static str = "BINANCE";
 
-    pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
-        Arc::new(Self { config })
+    pub async fn new() -> Arc<Self> {
+        Arc::new(Self {})
     }
 
     pub(super) async fn execute(&self) {
@@ -47,11 +46,15 @@ impl SigbotBinanceDatafeedClient {
 
 #[async_trait]
 impl ISigbotDatafeedClient for SigbotBinanceDatafeedClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Started Binance Datafeed.");
     }
 
-    async fn shutdown(&self) {
+    async fn close(&self) {
         info!("Shut down Binance Datafeed.");
     }
 }

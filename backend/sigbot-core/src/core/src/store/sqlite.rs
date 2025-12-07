@@ -187,7 +187,7 @@ macro_rules! dynamic_sqlite_query {
                 .unwrap();
 
               // Queries to get data.
-              let query = format!("SELECT * FROM {} WHERE {} ORDER BY {} LIMIT {} OFFSET {}",
+              let query = format!("SELECT * FROM {} WHERE {} AND del_flag = 0 ORDER BY {} LIMIT {} OFFSET {}",
                     $table, where_clause, $order_by, $page.get_limit(), $page.get_offset());
 
               let mut operator = sqlx::query_as::<_, $($t),+>(&query);

@@ -21,10 +21,13 @@
 use crate::client::messaging_factory::ISigbotMessagingClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
-use common_telemetry::info;
-use rumqttc::v5::{mqttbytes::QoS, AsyncClient, EventLoop, MqttOptions};
+use common_telemetry::{debug, info, warn};
+use rumqttc::v5::{
+    mqttbytes::{v5::Packet, QoS},
+    AsyncClient, Event, EventLoop, MqttOptions,
+};
 use sigbot_types::modules::messaging::messaging::MessagingInfo;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, task};
 
 #[derive(Clone)]
@@ -112,20 +115,27 @@ impl SigbotMqttClientConfig {
 }
 
 pub struct SigbotMqttClient {
-    config: SigbotMqttClientConfig,
+    config: Arc<SigbotMqttClientConfig>,
     client: Arc<Mutex<Option<AsyncClient>>>,
     eventloop: Arc<Mutex<Option<EventLoop>>>,
     // This is concurrent map to store the subscription topics and their handlers.
-    subscription_registrations: Arc<Mutex<HashMap<String, Arc<dyn Fn(String) -> Result<String, Error> + Send + Sync>>>>,
+    subscription_registrations: Arc<
+        Mutex<
+            HashMap<
+                String,
+                Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+            >,
+        >,
+    >,
     // TODO: Add the memory message queue for subscription messages.
 }
 
 impl SigbotMqttClient {
-    pub const KIND: &'static str = "MQTT"; // NotificationKind::EMAIL
+    pub const NAME: &'static str = "MQTT";
 
-    pub async fn new(config: Arc<MessagingInfo>) -> Arc<Self> {
+    pub async fn new(config: Option<Arc<SigbotMqttClientConfig>>) -> Arc<Self> {
         Arc::new(Self {
-            config: SigbotMqttClientConfig::from_messaging(config),
+            config: config.expect("Config is required"), // TODO: required input param
             client: Arc::new(Mutex::new(None)),
             eventloop: Arc::new(Mutex::new(None)),
             subscription_registrations: Arc::new(Mutex::new(HashMap::new())),
@@ -144,6 +154,10 @@ impl SigbotMqttClient {
 
 #[async_trait]
 impl ISigbotMessagingClient for SigbotMqttClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Initializing MQTT messaging with config={}", self.config);
 
@@ -161,7 +175,7 @@ impl ISigbotMessagingClient for SigbotMqttClient {
         info!("Initialized MQTT messaging with clientId={}", client_id);
     }
 
-    async fn shutdown(&self) {
+    async fn close(&self) {
         info!("Closing MQTT messaging with {}", self.config);
         let client = {
             let mut guard = self.client.lock().await;
@@ -193,7 +207,11 @@ impl ISigbotMessagingClient for SigbotMqttClient {
         }
     }
 
-    async fn subscribe(&self, topic: &str) -> Result<String, Error> {
+    async fn subscribe(
+        &self,
+        topic: &str,
+        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+    ) -> Result<(), Error> {
         let store_key = topic.to_string();
         if !self.subscription_registrations.lock().await.contains_key(&store_key) {
             let mut client_guard = self.client.lock().await;
@@ -207,23 +225,45 @@ impl ISigbotMessagingClient for SigbotMqttClient {
             drop(client_guard); // It's optional due to the lock will be automatically released at the end of the scope.
 
             // check if the eventloop is already running, if not then start it
-            let mut eventloop_guard = self.eventloop.lock().await;
-            if let Some(eventloop) = eventloop_guard.take() {
+            let handler0 = handler.clone();
+            let mut guard = self.eventloop.lock().await;
+            if let Some(eventloop) = guard.take() {
                 let mut eventloop0 = eventloop;
+                let handler1 = handler0.clone();
                 task::spawn(async move {
                     while let Ok(notification) = eventloop0.poll().await {
-                        println!("Received = {:?}", notification);
+                        debug!("Received = {:?}", notification);
+                        match notification {
+                            Event::Incoming(incoming) => {
+                                debug!("Incoming = {:?}", incoming);
+                                match incoming {
+                                    Packet::Publish(publish) => {
+                                        debug!("Publish = {:?}", publish);
+                                        let data = publish.payload.to_vec();
+                                        let handler2 = handler1.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = handler2(data).await {
+                                                warn!("Error handling MQTT message: {:?}", e);
+                                            }
+                                        });
+                                    }
+                                    _ => {
+                                        debug!("Ignored subscribed packet = {:?}", incoming);
+                                    }
+                                }
+                            }
+                            Event::Outgoing(outgoing) => {
+                                debug!("Ignore outgoing = {:?}", outgoing);
+                            }
+                        }
                     }
                 });
             }
             // Explicitly release the lock early for avoid unnecessarily to acquire in subsequent code.
-            drop(eventloop_guard); // It's optional due to the lock will be automatically released at the end of the scope.
+            drop(guard); // It's optional due to the lock will be automatically released at the end of the scope.
 
-            self.subscription_registrations
-                .lock()
-                .await
-                .insert(store_key, Arc::new(move |message| Ok(message.to_string())));
+            self.subscription_registrations.lock().await.insert(store_key, handler0);
         }
-        Ok(topic.to_string())
+        Ok(())
     }
 }

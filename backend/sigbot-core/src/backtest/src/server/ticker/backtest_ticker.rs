@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::backtest::backtest_factory::ISigbotBacktestEngine;
+use crate::server::backtest_factory::ISigbotBacktestServer;
 use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_core::config::config::BacktestProperties;
@@ -27,12 +27,12 @@ use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
-pub struct TickerBasedBacktestEngine {
+pub struct TickerBasedBacktestServer {
     config: BacktestProperties,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
 }
 
-impl TickerBasedBacktestEngine {
+impl TickerBasedBacktestServer {
     pub const KIND: &'static str = "TICKER_BASED";
 
     pub async fn new(config: &BacktestProperties) -> Arc<Self> {
@@ -53,7 +53,7 @@ impl TickerBasedBacktestEngine {
 }
 
 #[async_trait]
-impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
+impl ISigbotBacktestServer for TickerBasedBacktestServer {
     async fn startup(&self) {
         let this = self.clone();
 

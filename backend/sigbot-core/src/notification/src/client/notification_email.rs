@@ -76,16 +76,16 @@ impl SigbotEmailClientConfig {
 }
 
 pub struct SigbotEmailClient {
-    config: SigbotEmailClientConfig,
+    config: Arc<SigbotEmailClientConfig>,
     // email_client: Arc<Mutex<Option<EmailClient>>>,
 }
 
 impl SigbotEmailClient {
-    pub const KIND: &'static str = "EMAIL"; // NotificationKind::EMAIL
+    pub const NAME: &'static str = "EMAIL"; // NotificationKind::EMAIL
 
-    pub async fn new(config: &SigbotEmailClientConfig) -> Arc<Self> {
+    pub async fn new(config: Option<Arc<SigbotEmailClientConfig>>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
+            config: config.expect("Config is required"),
             // email_client: Arc::new(Mutex::new(None)),
         })
     }
@@ -93,6 +93,10 @@ impl SigbotEmailClient {
 
 #[async_trait]
 impl ISigbotNotificationClient for SigbotEmailClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Starting Email notification with config={}", self.config);
         unimplemented!();

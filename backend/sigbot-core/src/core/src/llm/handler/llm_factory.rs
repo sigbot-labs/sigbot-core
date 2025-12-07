@@ -18,8 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::{config::config, llm::handler::llm_langchain::LangchainLLMManager};
+use crate::{config::config, llm::handler::llm_langchain::LangchainOperation};
 use anyhow::Error;
+use common_telemetry::info;
 use lazy_static::lazy_static;
 use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
 use std::{
@@ -29,51 +30,52 @@ use std::{
 };
 
 #[async_trait::async_trait]
-pub trait ILLMManager {
+pub trait ILLMOperation {
     async fn init(&self);
+    async fn close(&self);
     async fn embedding(&self, mut info: KnowledgeUploadInfo, file: File) -> Result<KnowledgeUploadInfo, anyhow::Error>;
     async fn generate(&self, prompt: String) -> Result<String, anyhow::Error>;
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<LLMEngine> = RwLock::new(LLMEngine::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotLLMFactory> = RwLock::new(SigbotLLMFactory::new());
 }
 
-pub struct LLMEngine {
-    pub implementations: HashMap<String, sync::Arc<dyn ILLMManager + Send + Sync>>,
+pub struct SigbotLLMFactory {
+    pub implementations: HashMap<String, sync::Arc<dyn ILLMOperation + Send + Sync>>,
 }
 
-impl LLMEngine {
+impl SigbotLLMFactory {
     fn new() -> Self {
-        LLMEngine {
+        SigbotLLMFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<LLMEngine> {
+    pub fn get() -> &'static RwLock<SigbotLLMFactory> {
         &SINGLE_INSTANCE
     }
 
     pub async fn init() {
         let config = &config::get_config().llm;
 
-        tracing::info!("Initializing implementation langChain LLM ...");
+        info!("Initializing implementation langChain LLM ...");
         match Self::get()
             .write() // If acquire fails, then it block until acquired.
             .unwrap() // If acquire fails, then it should panic.
             .register(
-                LangchainLLMManager::NAME.to_owned(),
-                LangchainLLMManager::new(config).await,
+                LangchainOperation::NAME.to_owned(),
+                LangchainOperation::new(config).await,
             ) {
             Ok(registered) => {
-                tracing::info!("Initializing langChain LLM ...");
+                info!("Initializing langChain LLM ...");
                 let _ = registered.init().await;
             }
             Err(e) => panic!("Failed to register langChain LLM: {}", e),
         }
     }
 
-    fn register<T: ILLMManager + Send + Sync + 'static>(
+    fn register<T: ILLMOperation + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
@@ -87,9 +89,9 @@ impl LLMEngine {
         Ok(handler)
     }
 
-    pub fn get_implementation(name: String) -> Result<Arc<dyn ILLMManager + Send + Sync>, Error> {
+    pub fn get_implementation(name: String) -> Result<Arc<dyn ILLMOperation + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = LLMEngine::get().read().unwrap();
+        let this = SigbotLLMFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
@@ -98,7 +100,14 @@ impl LLMEngine {
         }
     }
 
-    pub fn get_default_implementation() -> Arc<dyn ILLMManager + Send + Sync> {
-        Self::get_implementation(LangchainLLMManager::NAME.to_owned()).expect("Failed to get default LLM handler")
+    pub fn get_default() -> Arc<dyn ILLMOperation + Send + Sync> {
+        Self::get_implementation(LangchainOperation::NAME.to_owned()).expect("Failed to get default LLM handler")
+    }
+
+    pub async fn close() {
+        let this = SigbotLLMFactory::get().read().unwrap();
+        for implementation in this.implementations.values() {
+            implementation.close().await;
+        }
     }
 }

@@ -13,6 +13,7 @@ common-telemetry.workspace = true
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
 sigbot-core.workspace = true
+sigbot-messaging.workspace = true
 
 # Thirdparty dependencies.
 axum.workspace = true

@@ -22,20 +22,21 @@ use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::datafeed::datafeed::{DatafeedInfo, DatafeedProvider};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
 use crate::client::{
-    market::datafeed_binance::SigbotBinanceDatafeedClient, news::datafeed_twitter::SigbotTwitterDatafeedClient,
+    market::datafeed_binance::SigbotBinanceDatafeedClient,
+    news::{datafeed_trushsocial::SigbotTrushSocialDatafeedClient, datafeed_twitter::SigbotTwitterDatafeedClient},
 };
 
 #[async_trait]
 pub trait ISigbotDatafeedClient: Send + Sync {
+    fn name(&self) -> &'static str;
     async fn init(&self);
-    async fn shutdown(&self);
+    async fn close(&self);
 }
 
 lazy_static! {
@@ -57,33 +58,74 @@ impl SigbotDatafeedClientFactory {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {}
+    #[allow(unused_variables)]
+    pub async fn init(matches: &clap::ArgMatches, verbose: bool) {
+        // e.g '--datafeed=binance'
+        let datafeed_provider = matches
+            .try_get_one::<String>("datafeed")
+            .map(|s| {
+                s.map(|s| s.to_owned())
+                    .unwrap_or_else(|| SigbotBinanceDatafeedClient::NAME.to_owned())
+            })
+            .expect("Failed to parse the datafeed provider from the command line arguments.");
 
-    pub async fn register(datafeed: Arc<DatafeedInfo>) -> Result<Arc<dyn ISigbotDatafeedClient + Send + Sync>, Error> {
-        info!("Register Sigbot Datafeed ...");
-        let handler: Arc<dyn ISigbotDatafeedClient + Send + Sync> = match datafeed.to_owned().provider.clone().unwrap()
-        {
-            DatafeedProvider::BINANCE => SigbotBinanceDatafeedClient::new(datafeed.to_owned()).await,
-            DatafeedProvider::TWITTER => SigbotTwitterDatafeedClient::new(datafeed.to_owned()).await,
-        };
-        let name = datafeed.name.clone().unwrap_or_default();
-        let result = {
-            let mut factory = SigbotDatafeedClientFactory::get().write().unwrap();
-            factory.register0(name, handler.to_owned())
-        };
-        result
+        info!("Registering Sigbot Datafeed: {}", &datafeed_provider);
+
+        for provider in datafeed_provider.split(',').collect::<Vec<&str>>() {
+            match provider.to_uppercase().as_str() {
+                SigbotBinanceDatafeedClient::NAME => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(
+                            &SigbotBinanceDatafeedClient::NAME.to_owned(),
+                            SigbotBinanceDatafeedClient::new().await, // TODO: set up run configuration?
+                        )
+                        .expect("Failed to register the Binance datafeed.");
+                }
+                SigbotTwitterDatafeedClient::NAME => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(
+                            &SigbotTwitterDatafeedClient::NAME.to_owned(),
+                            SigbotTwitterDatafeedClient::new().await, // TODO: set up run configuration?
+                        )
+                        .expect("Failed to register the Twitter datafeed.");
+                }
+                SigbotTrushSocialDatafeedClient::NAME => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(
+                            &SigbotTrushSocialDatafeedClient::NAME.to_owned(),
+                            SigbotTrushSocialDatafeedClient::new().await, // TODO: set up run configuration?
+                        )
+                        .expect("Failed to register the Trush Social datafeed.");
+                }
+                _ => panic!("Unsupported sigbot datafeed provider : '{}'.", provider),
+            };
+
+            let registered = Self::get_implementation(provider.to_owned())
+                .await
+                .expect("Failed to get the registered datafeed.");
+
+            info!("Initializing the datafeed with name: {}", &provider);
+            registered.init().await;
+            info!("Initialized the datafeed with name: {}.", &provider);
+        }
     }
 
     fn register0(
         &mut self,
-        name: String,
+        name: &String,
         handler: Arc<dyn ISigbotDatafeedClient + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotDatafeedClient + Send + Sync>, Error> {
-        if self.implementations.contains_key(&name) {
+        if self.implementations.contains_key(name) {
             debug!("Already register the Datafeed '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.clone());
+        self.implementations.insert(name.to_owned(), handler.clone());
         Ok(handler)
     }
 
@@ -95,6 +137,13 @@ impl SigbotDatafeedClientFactory {
         } else {
             let errmsg = format!("Could not obtain registered Sigbot Datafeed '{}'.", name);
             return Err(Error::msg(errmsg));
+        }
+    }
+
+    pub async fn close() {
+        let this = SigbotDatafeedClientFactory::get().read().unwrap();
+        for implementation in this.implementations.values() {
+            implementation.close().await;
         }
     }
 }

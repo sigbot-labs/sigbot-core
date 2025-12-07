@@ -20,6 +20,7 @@ async-trait.workspace = true
 lazy_static.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+clap.workspace = true
 # see:https://crates.io/crates/mqtt-endpoint-tokio
 #mqtt-endpoint-tokio = "0.6"
 rumqttc = "0.25.1"

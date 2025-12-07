@@ -21,19 +21,18 @@
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct SigbotTrushSocialDatafeedExecutor {
-    config: Arc<DatafeedInfo>,
+pub struct SigbotTrushSocialDatafeedClient {
+    // config: Arc<DatafeedInfo>,
 }
 
-impl SigbotTrushSocialDatafeedExecutor {
-    pub const KIND: &'static str = "TRUSHSOCIAL_DATAFEED";
+impl SigbotTrushSocialDatafeedClient {
+    pub const NAME: &'static str = "TRUSHSOCIAL";
 
-    pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
-        Arc::new(Self { config })
+    pub async fn new() -> Arc<Self> {
+        Arc::new(Self {})
     }
 
     pub(super) async fn process(&self) {
@@ -46,12 +45,16 @@ impl SigbotTrushSocialDatafeedExecutor {
 }
 
 #[async_trait]
-impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedExecutor {
+impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Started Trush Social Datafeed.");
     }
 
-    async fn shutdown(&self) {
+    async fn close(&self) {
         info!("Shutting down Trush Social Datafeed.");
     }
 }

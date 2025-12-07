@@ -14,8 +14,10 @@ common-makestruct.workspace = true
 sigbot-utils.workspace = true
 sigbot-types.workspace = true
 sigbot-core.workspace = true
+sigbot-messaging.workspace = true
 
 # Thirdparty dependencies.
+clap.workspace = true
 async-trait.workspace = true
 lazy_static.workspace = true
 anyhow.workspace = true

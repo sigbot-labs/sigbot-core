@@ -11,11 +11,13 @@ members = [
     "src/utils",
     "src/core",
     "src/exchange",
-    "src/notification",
-    "src/messaging",
+    "src/deployer",
     "src/controller",
     "src/datafeed",
+    "src/strategy",
+    "src/notification",
     "src/backtest",
+    "src/messaging",
     "src/cmd",
 ]
 resolver = "2"
@@ -51,11 +53,13 @@ sigbot-core = { path = "src/core" }
 sigbot-types = { path = "src/types" }
 sigbot-utils = { path = "src/utils" }
 sigbot-exchange = { path = "src/exchange" }
-sigbot-notification = { path = "src/notification" }
-sigbot-messaging = { path = "src/messaging" }
+sigbot-deployer = { path = "src/deployer" }
 sigbot-controller = { path = "src/controller" }
 sigbot-datafeed = { path = "src/datafeed" }
+sigbot-strategy = { path = "src/strategy" }
+sigbot-notification = { path = "src/notification" }
 sigbot-backtest = { path = "src/backtest" }
+sigbot-messaging = { path = "src/messaging" }
 
 # Lang libs
 regex = "1.11.1"

@@ -21,7 +21,7 @@
 use crate::{
     cache::{memory::StringMemoryCache, redis::StringRedisCache, CacheContainer},
     config::config::{AppConfig, AppDBType},
-    llm::handler::llm_engine::{ILLMManager, LLMEngine},
+    llm::handler::llm_factory::{ILLMOperation, SigbotLLMFactory},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
         datafeed::store::{
@@ -48,8 +48,9 @@ use crate::{
     },
     store::RepositoryContainer,
     sys::store::{
-        dlock_postgres::DLockPostgresRepository, user_mongo::UserMongoRepository,
-        user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
+        dlock_postgres::DLockPostgresRepository, tenant_mongo::TenantMongoRepository,
+        tenant_postgres::TenantPostgresRepository, tenant_sqlite::TenantSQLiteRepository,
+        user_mongo::UserMongoRepository, user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
     },
 };
 
@@ -59,7 +60,7 @@ use sigbot_types::{
         datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo,
         notification::notification::NotificationInfo, strategy::strategy::StrategyInfo,
     },
-    sys::{dlock::DLock, user::User},
+    sys::{dlock::DLock, tenant::Tenant, user::User},
 };
 use sigbot_utils::httpclients;
 use std::sync::Arc;
@@ -79,8 +80,9 @@ pub struct SigbotState {
     pub redis_cluster_checker: RedisClusterChecker,
     // The System module repositories.
     pub user_repo: Arc<Mutex<RepositoryContainer<User>>>,
+    pub tenant_repo: Arc<Mutex<RepositoryContainer<Tenant>>>,
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
-    pub llm_handler: Arc<dyn ILLMManager + Send + Sync>,
+    pub llm_handler: Arc<dyn ILLMOperation + Send + Sync>,
     // The Service module repositories.
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
     pub messaging_repo: Arc<Mutex<RepositoryContainer<MessagingInfo>>>,
@@ -128,6 +130,22 @@ impl SigbotState {
             },
             match db_config.db_type {
                 AppDBType::MONGODB => Some(Box::new(UserMongoRepository::new(&db_config.mongodb).await.unwrap())),
+                _ => None,
+            },
+        );
+        let tenant_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(TenantSQLiteRepository::new(&db_config.sqlite).await.unwrap())),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    TenantPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(TenantMongoRepository::new(&db_config.mongodb).await.unwrap())),
                 _ => None,
             },
         );
@@ -260,8 +278,9 @@ impl SigbotState {
             redis_cluster_checker: RedisClusterChecker::new(),
             // The System repositories.
             user_repo: Arc::new(Mutex::new(user_repo)),
+            tenant_repo: Arc::new(Mutex::new(tenant_repo)),
             lock_repo: Arc::new(Mutex::new(lock_repo)),
-            llm_handler: LLMEngine::get_default_implementation(),
+            llm_handler: SigbotLLMFactory::get_default(),
             // The Application repositories.
             datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
             messaging_repo: Arc::new(Mutex::new(messaging_repo)),

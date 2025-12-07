@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::llm_engine::ILLMManager;
+use super::llm_factory::ILLMOperation;
 use crate::config::config::{self, LlmProperties};
 use anyhow::{Ok, Result};
 use langchain_rust::{
@@ -44,12 +44,12 @@ use std::{
 };
 
 /// see:https://github.com/wl4g-ai/langchain-rust/blob/main/examples/conversational_retriever_chain_with_vector_store.rs
-pub struct LangchainLLMManager {
+pub struct LangchainOperation {
     pgvec_store: Arc<Box<dyn VectorStore>>,
     openai_llm: OpenAI<OpenAIConfig>,
 }
 
-impl LangchainLLMManager {
+impl LangchainOperation {
     pub const NAME: &'static str = "LANGCHAIN";
 
     #[allow(unused)]
@@ -127,8 +127,10 @@ impl LangchainLLMManager {
 }
 
 #[async_trait::async_trait]
-impl ILLMManager for LangchainLLMManager {
+impl ILLMOperation for LangchainOperation {
     async fn init(&self) {}
+
+    async fn close(&self) {}
 
     async fn embedding(&self, mut info: KnowledgeUploadInfo, file: File) -> Result<KnowledgeUploadInfo, anyhow::Error> {
         info.status = KnowledgeStatus::RECEIVED;
@@ -203,6 +205,7 @@ impl ILLMManager for LangchainLLMManager {
         Ok(info)
     }
 
+    #[allow(unused_variables)]
     async fn generate(&self, prompt: String) -> Result<String, anyhow::Error> {
         // Native OpenAI to completions.
         // let messages = vec![ChatCompletionMessage {

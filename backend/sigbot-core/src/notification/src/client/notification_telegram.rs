@@ -62,24 +62,28 @@ impl SigbotTelegramConfig {
     }
 }
 
-pub struct SigbotTelegramNotification {
-    config: SigbotTelegramConfig,
+pub struct SigbotTelegramClient {
+    config: Arc<SigbotTelegramConfig>,
     // telegram_client: Arc<Mutex<Option<TelegramClient>>>,
 }
 
-impl SigbotTelegramNotification {
-    pub const KIND: &'static str = "TELEGRAM"; // NotificationKind::TELEGRAM
+impl SigbotTelegramClient {
+    pub const NAME: &'static str = "TELEGRAM"; // NotificationKind::TELEGRAM
 
-    pub async fn new(config: &SigbotTelegramConfig) -> Arc<Self> {
+    pub async fn new(config: Option<Arc<SigbotTelegramConfig>>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
+            config: config.expect("Config is required"),
             // telegram_client: Arc::new(Mutex::new(None)),
         })
     }
 }
 
 #[async_trait]
-impl ISigbotNotificationClient for SigbotTelegramNotification {
+impl ISigbotNotificationClient for SigbotTelegramClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Starting Telegram notification with config={}", self.config);
         unimplemented!();

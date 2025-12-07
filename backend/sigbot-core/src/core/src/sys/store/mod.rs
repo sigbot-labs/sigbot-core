@@ -21,6 +21,9 @@
 pub mod dlock_mongo;
 pub mod dlock_postgres;
 pub mod dlock_sqlite;
+pub mod tenant_mongo;
+pub mod tenant_postgres;
+pub mod tenant_sqlite;
 pub mod user_mongo;
 pub mod user_postgres;
 pub mod user_sqlite;

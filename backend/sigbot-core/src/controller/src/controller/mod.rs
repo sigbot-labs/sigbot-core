@@ -19,7 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod controller_factory;
-pub mod datafeed;
-pub mod messaging;
-pub mod notification;
 pub mod strategy;

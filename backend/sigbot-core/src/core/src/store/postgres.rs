@@ -180,7 +180,7 @@ macro_rules! dynamic_postgres_query {
             let total_count = total_operator.fetch_one($pool).await?.get::<i64, _>(0);
 
             // Queries to get data.
-            let query = format!("SELECT * FROM {} WHERE {} ORDER BY {} LIMIT {} OFFSET {}",
+            let query = format!("SELECT * FROM {} WHERE {} AND del_flag = 0 ORDER BY {} LIMIT {} OFFSET {}",
                   $table, where_clause, $order_by, $page.get_limit(), $page.get_offset());
             let mut operator = sqlx::query_as::<_, $($t),+>(&query);
             for param in params.iter() {

@@ -30,11 +30,10 @@ use clap::Command;
 use common_telemetry::{debug, error, info};
 use sigbot_core::{
     config::{
-        config::{self, AppConfig, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
+        config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
         swagger,
     },
     context::state::SigbotState,
-    llm::handler::llm_engine::LLMEngine,
     mgmt::{apm, health::init as health_router},
     sys::route::{
         auth_router::{auth_middleware, init as auth_router},
@@ -42,7 +41,7 @@ use sigbot_core::{
     },
 };
 use sigbot_utils::{panics::PanicHelper, tokio_signal::tokio_graceful_shutdown_signal};
-use std::{env, future::Future, pin::Pin, sync::Arc};
+use std::{env, future::Future, pin::Pin};
 use tokio::{net::TcpListener, sync::oneshot};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -56,45 +55,40 @@ impl SigbotAPIServer {
     pub const COMMAND_NAME: &'static str = "api";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Platform (Central) API Server (configuration management APIs for All components)")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Platform (Central) API Server.")
     }
 
-    #[allow(unused)]
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default();
 
-        let config = config::get_config();
+        Self::print_banner(verbose);
 
-        Self::print_banner(config.to_owned(), verbose);
-
-        apm::init_components(&config).await;
+        apm::init().await;
 
         let (signal_s, signal_r) = oneshot::channel();
-        let signal_handle = SigbotManagementServer::start(&config, true, signal_s).await;
+        let signal_handle = SigbotManagementServer::start(verbose, signal_s).await;
 
         signal_r.await.expect("Failed to start Management server.");
         info!("Management server is started");
 
-        Self::start(&config, true, None, None).await;
+        Self::startup(matches, verbose, None, None).await;
 
-        signal_handle.await.unwrap();
+        signal_handle.await.expect("Failed to start Management server.");
     }
 
-    #[allow(unused)]
-    pub async fn start(
-        config: &Arc<AppConfig>,
+    #[allow(unused_variables)]
+    pub async fn startup(
+        matches: &clap::ArgMatches,
         verbose: bool,
         addition_router: Option<Router<SigbotState>>,
         addition_middleware: Option<MiddlewareFunction>,
     ) {
-        LLMEngine::init().await;
-
+        let config = get_config();
         let app_state = SigbotState::new(&config).await;
 
         // 1. Merge the biz modules routes.
-        debug!("Register Web server app routers ...");
+        info!("Register Web server app routers ...");
         let mut register_router = Router::new().merge(auth_router()).merge(user_router());
 
         // 1.1 Merge the addition router.
@@ -138,7 +132,7 @@ impl SigbotAPIServer {
         // The later the higher the priority? For example, if auth_middleware is set at the end, it will
         // enter when requesting '/', otherwise it will not enter if it is set at the front, and will
         // directly enter handle_root().
-        debug!("Register Web server auth middlewares ...");
+        info!("Register API Server auth middlewares ...");
         app_router = app_router.layer(
             ServiceBuilder::new()
                 .layer(axum::middleware::from_fn_with_state(
@@ -190,7 +184,8 @@ impl SigbotAPIServer {
         }
     }
 
-    fn print_banner(config: Arc<AppConfig>, verbose: bool) {
+    fn print_banner(verbose: bool) {
+        let config = get_config();
         // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
         let ascii_name = r#"
  ______                  ____                                           

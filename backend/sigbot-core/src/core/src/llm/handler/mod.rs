@@ -18,5 +18,5 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod llm_engine;
+pub mod llm_factory;
 pub mod llm_langchain;

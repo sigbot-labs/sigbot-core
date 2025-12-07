@@ -22,15 +22,16 @@ use crate::apm;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use common_telemetry::info;
-use sigbot_core::{config::config::AppConfig, mgmt};
-use std::sync::Arc;
+use sigbot_core::{config::config::get_config, mgmt};
 use tokio::{sync::oneshot, task::JoinHandle};
 
 pub struct SigbotManagementServer {}
 
 impl SigbotManagementServer {
     #[allow(unused)]
-    pub async fn start(config: &Arc<AppConfig>, verbose: bool, signal_s: oneshot::Sender<()>) -> JoinHandle<()> {
+    pub async fn start(verbose: bool, signal_s: oneshot::Sender<()>) -> JoinHandle<()> {
+        let config = get_config();
+
         let (prometheus_layer, _) = PrometheusMetricLayer::pair();
 
         let app: Router = Router::new()

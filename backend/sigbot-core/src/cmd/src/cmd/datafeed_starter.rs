@@ -18,22 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::cmd::internal::management_server::SigbotManagementServer;
-use axum::Router;
-use clap::Command;
-use common_telemetry::{error, info};
-use sigbot_core::config::config::AppConfig;
-use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
-use sigbot_core::context::state::SigbotState;
-use sigbot_core::llm::handler::llm_engine::LLMEngine;
-use sigbot_core::mgmt::{apm, health::init as health_router};
-use sigbot_datafeed::client::datafeed_factory::SigbotDatafeedClientFactory;
-use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
-use sigbot_utils::panics::PanicHelper;
-use sigbot_utils::tokio_signal::tokio_graceful_shutdown_signal;
 use std::env;
-use std::sync::Arc;
-use tokio::net::TcpListener;
+
+use crate::cmd::internal::management_server::SigbotManagementServer;
+use clap::{Arg, Command};
+use common_telemetry::info;
+use sigbot_core::config::config::get_config;
+use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
+use sigbot_core::mgmt::apm;
+use sigbot_datafeed::client::market::datafeed_binance::SigbotBinanceDatafeedClient;
+use sigbot_datafeed::client::news::datafeed_trushsocial::SigbotTrushSocialDatafeedClient;
+use sigbot_datafeed::client::news::datafeed_twitter::SigbotTwitterDatafeedClient;
+use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestorServer;
+use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
+use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
 
 pub struct SigbotDatafeedIngestorStarter {}
@@ -42,69 +40,60 @@ impl SigbotDatafeedIngestorStarter {
     pub const COMMAND_NAME: &'static str = "datafeed";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Datafeed Ingestor")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Tenant (Isolated) Datafeed Ingestor.")
+            .arg_required_else_help(true) // When no args are provided, show help.
+            .arg(
+                Arg::new("provider")
+                    .short('p')
+                    .long("provider")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
+                        SigbotBinanceDatafeedClient::NAME,
+                        SigbotTwitterDatafeedClient::NAME,
+                        SigbotTrushSocialDatafeedClient::NAME
+                    ))
+                    .default_value(SigbotBinanceDatafeedClient::NAME),
+            )
+            .arg(
+                Arg::new("messaging")
+                    .short('m')
+                    .long("messaging")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The providers of messaging. (supported are: {})",
+                        SigbotMqttClient::NAME,
+                    ))
+                    .default_value(SigbotMqttClient::NAME),
+            )
     }
 
-    #[allow(unused)]
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default();
 
-        let config = config::get_config();
+        Self::print_banner(verbose);
 
-        Self::print_banner(config.to_owned(), verbose);
-
-        // Initial APM components.
-        apm::init_components(&config).await;
+        apm::init().await;
 
         let (signal_s, signal_r) = oneshot::channel();
-        let signal_handle = SigbotManagementServer::start(&config, true, signal_s).await;
+        let signal_handle = SigbotManagementServer::start(verbose, signal_s).await;
 
         signal_r.await.expect("Failed to start Management server.");
-        info!("Management server is ready on {}", config.mgmt.get_bind_addr());
+        info!("Management server is ready on {}", get_config().mgmt.get_bind_addr());
 
-        Self::start(&config, true).await;
+        Self::start(matches, verbose).await;
 
         signal_handle.await.unwrap();
     }
 
-    #[allow(unused)]
-    async fn start(config: &Arc<AppConfig>, verbose: bool) {
-        LLMEngine::init().await;
-        SigbotDatafeedIngestor::startup().await;
-
-        let app_state = SigbotState::new(&config).await;
-
-        let bind_addr = config.server.get_bind_addr();
-        info!("Starting Sigbot Datafeed Ingestor on {}", bind_addr);
-        let listener = match TcpListener::bind(&bind_addr).await {
-            Ok(l) => {
-                info!("Sigbot Datafeed Ingestor is ready on {}", bind_addr);
-                l
-            }
-            Err(e) => {
-                error!("Failed to bind to {}: {}", bind_addr, e);
-                panic!("Failed to bind to {}: {}", bind_addr, e);
-            }
-        };
-
-        let app_router = Router::new().merge(health_router()).with_state(app_state);
-        match axum::serve(listener, app_router.into_make_service())
-            .with_graceful_shutdown(tokio_graceful_shutdown_signal())
-            // .tcp_nodelay(true)
-            .await
-        {
-            Ok(_) => {
-                info!("Sigbot Datafeed Ingestor shutdown gracefully");
-            }
-            Err(e) => {
-                error!("Error running web server: {}", e);
-                panic!("Error start Sigbot Datafeed Ingestor: {}", e);
-            }
-        }
+    async fn start(matches: &clap::ArgMatches, verbose: bool) {
+        SigbotDatafeedIngestorServer::startup(matches, verbose).await;
     }
 
-    fn print_banner(config: Arc<AppConfig>, verbose: bool) {
+    fn print_banner(verbose: bool) {
+        let config = get_config();
         // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
         let ascii_name = r#"
  ____              __             ____                  __     

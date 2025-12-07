@@ -19,26 +19,40 @@
 // This includes modifications and derived works.
 
 use common_telemetry::info;
+use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use std::sync::Arc;
 
-pub struct SigbotDatafeedIngestor {
+use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
+
+pub struct SigbotDatafeedIngestorServer {
     // TODO: binance client.
     // TODO: twitter client.
     // TODO: trush social client.
 }
 
-impl SigbotDatafeedIngestor {
+impl SigbotDatafeedIngestorServer {
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
 
-    pub async fn startup() {
-        info!("Initializing Sigbot Datafeed Ingestor.");
-        unimplemented!()
+    pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
+        info!("Initializing Datafeed clients.");
+        SigbotDatafeedClientFactory::init(matches, verbose).await;
+        info!("Initialized Datafeed clients.");
+
+        info!("Initializing Messaging client.");
+        SigbotMessagingClientFactory::init(matches, verbose).await;
+        info!("Initialized Messaging client.");
     }
 
     pub async fn shutdown() {
-        info!("Shutting down Sigbot Datafeed Ingestor.");
+        info!("Shutting down Datafeed clients.");
+        SigbotDatafeedClientFactory::close().await;
+        info!("Shutting down Datafeed clients.");
+
+        info!("Shutting down Messaging client.");
+        SigbotMessagingClientFactory::close().await;
+        info!("Shutting down Messaging client.");
     }
 }
 

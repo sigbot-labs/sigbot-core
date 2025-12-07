@@ -18,9 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::config::config::AppConfig;
+use crate::config::config::get_config;
 use crate::mgmt::apm::otel::create_otel_tracer;
-use std::sync::Arc;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::layer::SubscriberExt;
 
@@ -28,7 +27,9 @@ pub mod logging;
 pub mod metrics;
 pub mod otel;
 
-pub async fn init_components(config: &Arc<AppConfig>) {
+pub async fn init() {
+    let config = &get_config();
+
     // Setup logging+tracing layers.
     let (route_layer, _) = tracing_subscriber::reload::Layer::new(logging::default_log_route_layer());
     let (stderr_layer, _) = tracing_subscriber::reload::Layer::new(logging::default_log_stderr_layer(config));

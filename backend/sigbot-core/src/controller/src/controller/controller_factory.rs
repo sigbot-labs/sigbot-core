@@ -18,12 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::controller::{
-    datafeed::controller_datafeed::SigbotDatafeedRunnerController,
-    messaging::controller_messaging::SigbotMessagingController,
-    notification::controller_notification::SigbotNotificationController,
-    strategy::controller_strategy::SigbotStrategyRunnerController,
-};
+use crate::controller::strategy::controller_strategy::SigbotStrategyRunnerController;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -41,96 +36,29 @@ pub trait ISigbotController: Send + Sync {
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotControllerFactory> = RwLock::new(SigbotControllerFactory::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotControllerServer> = RwLock::new(SigbotControllerServer::new());
 }
 
-pub struct SigbotControllerFactory {
+pub struct SigbotControllerServer {
     pub implementations: HashMap<String, Arc<dyn ISigbotController + Send + Sync>>,
 }
 
-impl SigbotControllerFactory {
+impl SigbotControllerServer {
     fn new() -> Self {
-        SigbotControllerFactory {
+        SigbotControllerServer {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotControllerFactory> {
+    pub fn get() -> &'static RwLock<SigbotControllerServer> {
         &SINGLE_INSTANCE
     }
 
-    pub async fn startup() {
+    #[allow(unused_variables)]
+    pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         let config = config::get_config();
 
-        if config.services.controllers.datafeed.inner.enabled {
-            info!("Registering Sigbot Datafeed Controller ...");
-            match Self::get()
-                .write() // If acquire fails, then it block until acquired.
-                .unwrap() // If acquire fails, then it should panic.
-                .register(
-                    SigbotDatafeedRunnerController::NAME.to_owned(),
-                    SigbotDatafeedRunnerController::new(
-                        Some(config.services.controllers.datafeed.inner.cron.to_owned()),
-                        Some(config.services.controllers.datafeed.inner.channel_size),
-                    )
-                    .await,
-                ) {
-                Ok(registered) => {
-                    info!("Initializing Sigbot Datafeed Controller ...");
-                    let _ = registered.startup().await;
-                }
-                Err(e) => panic!("Failed to register Sigbot Datafeed Controller : {}", e),
-            }
-        } else {
-            info!("Disabled the Datafeed Controller.")
-        }
-
-        if config.services.controllers.messaging.inner.enabled {
-            info!("Registering Sigbot Messaging Controller ...");
-            match Self::get()
-                .write() // If acquire fails, then it block until acquired.
-                .unwrap() // If acquire fails, then it should panic.
-                .register(
-                    SigbotMessagingController::NAME.to_owned(),
-                    SigbotMessagingController::new(
-                        Some(config.services.controllers.messaging.inner.cron.to_owned()),
-                        Some(config.services.controllers.messaging.inner.channel_size),
-                    )
-                    .await,
-                ) {
-                Ok(registered) => {
-                    info!("Initializing Sigbot Messaging Controller  ...");
-                    let _ = registered.startup().await;
-                }
-                Err(e) => panic!("Failed to register Sigbot Messaging Controller : {}", e),
-            }
-        } else {
-            info!("Disabled the Messaging Controller.")
-        }
-
-        if config.services.controllers.notification.inner.enabled {
-            info!("Registering Sigbot Notification Controller ...");
-            match Self::get()
-                .write() // If acquire fails, then it block until acquired.
-                .unwrap() // If acquire fails, then it should panic.
-                .register(
-                    SigbotNotificationController::NAME.to_owned(),
-                    SigbotNotificationController::new(
-                        Some(config.services.controllers.notification.inner.cron.to_owned()),
-                        Some(config.services.controllers.notification.inner.channel_size),
-                    )
-                    .await,
-                ) {
-                Ok(registered) => {
-                    info!("Initializing Sigbot Notification Controller ...");
-                    let _ = registered.startup().await;
-                }
-                Err(e) => panic!("Failed to register Sigbot Notification Controller : {}", e),
-            }
-        } else {
-            info!("Disabled the Notification Controller.")
-        }
-
+        // TODO: remove this? due to implementation in the deployer module
         if config.services.controllers.strategy.inner.enabled {
             info!("Registering Sigbot Strategy Controller ...");
             match Self::get()
@@ -170,7 +98,7 @@ impl SigbotControllerFactory {
 
     pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotController + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotControllerFactory::get().read().unwrap();
+        let this = SigbotControllerServer::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
@@ -180,7 +108,7 @@ impl SigbotControllerFactory {
     }
 
     pub async fn shutdown() {
-        let this = SigbotControllerFactory::get().read().unwrap();
+        let this = SigbotControllerServer::get().read().unwrap();
         for implementation in this.implementations.values() {
             implementation.shutdown().await;
         }
