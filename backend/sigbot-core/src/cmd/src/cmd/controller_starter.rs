@@ -21,15 +21,12 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use axum::Router;
 use clap::Command;
-use sigbot_backtest::backtest::backtest_factory::SigbotBacktestFactory;
+use sigbot_controller::controller::controller_factory::SigbotControllerFactory;
 use sigbot_core::config::config::AppConfig;
+use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::llm::handler::llm_engine::LLMEngine;
-use sigbot_core::mgmt::health::init as health_router;
-use sigbot_core::{
-    config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
-    mgmt::apm,
-};
+use sigbot_core::mgmt::{apm, health::init as health_router};
 use sigbot_utils::panics::PanicHelper;
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_signal;
 use std::env;
@@ -37,13 +34,14 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-pub struct SigbotBacktestRunner {}
+pub struct SigbotControllerManagerStarter {}
 
-impl SigbotBacktestRunner {
-    pub const COMMAND_NAME: &'static str = "backtest-runner";
+impl SigbotControllerManagerStarter {
+    pub const COMMAND_NAME: &'static str = "controller";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Backtest Runner.")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Platform (Central) Controller Manager (lifecycle management for All components)")
     }
 
     #[allow(unused)]
@@ -72,15 +70,15 @@ impl SigbotBacktestRunner {
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
         LLMEngine::init().await;
-        SigbotBacktestFactory::init().await;
+        SigbotControllerFactory::startup().await;
 
         let app_state = SigbotState::new(&config).await;
 
         let bind_addr = config.server.get_bind_addr();
-        tracing::info!("Starting Sigbot Backtest Runner on {}", bind_addr);
+        tracing::info!("Starting SigBot Controller Server on {}", bind_addr);
         let listener = match TcpListener::bind(&bind_addr).await {
             Ok(l) => {
-                tracing::info!("Sigbot Backtest Runner is ready on {}", bind_addr);
+                tracing::info!("SigBot Controller Server is ready on {}", bind_addr);
                 l
             }
             Err(e) => {
@@ -96,11 +94,11 @@ impl SigbotBacktestRunner {
             .await
         {
             Ok(_) => {
-                tracing::info!("Sigbot Backtest Runner shut down gracefully");
+                tracing::info!("SigBot Controller Server shut down gracefully");
             }
             Err(e) => {
-                tracing::error!("Error running Sigbot Backtest Runner: {}", e);
-                panic!("Error start Sigbot Backtest Runner: {}", e);
+                tracing::error!("Error running web server: {}", e);
+                panic!("Error start SigBot Controller Server: {}", e);
             }
         }
     }
@@ -108,15 +106,15 @@ impl SigbotBacktestRunner {
     fn print_banner(config: Arc<AppConfig>, verbose: bool) {
         // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
         let ascii_name = r#"
- ____                     __          __                   __      
-/\  _`\                  /\ \        /\ \__               /\ \__   
-\ \ \L\ \     __      ___\ \ \/'\    \ \ ,_\    __    ____\ \ ,_\ 
- \ \  _ <'  /'__`\   /'___\ \ , <     \ \ \/  /'__`\ /',__\\ \ \/  
-  \ \ \L\ \/\ \L\.\_/\ \__/\ \ \\`\    \ \ \_/\  __//\__, `\\ \ \_ 
-   \ \____/\ \__/.\_\ \____\\ \_\ \_\   \ \__\ \____\/\____/ \ \__\
-    \/___/  \/__/\/_/\/____/ \/_/\/_/    \/__/\/____/\/___/   \/__/
-
-                                            (Sigbot Backtest Runner)
+ ____                    __                 ___    ___                   
+/\  _`\                 /\ \__             /\_ \  /\_ \                  
+\ \ \/\_\    ___     ___\ \ ,_\  _ __   ___\//\ \ \//\ \      __   _ __  
+ \ \ \/_/_  / __`\ /' _ `\ \ \/ /\`'__\/ __`\\ \ \  \ \ \   /'__`\/\`'__\
+  \ \ \L\ \/\ \L\ \/\ \/\ \ \ \_\ \ \//\ \L\ \\_\ \_ \_\ \_/\  __/\ \ \/ 
+   \ \____/\ \____/\ \_\ \_\ \__\\ \_\\ \____//\____\/\____\ \____\\ \_\ 
+    \/___/  \/___/  \/_/\/_/\/__/ \/_/ \/___/ \/____/\/____/\/____/ \/_/ 
+                                                                         
+                                                (Sigbot Controller Manager)
  "#;
         eprintln!("");
         eprintln!("{}", ascii_name);

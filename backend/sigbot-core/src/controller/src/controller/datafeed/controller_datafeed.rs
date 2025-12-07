@@ -24,7 +24,7 @@ use common_telemetry::info;
 use sigbot_core::{
     modules::datafeed::handler::datafeed_handler::IDatafeedInfoHandler, sys::handler::dlock_handler::IDLockHandler,
 };
-use sigbot_datafeed::datafeed::datafeed_factory::SigbotDatafeedFactory;
+use sigbot_datafeed::client::datafeed_factory::SigbotDatafeedClientFactory;
 use sigbot_types::{modules::datafeed::datafeed::QueryDatafeedRequest, PageRequest, PageResponse};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -114,48 +114,38 @@ impl SigbotDatafeedRunnerController {
 
             info!("Loaded {} Datafeed : {}", datafeeds.len(), last_page.num.unwrap_or(1));
 
-            for datafeed in datafeeds {
-                let datafeed0 = Arc::new(datafeed);
-                if datafeed0.base.status.unwrap_or(0) == 1 {
-                    info!(
-                        "Initializing Datafeed Runner : {:?}/{:?}",
-                        datafeed0.base.id, datafeed0.name
-                    );
-                    let result = SigbotDatafeedFactory::register(datafeed0.to_owned()).await;
+            //SigbotDatafeedIngestorBootstrap::startup().await;
+            for info in datafeeds {
+                let info0 = Arc::new(info);
+                if info0.base.status.unwrap_or(0) == 1 {
+                    info!("Initializing Datafeed Runner : {:?}/{:?}", info0.base.id, info0.name);
+                    let result = SigbotDatafeedClientFactory::register(info0.to_owned()).await;
                     match result {
                         Ok(handler) => {
                             handler.init().await;
-                            info!(
-                                "Initialized Datafeed Runner : {:?}/{:?}",
-                                datafeed0.base.id, datafeed0.name
-                            );
+                            info!("Initialized Datafeed Runner : {:?}/{:?}", info0.base.id, info0.name);
                         }
                         Err(e) => {
                             info!(
                                 "Failed to initialize Datafeed Runner : {:?}/{:?}",
-                                datafeed0.base.id, datafeed0.name
+                                info0.base.id, info0.name
                             );
                         }
                     }
                 } else {
-                    info!(
-                        "Shutting down Datafeed Runner : {:?}/{:?}",
-                        datafeed0.base.id, datafeed0.name
-                    );
+                    info!("Shutting down Datafeed Runner : {:?}/{:?}", info0.base.id, info0.name);
                     let result =
-                        SigbotDatafeedFactory::get_implementation(datafeed0.name.to_owned().unwrap_or_default()).await;
+                        SigbotDatafeedClientFactory::get_implementation(info0.name.to_owned().unwrap_or_default())
+                            .await;
                     match result {
                         Ok(handler) => {
                             handler.shutdown().await;
-                            info!(
-                                "Shutdown Datafeed Runner : {:?}/{:?}",
-                                datafeed0.base.id, datafeed0.name
-                            );
+                            info!("Shutdown Datafeed Runner : {:?}/{:?}", info0.base.id, info0.name);
                         }
                         Err(e) => {
                             info!(
                                 "Failed to shutdown Datafeed Runner : {:?}/{:?}",
-                                datafeed0.base.id, datafeed0.name
+                                info0.base.id, info0.name
                             );
                         }
                     }
@@ -167,7 +157,7 @@ impl SigbotDatafeedRunnerController {
 
 #[async_trait]
 impl ISigbotController for SigbotDatafeedRunnerController {
-    async fn init(&self) {
+    async fn startup(&self) {
         let this = self.clone();
         let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
         let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
@@ -213,7 +203,7 @@ impl ISigbotController for SigbotDatafeedRunnerController {
         );
     }
 
-    async fn close(&self) {
+    async fn shutdown(&self) {
         info!(
             "Closing Datafeed controller with cron '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION)

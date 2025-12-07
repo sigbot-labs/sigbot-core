@@ -28,51 +28,47 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::datafeed::{
-    market::datafeed_binance::SigbotBinanceDatafeedExecutor, news::datafeed_twitter::SigbotTwitterDatafeedExecutor,
+use crate::client::{
+    market::datafeed_binance::SigbotBinanceDatafeedClient, news::datafeed_twitter::SigbotTwitterDatafeedClient,
 };
 
 #[async_trait]
-pub trait ISigbotDatafeedExecutor: Send + Sync {
+pub trait ISigbotDatafeedClient: Send + Sync {
     async fn init(&self);
     async fn shutdown(&self);
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotDatafeedFactory> = RwLock::new(SigbotDatafeedFactory::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotDatafeedClientFactory> = RwLock::new(SigbotDatafeedClientFactory::new());
 }
 
-pub struct SigbotDatafeedFactory {
-    pub implementations: HashMap<String, Arc<dyn ISigbotDatafeedExecutor + Send + Sync>>,
+pub struct SigbotDatafeedClientFactory {
+    pub implementations: HashMap<String, Arc<dyn ISigbotDatafeedClient + Send + Sync>>,
 }
 
-impl SigbotDatafeedFactory {
+impl SigbotDatafeedClientFactory {
     fn new() -> Self {
-        SigbotDatafeedFactory {
+        SigbotDatafeedClientFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotDatafeedFactory> {
+    pub fn get() -> &'static RwLock<SigbotDatafeedClientFactory> {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {
-        unimplemented!()
-    }
+    pub async fn init() {}
 
-    pub async fn register(
-        datafeed: Arc<DatafeedInfo>,
-    ) -> Result<Arc<dyn ISigbotDatafeedExecutor + Send + Sync>, Error> {
+    pub async fn register(datafeed: Arc<DatafeedInfo>) -> Result<Arc<dyn ISigbotDatafeedClient + Send + Sync>, Error> {
         info!("Register Sigbot Datafeed ...");
-        let handler: Arc<dyn ISigbotDatafeedExecutor + Send + Sync> =
-            match datafeed.to_owned().provider.clone().unwrap() {
-                DatafeedProvider::BINANCE => SigbotBinanceDatafeedExecutor::new(datafeed.to_owned()).await,
-                DatafeedProvider::TWITTER => SigbotTwitterDatafeedExecutor::new(datafeed.to_owned()).await,
-            };
+        let handler: Arc<dyn ISigbotDatafeedClient + Send + Sync> = match datafeed.to_owned().provider.clone().unwrap()
+        {
+            DatafeedProvider::BINANCE => SigbotBinanceDatafeedClient::new(datafeed.to_owned()).await,
+            DatafeedProvider::TWITTER => SigbotTwitterDatafeedClient::new(datafeed.to_owned()).await,
+        };
         let name = datafeed.name.clone().unwrap_or_default();
         let result = {
-            let mut factory = SigbotDatafeedFactory::get().write().unwrap();
+            let mut factory = SigbotDatafeedClientFactory::get().write().unwrap();
             factory.register0(name, handler.to_owned())
         };
         result
@@ -81,8 +77,8 @@ impl SigbotDatafeedFactory {
     fn register0(
         &mut self,
         name: String,
-        handler: Arc<dyn ISigbotDatafeedExecutor + Send + Sync>,
-    ) -> Result<Arc<dyn ISigbotDatafeedExecutor + Send + Sync>, Error> {
+        handler: Arc<dyn ISigbotDatafeedClient + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotDatafeedClient + Send + Sync>, Error> {
         if self.implementations.contains_key(&name) {
             debug!("Already register the Datafeed '{}'", name);
             return Ok(handler);
@@ -91,9 +87,9 @@ impl SigbotDatafeedFactory {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotDatafeedExecutor + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotDatafeedClient + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotDatafeedFactory::get().read().unwrap();
+        let this = SigbotDatafeedClientFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {

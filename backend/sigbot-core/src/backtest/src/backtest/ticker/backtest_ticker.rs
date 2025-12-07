@@ -23,12 +23,13 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_core::config::config::BacktestProperties;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
 pub struct TickerBasedBacktestEngine {
     config: BacktestProperties,
-    scheduler: Arc<JobScheduler>,
+    scheduler: Arc<Mutex<Option<JobScheduler>>>,
 }
 
 impl TickerBasedBacktestEngine {
@@ -37,7 +38,7 @@ impl TickerBasedBacktestEngine {
     pub async fn new(config: &BacktestProperties) -> Arc<Self> {
         Arc::new(Self {
             config: config.to_owned(),
-            scheduler: Arc::new(JobScheduler::new_with_channel_size(config.channel_size).await.unwrap()),
+            scheduler: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -53,7 +54,7 @@ impl TickerBasedBacktestEngine {
 
 #[async_trait]
 impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
-    async fn init(&self) {
+    async fn startup(&self) {
         let this = self.clone();
 
         // Pre-check the cron expression is valid.
@@ -79,10 +80,26 @@ impl ISigbotBacktestEngine for TickerBasedBacktestEngine {
         })
         .unwrap();
 
-        self.scheduler.add(job).await.unwrap();
-        self.scheduler.start().await.unwrap();
+        let scheduler = JobScheduler::new_with_channel_size(self.config.channel_size)
+            .await
+            .unwrap();
+        scheduler.add(job).await.unwrap();
+        scheduler.start().await.unwrap();
+        *self.scheduler.lock().await = Some(scheduler);
 
         info!("Started Ticker based backtest handler.");
+    }
+
+    async fn shutdown(&self) {
+        info!("Shutting down Ticker based backtest handler.");
+        let mut guard = self.scheduler.lock().await;
+        if let Some(scheduler) = guard.as_mut() {
+            scheduler
+                .shutdown()
+                .await
+                .expect("Failed to shutdown Ticker based backtest handler.");
+        }
+        info!("Ticker based backtest handler shutdown gracefully.");
     }
 }
 

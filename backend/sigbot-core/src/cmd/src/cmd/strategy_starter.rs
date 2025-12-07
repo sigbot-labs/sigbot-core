@@ -21,7 +21,6 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use axum::Router;
 use clap::Command;
-use sigbot_controller::controller::controller_factory::SigbotControllerFactory;
 use sigbot_core::config::config::AppConfig;
 use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::context::state::SigbotState;
@@ -34,13 +33,13 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-pub struct SigbotStrategyRunner {}
+pub struct SigbotStrategyRunnerStarter {}
 
-impl SigbotStrategyRunner {
-    pub const COMMAND_NAME: &'static str = "strategy-runner";
+impl SigbotStrategyRunnerStarter {
+    pub const COMMAND_NAME: &'static str = "strategy";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Strategy Runner.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Strategy Runner")
     }
 
     #[allow(unused)]
@@ -69,7 +68,7 @@ impl SigbotStrategyRunner {
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
         LLMEngine::init().await;
-        SigbotControllerFactory::init().await;
+        // SigbotStrategyRunnerFactory::init().await;
 
         let app_state = SigbotState::new(&config).await;
 

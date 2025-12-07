@@ -28,10 +28,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::messaging::messaging_mqtt::SigbotMqttOperation;
+use crate::client::messaging_mqtt::SigbotMqttClient;
 
 #[async_trait]
-pub trait ISigbotMessagingOperation: Send + Sync {
+pub trait ISigbotMessagingClient: Send + Sync {
     async fn init(&self);
     async fn shutdown(&self);
     async fn publish(&self, to: &str, message: &str) -> Result<String, Error>;
@@ -39,21 +39,21 @@ pub trait ISigbotMessagingOperation: Send + Sync {
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotMessagingFactory> = RwLock::new(SigbotMessagingFactory::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotMessagingClientFactory> = RwLock::new(SigbotMessagingClientFactory::new());
 }
 
-pub struct SigbotMessagingFactory {
-    pub implementations: HashMap<String, Arc<dyn ISigbotMessagingOperation + Send + Sync>>,
+pub struct SigbotMessagingClientFactory {
+    pub implementations: HashMap<String, Arc<dyn ISigbotMessagingClient + Send + Sync>>,
 }
 
-impl SigbotMessagingFactory {
+impl SigbotMessagingClientFactory {
     fn new() -> Self {
-        SigbotMessagingFactory {
+        SigbotMessagingClientFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotMessagingFactory> {
+    pub fn get() -> &'static RwLock<SigbotMessagingClientFactory> {
         &SINGLE_INSTANCE
     }
 
@@ -63,15 +63,15 @@ impl SigbotMessagingFactory {
 
     pub async fn register(
         messaaging: Arc<MessagingInfo>,
-    ) -> Result<Arc<dyn ISigbotMessagingOperation + Send + Sync>, Error> {
+    ) -> Result<Arc<dyn ISigbotMessagingClient + Send + Sync>, Error> {
         info!("Register Sigbot Datafeed ...");
-        let handler: Arc<dyn ISigbotMessagingOperation + Send + Sync> =
+        let handler: Arc<dyn ISigbotMessagingClient + Send + Sync> =
             match messaaging.to_owned().provider.clone().unwrap() {
-                MessagingProvider::MQTT => SigbotMqttOperation::new(messaaging.to_owned()).await,
+                MessagingProvider::MQTT => SigbotMqttClient::new(messaaging.to_owned()).await,
             };
         let name = messaaging.name.clone().unwrap_or_default();
         let result = {
-            let mut factory = SigbotMessagingFactory::get().write().unwrap();
+            let mut factory = SigbotMessagingClientFactory::get().write().unwrap();
             factory.register0(name, handler.to_owned())
         };
         result
@@ -80,8 +80,8 @@ impl SigbotMessagingFactory {
     fn register0(
         &mut self,
         name: String,
-        handler: Arc<dyn ISigbotMessagingOperation + Send + Sync>,
-    ) -> Result<Arc<dyn ISigbotMessagingOperation + Send + Sync>, Error> {
+        handler: Arc<dyn ISigbotMessagingClient + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotMessagingClient + Send + Sync>, Error> {
         if self.implementations.contains_key(&name) {
             debug!("Already register the sigbot messaging operation '{}'", name);
             return Ok(handler);
@@ -90,9 +90,9 @@ impl SigbotMessagingFactory {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotMessagingOperation + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotMessagingClient + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotMessagingFactory::get().read().unwrap();
+        let this = SigbotMessagingClientFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
@@ -102,7 +102,7 @@ impl SigbotMessagingFactory {
     }
 
     pub async fn close() {
-        let this = SigbotMessagingFactory::get().read().unwrap();
+        let this = SigbotMessagingClientFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
             implementation.shutdown().await;
         }

@@ -7351,6 +7351,7 @@ dependencies = [
  "sigbot-controller",
  "sigbot-core",
  "sigbot-datafeed",
+ "sigbot-notification",
  "sigbot-types",
  "sigbot-utils",
  "snafu",

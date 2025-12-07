@@ -18,4 +18,28 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod client;
+use common_telemetry::info;
+use std::sync::Arc;
+
+pub struct SigbotNotificationForwarder {
+    // TODO: email client.
+    // TODO: telegram client.
+}
+
+impl SigbotNotificationForwarder {
+    pub async fn new() -> Arc<Self> {
+        Arc::new(Self {})
+    }
+
+    pub async fn startup() {
+        info!("Initializing Sigbot Notification Forwarder.");
+        unimplemented!()
+    }
+
+    pub async fn shutdown() {
+        info!("Shutting down Sigbot Notification Forwarder.");
+    }
+}
+
+#[cfg(test)]
+mod tests {}

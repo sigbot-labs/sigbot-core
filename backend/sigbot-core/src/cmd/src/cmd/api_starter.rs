@@ -53,10 +53,11 @@ pub type MiddlewareFunction =
     fn(State<SigbotState>, Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response<Body>> + Send + 'static>>;
 
 impl SigbotAPIServer {
-    pub const COMMAND_NAME: &'static str = "api-server";
+    pub const COMMAND_NAME: &'static str = "api";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot API Server.")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Platform (Central) API Server (configuration management APIs for All components)")
     }
 
     #[allow(unused)]

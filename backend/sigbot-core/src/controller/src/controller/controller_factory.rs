@@ -36,8 +36,8 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotController: Send + Sync {
-    async fn init(&self);
-    async fn close(&self);
+    async fn startup(&self);
+    async fn shutdown(&self);
 }
 
 lazy_static! {
@@ -59,7 +59,7 @@ impl SigbotControllerFactory {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {
+    pub async fn startup() {
         let config = config::get_config();
 
         if config.services.controllers.datafeed.inner.enabled {
@@ -77,7 +77,7 @@ impl SigbotControllerFactory {
                 ) {
                 Ok(registered) => {
                     info!("Initializing Sigbot Datafeed Controller ...");
-                    let _ = registered.init().await;
+                    let _ = registered.startup().await;
                 }
                 Err(e) => panic!("Failed to register Sigbot Datafeed Controller : {}", e),
             }
@@ -100,7 +100,7 @@ impl SigbotControllerFactory {
                 ) {
                 Ok(registered) => {
                     info!("Initializing Sigbot Messaging Controller  ...");
-                    let _ = registered.init().await;
+                    let _ = registered.startup().await;
                 }
                 Err(e) => panic!("Failed to register Sigbot Messaging Controller : {}", e),
             }
@@ -123,7 +123,7 @@ impl SigbotControllerFactory {
                 ) {
                 Ok(registered) => {
                     info!("Initializing Sigbot Notification Controller ...");
-                    let _ = registered.init().await;
+                    let _ = registered.startup().await;
                 }
                 Err(e) => panic!("Failed to register Sigbot Notification Controller : {}", e),
             }
@@ -146,7 +146,7 @@ impl SigbotControllerFactory {
                 ) {
                 Ok(registered) => {
                     info!("Initializing Sigbot Strategy Controller ...");
-                    let _ = registered.init().await;
+                    let _ = registered.startup().await;
                 }
                 Err(e) => panic!("Failed to register Sigbot Strategy Controller : {}", e),
             }
@@ -179,10 +179,10 @@ impl SigbotControllerFactory {
         }
     }
 
-    pub async fn close() {
+    pub async fn shutdown() {
         let this = SigbotControllerFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
-            implementation.close().await;
+            implementation.shutdown().await;
         }
     }
 }

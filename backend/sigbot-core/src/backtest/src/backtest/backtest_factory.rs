@@ -31,30 +31,31 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotBacktestEngine: Send + Sync {
-    async fn init(&self);
+    async fn startup(&self);
+    async fn shutdown(&self);
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotBacktestFactory> = RwLock::new(SigbotBacktestFactory::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotBacktestRunnerFactory> = RwLock::new(SigbotBacktestRunnerFactory::new());
 }
 
-pub struct SigbotBacktestFactory {
+pub struct SigbotBacktestRunnerFactory {
     pub implementations: HashMap<String, Arc<dyn ISigbotBacktestEngine + Send + Sync>>,
 }
 
-impl SigbotBacktestFactory {
+impl SigbotBacktestRunnerFactory {
     fn new() -> Self {
-        SigbotBacktestFactory {
+        SigbotBacktestRunnerFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotBacktestFactory> {
+    pub fn get() -> &'static RwLock<SigbotBacktestRunnerFactory> {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {
-        info!("Register All Sigbot backtesting ...");
+    pub async fn startup() {
+        info!("Startup All Sigbot backtesting ...");
 
         for config in &config::get_config().services.backtests {
             if !config.enabled {
@@ -70,7 +71,7 @@ impl SigbotBacktestFactory {
                 {
                     Ok(registered) => {
                         info!("Initializing Sigbot backtest ...");
-                        let _ = registered.init().await;
+                        let _ = registered.startup().await;
                     }
                     Err(e) => panic!("Failed to register Sigbot backtest: {}", e),
                 }
@@ -93,7 +94,7 @@ impl SigbotBacktestFactory {
 
     pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotBacktestEngine + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotBacktestFactory::get().read().unwrap();
+        let this = SigbotBacktestRunnerFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {

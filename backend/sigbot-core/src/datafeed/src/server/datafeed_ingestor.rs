@@ -18,41 +18,27 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::datafeed::datafeed_factory::ISigbotDatafeedExecutor;
-use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct SigbotTwitterDatafeedExecutor {
-    config: Arc<DatafeedInfo>,
+pub struct SigbotDatafeedIngestor {
+    // TODO: binance client.
+    // TODO: twitter client.
+    // TODO: trush social client.
 }
 
-impl SigbotTwitterDatafeedExecutor {
-    pub const KIND: &'static str = "TWITTER_DATAFEED";
-
-    pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
-        Arc::new(Self { config })
+impl SigbotDatafeedIngestor {
+    pub async fn new() -> Arc<Self> {
+        Arc::new(Self {})
     }
 
-    pub(super) async fn process(&self) {
-        info!("Processing Twitter data feed ...");
-        // TODO: Implement the logic to process Twitter data feed.
-        // TODO: 1. Start the Twitter websocket subscription and pushing to EMQx(hot data cache).
-        // TODO: 2. Start the consumer to Twitter data to database(cold data persist) from EMQx.
+    pub async fn startup() {
+        info!("Initializing Sigbot Datafeed Ingestor.");
         unimplemented!()
     }
-}
 
-#[async_trait]
-impl ISigbotDatafeedExecutor for SigbotTwitterDatafeedExecutor {
-    async fn init(&self) {
-        info!("Started Twitter data feed.");
-    }
-
-    async fn shutdown(&self) {
-        info!("Shut down Twitter data feed.");
+    pub async fn shutdown() {
+        info!("Shutting down Sigbot Datafeed Ingestor.");
     }
 }
 

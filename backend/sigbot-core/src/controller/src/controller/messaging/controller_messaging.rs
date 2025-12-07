@@ -24,7 +24,7 @@ use common_telemetry::info;
 use sigbot_core::{
     modules::messaging::handler::messaging_handler::IMessagingInfoHandler, sys::handler::dlock_handler::IDLockHandler,
 };
-use sigbot_messaging::messaging::messaging_factory::SigbotMessagingFactory;
+use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use sigbot_types::{modules::messaging::messaging::QueryMessagingRequest, PageRequest, PageResponse};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -121,7 +121,7 @@ impl SigbotMessagingController {
                         "Initializing Datafeed Runner : {:?}/{:?}",
                         messaging0.base.id, messaging0.name
                     );
-                    let result = SigbotMessagingFactory::register(messaging0.to_owned()).await;
+                    let result = SigbotMessagingClientFactory::register(messaging0.to_owned()).await;
                     match result {
                         Ok(handler) => {
                             handler.init().await;
@@ -142,9 +142,10 @@ impl SigbotMessagingController {
                         "Shutting down Datafeed Runner : {:?}/{:?}",
                         messaging0.base.id, messaging0.name
                     );
-                    let result =
-                        SigbotMessagingFactory::get_implementation(messaging0.name.to_owned().unwrap_or_default())
-                            .await;
+                    let result = SigbotMessagingClientFactory::get_implementation(
+                        messaging0.name.to_owned().unwrap_or_default(),
+                    )
+                    .await;
                     match result {
                         Ok(handler) => {
                             handler.shutdown().await;
@@ -168,7 +169,7 @@ impl SigbotMessagingController {
 
 #[async_trait]
 impl ISigbotController for SigbotMessagingController {
-    async fn init(&self) {
+    async fn startup(&self) {
         let this = self.clone();
         let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
         let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
@@ -217,7 +218,7 @@ impl ISigbotController for SigbotMessagingController {
         );
     }
 
-    async fn close(&self) {
+    async fn shutdown(&self) {
         info!(
             "Closing Messaging controller with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),

@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::exchange::exchange_factory::ISigbotExchangeOperation;
+use crate::client::exchange_factory::ISigbotExchangeClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use binance_sdk::common::websocket::WebsocketStream;
@@ -53,7 +53,7 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
-pub struct SigbotBinanceConfig {
+pub struct SigbotBinanceClientConfig {
     pub id: i64,
     pub name: String,
     // Spot endpoints
@@ -94,7 +94,7 @@ pub struct SigbotBinanceConfig {
     pub description: Option<String>,
 }
 
-impl std::fmt::Display for SigbotBinanceConfig {
+impl std::fmt::Display for SigbotBinanceClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -123,7 +123,7 @@ impl std::fmt::Display for SigbotBinanceConfig {
     }
 }
 
-impl SigbotBinanceConfig {
+impl SigbotBinanceClientConfig {
     pub fn from_exchange(exchange: ExchangeInfo) -> Self {
         let plain_config = exchange.configuration.expect("Plain configuration is required");
         let secret_config = exchange.secrets.expect("Secret configuration is required");
@@ -251,8 +251,8 @@ impl SigbotBinanceConfig {
     }
 }
 
-pub struct BinanceExchangeOperation {
-    config: SigbotBinanceConfig,
+pub struct SigbotBinanceClient {
+    config: SigbotBinanceClientConfig,
     rest_api_client: Arc<Mutex<Option<RestApi>>>,
     rest_market_client: Arc<Mutex<Option<RestApi>>>,
     ws_api_client: Arc<Mutex<Option<WebsocketApi>>>,
@@ -265,10 +265,10 @@ pub struct BinanceExchangeOperation {
         Arc<Mutex<HashMap<String, Arc<WebsocketStream<KlineCandlestickStreamsResponse>>>>>,
 }
 
-impl BinanceExchangeOperation {
+impl SigbotBinanceClient {
     pub const KIND: &'static str = "BINANCE"; // ExchangeProvider::BINANCE
 
-    pub async fn new(config: &SigbotBinanceConfig, kline_store: Box<dyn ICache<Vec<KlineResult>>>) -> Arc<Self> {
+    pub async fn new(config: &SigbotBinanceClientConfig, kline_store: Box<dyn ICache<Vec<KlineResult>>>) -> Arc<Self> {
         Arc::new(Self {
             config: config.to_owned(),
             rest_api_client: Arc::new(Mutex::new(None)),
@@ -293,7 +293,7 @@ impl BinanceExchangeOperation {
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/rest_api/trade_api/new_order.rs
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/websocket_api/trade_api/new_order.rs
 #[async_trait]
-impl ISigbotExchangeOperation for BinanceExchangeOperation {
+impl ISigbotExchangeClient for SigbotBinanceClient {
     async fn init(&self) {
         info!("Starting Binance exchange manager with config={}", self.config);
 

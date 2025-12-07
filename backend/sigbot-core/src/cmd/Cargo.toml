@@ -21,6 +21,7 @@ sigbot-utils.workspace = true
 sigbot-core.workspace = true
 sigbot-controller.workspace = true
 sigbot-datafeed.workspace = true
+sigbot-notification.workspace = true
 sigbot-backtest.workspace = true
 
 # Thirdparty dependencies.

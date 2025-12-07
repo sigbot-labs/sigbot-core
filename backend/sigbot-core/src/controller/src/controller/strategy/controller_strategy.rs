@@ -134,7 +134,7 @@ impl SigbotStrategyRunnerController {
 
 #[async_trait]
 impl ISigbotController for SigbotStrategyRunnerController {
-    async fn init(&self) {
+    async fn startup(&self) {
         let this = self.clone();
         let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
         let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
@@ -180,7 +180,7 @@ impl ISigbotController for SigbotStrategyRunnerController {
         );
     }
 
-    async fn close(&self) {
+    async fn shutdown(&self) {
         info!(
             "Closing Strategy Runner Controller with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),

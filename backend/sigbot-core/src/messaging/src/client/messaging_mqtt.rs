@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messaging::messaging_factory::ISigbotMessagingOperation;
+use crate::client::messaging_factory::ISigbotMessagingClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -28,7 +28,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, task};
 
 #[derive(Clone)]
-pub struct SigbotMqttConfig {
+pub struct SigbotMqttClientConfig {
     pub id: i64,
     pub mqtt_server: String,
     pub mqtt_port: u16,
@@ -41,11 +41,11 @@ pub struct SigbotMqttConfig {
     pub mqtt_retain: bool,
 }
 
-impl std::fmt::Display for SigbotMqttConfig {
+impl std::fmt::Display for SigbotMqttClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SigbotMqttConfig=(
+            "SigbotMqttClientConfig=(
                     id={}, mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password={:?}),
             )
             ",
@@ -54,7 +54,7 @@ impl std::fmt::Display for SigbotMqttConfig {
     }
 }
 
-impl SigbotMqttConfig {
+impl SigbotMqttClientConfig {
     pub fn from_messaging(messaging: Arc<MessagingInfo>) -> Self {
         let plain_config = messaging
             .configuration
@@ -111,8 +111,8 @@ impl SigbotMqttConfig {
     }
 }
 
-pub struct SigbotMqttOperation {
-    config: SigbotMqttConfig,
+pub struct SigbotMqttClient {
+    config: SigbotMqttClientConfig,
     client: Arc<Mutex<Option<AsyncClient>>>,
     eventloop: Arc<Mutex<Option<EventLoop>>>,
     // This is concurrent map to store the subscription topics and their handlers.
@@ -120,12 +120,12 @@ pub struct SigbotMqttOperation {
     // TODO: Add the memory message queue for subscription messages.
 }
 
-impl SigbotMqttOperation {
+impl SigbotMqttClient {
     pub const KIND: &'static str = "MQTT"; // NotificationKind::EMAIL
 
     pub async fn new(config: Arc<MessagingInfo>) -> Arc<Self> {
         Arc::new(Self {
-            config: SigbotMqttConfig::from_messaging(config),
+            config: SigbotMqttClientConfig::from_messaging(config),
             client: Arc::new(Mutex::new(None)),
             eventloop: Arc::new(Mutex::new(None)),
             subscription_registrations: Arc::new(Mutex::new(HashMap::new())),
@@ -143,7 +143,7 @@ impl SigbotMqttOperation {
 }
 
 #[async_trait]
-impl ISigbotMessagingOperation for SigbotMqttOperation {
+impl ISigbotMessagingClient for SigbotMqttClient {
     async fn init(&self) {
         info!("Initializing MQTT messaging with config={}", self.config);
 

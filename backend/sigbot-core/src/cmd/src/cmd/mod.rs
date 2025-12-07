@@ -18,23 +18,27 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod api_server;
-pub mod backtest_runner;
-pub mod controller_manager;
-pub mod datafeed_runner;
+pub mod api_starter;
+pub mod backtest_starter;
+pub mod controller_starter;
+pub mod datafeed_starter;
 pub mod internal;
-pub mod standalone_server;
-pub mod strategy_runner;
+pub mod notification_starter;
+pub mod standalone_starter;
+pub mod strategy_starter;
 
-use api_server::SigbotAPIServer;
-use backtest_runner::SigbotBacktestRunner;
+use api_starter::SigbotAPIServer;
+use backtest_starter::SigbotBacktestRunnerStarter;
 use clap::{Arg, ArgMatches, Command};
 use sigbot_core::config::config;
-use standalone_server::StandaloneServer;
+use standalone_starter::StandaloneServer;
 use std::sync::OnceLock;
-use strategy_runner::SigbotStrategyRunner;
+use strategy_starter::SigbotStrategyRunnerStarter;
 
-use crate::cmd::{controller_manager::SigbotControllerManager, datafeed_runner::SigbotDatafeedRunner};
+use crate::cmd::{
+    controller_starter::SigbotControllerManagerStarter, datafeed_starter::SigbotDatafeedIngestorStarter,
+    notification_starter::SigbotNotificationForwarderStarter,
+};
 
 type SubcommandBuildFn = fn() -> Command;
 type SubcommandHandleFn = fn(&ArgMatches, bool) -> ();
@@ -53,35 +57,43 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
             ),
         ));
         vec.push((
-            SigbotControllerManager::COMMAND_NAME,
+            SigbotControllerManagerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotControllerManager::build as SubcommandBuildFn,
-                SigbotControllerManager::run as SubcommandHandleFn,
+                SigbotControllerManagerStarter::build as SubcommandBuildFn,
+                SigbotControllerManagerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotDatafeedRunner::COMMAND_NAME,
+            SigbotDatafeedIngestorStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotDatafeedRunner::build as SubcommandBuildFn,
-                SigbotDatafeedRunner::run as SubcommandHandleFn,
+                SigbotDatafeedIngestorStarter::build as SubcommandBuildFn,
+                SigbotDatafeedIngestorStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotStrategyRunner::COMMAND_NAME,
+            SigbotStrategyRunnerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotStrategyRunner::build as SubcommandBuildFn,
-                SigbotStrategyRunner::run as SubcommandHandleFn,
+                SigbotStrategyRunnerStarter::build as SubcommandBuildFn,
+                SigbotStrategyRunnerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotBacktestRunner::COMMAND_NAME,
+            SigbotBacktestRunnerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotBacktestRunner::build as SubcommandBuildFn,
-                SigbotBacktestRunner::run as SubcommandHandleFn,
+                SigbotBacktestRunnerStarter::build as SubcommandBuildFn,
+                SigbotBacktestRunnerStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotNotificationForwarderStarter::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotNotificationForwarderStarter::build as SubcommandBuildFn,
+                SigbotNotificationForwarderStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((

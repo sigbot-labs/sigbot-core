@@ -18,29 +18,31 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::api_server::SigbotAPIServer;
 use crate::cmd::internal::management_server::SigbotManagementServer;
+use axum::Router;
 use clap::Command;
-use sigbot_backtest::backtest::backtest_factory::SigbotBacktestFactory;
-use sigbot_controller::controller::controller_factory::SigbotControllerFactory;
+use common_telemetry::{error, info};
 use sigbot_core::config::config::AppConfig;
+use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
+use sigbot_core::context::state::SigbotState;
 use sigbot_core::llm::handler::llm_engine::LLMEngine;
-use sigbot_core::{
-    config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
-    mgmt::apm,
-};
+use sigbot_core::mgmt::{apm, health::init as health_router};
+use sigbot_datafeed::client::datafeed_factory::SigbotDatafeedClientFactory;
+use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_utils::panics::PanicHelper;
+use sigbot_utils::tokio_signal::tokio_graceful_shutdown_signal;
 use std::env;
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-pub struct StandaloneServer {}
+pub struct SigbotDatafeedIngestorStarter {}
 
-impl StandaloneServer {
-    pub const COMMAND_NAME: &'static str = "standalone";
+impl SigbotDatafeedIngestorStarter {
+    pub const COMMAND_NAME: &'static str = "datafeed";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run SigBot All Components in One with Standalone.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Datafeed Ingestor")
     }
 
     #[allow(unused)]
@@ -59,7 +61,7 @@ impl StandaloneServer {
         let signal_handle = SigbotManagementServer::start(&config, true, signal_s).await;
 
         signal_r.await.expect("Failed to start Management server.");
-        tracing::info!("Management server is ready on {}", config.mgmt.get_bind_addr());
+        info!("Management server is ready on {}", config.mgmt.get_bind_addr());
 
         Self::start(&config, true).await;
 
@@ -68,24 +70,52 @@ impl StandaloneServer {
 
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
-        SigbotAPIServer::start(config, verbose, None, None).await;
         LLMEngine::init().await;
-        SigbotControllerFactory::init().await;
-        SigbotBacktestFactory::init().await;
+        SigbotDatafeedIngestor::startup().await;
+
+        let app_state = SigbotState::new(&config).await;
+
+        let bind_addr = config.server.get_bind_addr();
+        info!("Starting Sigbot Datafeed Ingestor on {}", bind_addr);
+        let listener = match TcpListener::bind(&bind_addr).await {
+            Ok(l) => {
+                info!("Sigbot Datafeed Ingestor is ready on {}", bind_addr);
+                l
+            }
+            Err(e) => {
+                error!("Failed to bind to {}: {}", bind_addr, e);
+                panic!("Failed to bind to {}: {}", bind_addr, e);
+            }
+        };
+
+        let app_router = Router::new().merge(health_router()).with_state(app_state);
+        match axum::serve(listener, app_router.into_make_service())
+            .with_graceful_shutdown(tokio_graceful_shutdown_signal())
+            // .tcp_nodelay(true)
+            .await
+        {
+            Ok(_) => {
+                info!("Sigbot Datafeed Ingestor shutdown gracefully");
+            }
+            Err(e) => {
+                error!("Error running web server: {}", e);
+                panic!("Error start Sigbot Datafeed Ingestor: {}", e);
+            }
+        }
     }
 
     fn print_banner(config: Arc<AppConfig>, verbose: bool) {
-        // http://www.network-science.de/ascii/#larry3d,graffiti,basic,drpepper,rounded,roman
+        // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
         let ascii_name = r#"
- ____                __              __      
-/\  _`\   __        /\ \            /\ \__   
-\ \,\L\_\/\_\     __\ \ \____    ___\ \ ,_\  
- \/_\__ \\/\ \  /'_ `\ \ '__`\  / __`\ \ \/  
-   /\ \L\ \ \ \/\ \L\ \ \ \L\ \/\ \L\ \ \ \_ 
-   \ `\____\ \_\ \____ \ \_,__/\ \____/\ \__\
-    \/_____/\/_/\/___L\ \/___/  \/___/  \/__/
-                  /\____/                    
-                  \_/__/      (Sigbot Standalone (All-in-One))
+ ____              __             ____                  __     
+/\  _`\           /\ \__         /\  _`\               /\ \    
+\ \ \/\ \     __  \ \ ,_\    __  \ \ \L\_\ __     __   \_\ \   
+ \ \ \ \ \  /'__`\ \ \ \/  /'__`\ \ \  _\/'__`\ /'__`\ /'_` \  
+  \ \ \_\ \/\ \L\.\_\ \ \_/\ \L\.\_\ \ \/\  __//\  __//\ \L\ \ 
+   \ \____/\ \__/.\_\\ \__\ \__/.\_\\ \_\ \____\ \____\ \___,_\
+    \/___/  \/__/\/_/ \/__/\/__/\/_/ \/_/\/____/\/____/\/__,_ /
+                                                                         
+                                        (Sigbot Datafeed Runner)
  "#;
         eprintln!("");
         eprintln!("{}", ascii_name);
@@ -99,7 +129,7 @@ impl StandaloneServer {
         let path = env::var("SIGBOT_CFG_PATH").unwrap_or("none".to_string());
         eprintln!("        Configuration file path: {:?}", path);
         eprintln!(
-            "            Web Serve listen on: \"{}://{}:{}\"",
+            "            DataFeed Server listen on: \"{}://{}:{}\"",
             "http", &config.server.host, config.server.port
         );
         if config.mgmt.enabled {

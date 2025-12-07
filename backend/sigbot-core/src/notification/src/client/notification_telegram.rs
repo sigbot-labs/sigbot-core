@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::notification::notification_factory::ISigbotNotificationOperation;
+use crate::client::notification_factory::ISigbotNotificationClient;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -26,88 +26,72 @@ use sigbot_types::modules::notification::notification::NotificationInfo;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct SigbotEmailConfig {
+pub struct SigbotTelegramConfig {
     pub id: i64,
-    pub smtp_server: String,
-    pub smtp_port: u16,
-    pub smtp_username: String,
-    pub smtp_password: String,
+    pub telegram_bot_token: String,
+    pub telegram_chat_id: String,
 }
 
-impl std::fmt::Display for SigbotEmailConfig {
+impl std::fmt::Display for SigbotTelegramConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SigbotEmailConfig=(
-                id={}, smtp_server={:?}, smtp_port={:?}, smtp_username={:?}, smtp_password={:?}),
-            )
-            ",
-            self.id, self.smtp_server, self.smtp_port, self.smtp_username, self.smtp_password,
-        )
+            "SigbotTelegramConfig=(
+                id={}, telegram_bot_token={:?}, telegram_chat_id={:?},
+            )",
+            self.id, self.telegram_bot_token, self.telegram_chat_id,
+        )?;
+        Ok(())
     }
 }
 
-impl SigbotEmailConfig {
+impl SigbotTelegramConfig {
     pub fn from_notification(notification: NotificationInfo) -> Self {
         let plain_config = notification.configuration.expect("Plain configuration is required");
-        let secret_config = notification.secrets.expect("Secret configuration is required");
         Self {
             id: notification.base.id.expect("Notification ID is required"),
-            smtp_server: plain_config
-                .get("smtp_server")
-                .expect("SMTP server is required")
+            telegram_bot_token: plain_config
+                .get("telegram_bot_token")
+                .expect("Telegram bot token is required")
                 .to_string(),
-            smtp_port: plain_config
-                .get("smtp_port")
-                .expect("SMTP port is required")
-                .to_string()
-                .parse::<u16>()
-                .expect("SMTP port must be a valid number"),
-            smtp_username: plain_config
-                .get("smtp_username")
-                .expect("SMTP username is required")
-                .to_string(),
-            smtp_password: secret_config
-                .get("smtp_password")
-                .expect("SMTP password is required")
+            telegram_chat_id: plain_config
+                .get("telegram_chat_id")
+                .expect("Telegram chat ID is required")
                 .to_string(),
         }
     }
 }
 
-pub struct SigbotEmailNotification {
-    config: SigbotEmailConfig,
-    // email_client: Arc<Mutex<Option<EmailClient>>>,
+pub struct SigbotTelegramNotification {
+    config: SigbotTelegramConfig,
+    // telegram_client: Arc<Mutex<Option<TelegramClient>>>,
 }
 
-impl SigbotEmailNotification {
-    pub const KIND: &'static str = "EMAIL"; // NotificationKind::EMAIL
+impl SigbotTelegramNotification {
+    pub const KIND: &'static str = "TELEGRAM"; // NotificationKind::TELEGRAM
 
-    pub async fn new(config: &SigbotEmailConfig) -> Arc<Self> {
+    pub async fn new(config: &SigbotTelegramConfig) -> Arc<Self> {
         Arc::new(Self {
             config: config.to_owned(),
-            // email_client: Arc::new(Mutex::new(None)),
+            // telegram_client: Arc::new(Mutex::new(None)),
         })
     }
 }
 
 #[async_trait]
-impl ISigbotNotificationOperation for SigbotEmailNotification {
+impl ISigbotNotificationClient for SigbotTelegramNotification {
     async fn init(&self) {
-        info!("Starting Email notification with config={}", self.config);
+        info!("Starting Telegram notification with config={}", self.config);
         unimplemented!();
     }
 
     async fn close(&self) {
-        info!("Closing Email notification with {}", self.config);
+        info!("Closing Telegram notification with {}", self.config);
         unimplemented!();
     }
 
     async fn send_message(&self, to: &str, message: &str) -> Result<String, Error> {
-        info!("Sending email to {} with message={}", to, message);
+        info!("Sending Telegram to {} with message={}", to, message);
         unimplemented!();
     }
 }
-
-#[cfg(test)]
-mod tests {}

@@ -22,90 +22,69 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::exchange::models::trade_market::{KlineResult, PriceResult};
-use sigbot_types::modules::exchange::models::trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
 #[async_trait]
-pub trait ISigbotExchangeOperation: Send + Sync {
+pub trait ISigbotNotificationClient: Send + Sync {
     async fn init(&self);
     async fn close(&self);
-    async fn get_current_price(&self, symbol: &str) -> Result<PriceResult, Error>;
-    async fn get_klines(
-        &self,
-        symbol: &str,
-        interval: &str,
-        start_time: Option<i64>,
-        end_time: Option<i64>,
-        limit: u32,
-    ) -> Result<Vec<KlineResult>, Error>;
-    async fn entry_position(&self, signal: EntryTradeSignal) -> Result<TradeResult, Error>;
-    async fn exit_loss_position(
-        &self,
-        original_order_id: u64,
-        position: &ExitTradePosition,
-    ) -> Result<TradeResult, Error>;
-    async fn exit_profit_position(
-        &self,
-        original_order_id: u64,
-        position: &ExitTradePosition,
-    ) -> Result<TradeResult, Error>;
+    async fn send_message(&self, to: &str, message: &str) -> Result<String, Error>;
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotExchangeFactory> = RwLock::new(SigbotExchangeFactory::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotNotificationClientFactory> =
+        RwLock::new(SigbotNotificationClientFactory::new());
 }
 
-pub struct SigbotExchangeFactory {
-    pub implementations: HashMap<String, Arc<dyn ISigbotExchangeOperation + Send + Sync>>,
+pub struct SigbotNotificationClientFactory {
+    pub implementations: HashMap<String, Arc<dyn ISigbotNotificationClient + Send + Sync>>,
 }
 
-impl SigbotExchangeFactory {
+impl SigbotNotificationClientFactory {
     fn new() -> Self {
-        SigbotExchangeFactory {
+        SigbotNotificationClientFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotExchangeFactory> {
+    pub fn get() -> &'static RwLock<SigbotNotificationClientFactory> {
         &SINGLE_INSTANCE
     }
 
     pub async fn init() {
-        info!("Register to All Sigbot exchange operators ...");
-
+        info!("Register to All Sigbot notification operations ...");
         unimplemented!()
     }
 
-    fn register<T: ISigbotExchangeOperation + Send + Sync + 'static>(
+    fn register<T: ISigbotNotificationClient + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
         if self.implementations.contains_key(&name) {
-            debug!("Already register the sigbot operator '{}'", name);
+            debug!("Already register the sigbot notification operation '{}'", name);
             return Ok(handler);
         }
         self.implementations.insert(name, handler.to_owned());
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotExchangeOperation + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotNotificationClient + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotExchangeFactory::get().read().unwrap();
+        let this = SigbotNotificationClientFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered sigbot exchange manager '{}'.", name);
+            let errmsg = format!("Could not obtain registered sigbot notification operation '{}'.", name);
             return Err(Error::msg(errmsg));
         }
     }
 
     pub async fn close() {
-        let this = SigbotExchangeFactory::get().read().unwrap();
+        let this = SigbotNotificationClientFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
             implementation.close().await;
         }

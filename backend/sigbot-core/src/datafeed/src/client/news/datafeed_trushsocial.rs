@@ -18,41 +18,41 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::datafeed::datafeed_factory::ISigbotDatafeedExecutor;
+use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_types::modules::datafeed::datafeed::DatafeedInfo;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct SigbotBinanceDatafeedExecutor {
+pub struct SigbotTrushSocialDatafeedExecutor {
     config: Arc<DatafeedInfo>,
 }
 
-impl SigbotBinanceDatafeedExecutor {
-    pub const KIND: &'static str = "BINANCE_DATAFEED";
+impl SigbotTrushSocialDatafeedExecutor {
+    pub const KIND: &'static str = "TRUSHSOCIAL_DATAFEED";
 
     pub async fn new(config: Arc<DatafeedInfo>) -> Arc<Self> {
         Arc::new(Self { config })
     }
 
-    pub(super) async fn execute(&self) {
-        info!("Executing Binance Datafeed ...");
-        // TODO: Implement the logic to execute Binance market gateway.
-        // TODO: 1. Start the Binance market websocket subscription and pushing to EMQx(hot data cache).
-        // TODO: 2. Start the consumer to market data to database(cold data persist) from EMQx.
-        info!("Executed Binance Datafeed.");
+    pub(super) async fn process(&self) {
+        info!("Processing Trush Social data feed ...");
+        // TODO: Implement the logic to process Trush Social data feed.
+        // TODO: 1. Start the Trush Social websocket subscription and pushing to EMQx(hot data cache).
+        // TODO: 2. Start the consumer to Trush Social data to database(cold data persist) from EMQx.
+        unimplemented!()
     }
 }
 
 #[async_trait]
-impl ISigbotDatafeedExecutor for SigbotBinanceDatafeedExecutor {
+impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedExecutor {
     async fn init(&self) {
-        info!("Started Binance Datafeed.");
+        info!("Started Trush Social Datafeed.");
     }
 
     async fn shutdown(&self) {
-        info!("Shut down Binance Datafeed.");
+        info!("Shutting down Trush Social Datafeed.");
     }
 }
 

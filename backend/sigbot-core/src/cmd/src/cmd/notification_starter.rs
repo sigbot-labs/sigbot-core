@@ -21,12 +21,14 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use axum::Router;
 use clap::Command;
+use common_telemetry::{error, info};
 use sigbot_core::config::config::AppConfig;
 use sigbot_core::config::config::{self, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::llm::handler::llm_engine::LLMEngine;
 use sigbot_core::mgmt::{apm, health::init as health_router};
-use sigbot_datafeed::datafeed::datafeed_factory::SigbotDatafeedFactory;
+use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
+use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_utils::panics::PanicHelper;
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_signal;
 use std::env;
@@ -34,13 +36,13 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-pub struct SigbotDatafeedRunner {}
+pub struct SigbotNotificationForwarderStarter {}
 
-impl SigbotDatafeedRunner {
-    pub const COMMAND_NAME: &'static str = "datafeed-runner";
+impl SigbotNotificationForwarderStarter {
+    pub const COMMAND_NAME: &'static str = "notification";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Datafeed Runner.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Notification Forwarder")
     }
 
     #[allow(unused)]
@@ -59,7 +61,7 @@ impl SigbotDatafeedRunner {
         let signal_handle = SigbotManagementServer::start(&config, true, signal_s).await;
 
         signal_r.await.expect("Failed to start Management server.");
-        tracing::info!("Management server is ready on {}", config.mgmt.get_bind_addr());
+        info!("Management server is ready on {}", config.mgmt.get_bind_addr());
 
         Self::start(&config, true).await;
 
@@ -69,19 +71,19 @@ impl SigbotDatafeedRunner {
     #[allow(unused)]
     async fn start(config: &Arc<AppConfig>, verbose: bool) {
         LLMEngine::init().await;
-        SigbotDatafeedFactory::init().await;
+        SigbotNotificationForwarder::startup().await;
 
         let app_state = SigbotState::new(&config).await;
 
         let bind_addr = config.server.get_bind_addr();
-        tracing::info!("Starting Sigbot Datafeed Runner on {}", bind_addr);
+        info!("Starting Sigbot Datafeed Ingestor on {}", bind_addr);
         let listener = match TcpListener::bind(&bind_addr).await {
             Ok(l) => {
-                tracing::info!("Sigbot Datafeed Runner is ready on {}", bind_addr);
+                info!("Sigbot Datafeed Ingestor is ready on {}", bind_addr);
                 l
             }
             Err(e) => {
-                tracing::error!("Failed to bind to {}: {}", bind_addr, e);
+                error!("Failed to bind to {}: {}", bind_addr, e);
                 panic!("Failed to bind to {}: {}", bind_addr, e);
             }
         };
@@ -93,11 +95,11 @@ impl SigbotDatafeedRunner {
             .await
         {
             Ok(_) => {
-                tracing::info!("Sigbot Datafeed Runner shut down gracefully");
+                info!("Sigbot Datafeed Ingestor shutdown gracefully");
             }
             Err(e) => {
-                tracing::error!("Error running web server: {}", e);
-                panic!("Error start Sigbot Datafeed Runner: {}", e);
+                error!("Error running web server: {}", e);
+                panic!("Error start Sigbot Datafeed Ingestor: {}", e);
             }
         }
     }
