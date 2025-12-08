@@ -18,19 +18,19 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use common_telemetry::{error, info};
+use common_telemetry::info;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use std::sync::Arc;
 
 use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
 
-pub struct SigbotDatafeedIngestorServer {
+pub struct SigbotDatafeedIngestor {
     // TODO: binance client.
     // TODO: twitter client.
     // TODO: trush social client.
 }
 
-impl SigbotDatafeedIngestorServer {
+impl SigbotDatafeedIngestor {
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
@@ -48,7 +48,7 @@ impl SigbotDatafeedIngestorServer {
             .expect("Failed to initialize Messaging client.");
         info!("Initialized Messaging client. {:?}", messaging.name());
 
-        // TODO: Publish the datafeed via messaging.
+        // TODO: Publish the datafeed data to messaging topics.
         for datafeed in datafeeds.iter() {}
     }
 

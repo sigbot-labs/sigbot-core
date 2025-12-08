@@ -23,7 +23,7 @@ use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_strategy::server::embed::strategy_default::SigbotDefaultStrategyRunner;
+use sigbot_strategy::server::strategy_default::SigbotDefaultStrategyRunner;
 use sigbot_strategy::server::strategy_factory::SigbotStrategyRunnerFactory;
 use sigbot_utils::panics::PanicHelper;
 use std::env;

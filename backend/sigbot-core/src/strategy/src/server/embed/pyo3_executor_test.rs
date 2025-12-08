@@ -23,8 +23,9 @@
 //! 本文件展示了如何使用 PyO3 执行器来执行 Python 策略代码。
 //! 用户可以从前端提交 Python 代码字符串，系统会通过 PyO3 解释器执行。
 
-use crate::server::embed::pyo3_executor::{PyO3StrategyExecutor, StrategyContext};
+use crate::server::embed::pyo3_executor::PyO3StrategyExecutor;
 use serde_json;
+use sigbot_types::modules::strategy::models::strategy_embed::StrategyContext;
 use std::collections::HashMap;
 
 /// 示例 1: 基本策略执行

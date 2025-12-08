@@ -20,4 +20,3 @@
 
 pub mod pyo3_executor;
 pub mod pyo3_executor_test;
-pub mod strategy_default;

@@ -21,29 +21,62 @@
 use crate::server::backtest_factory::ISigbotBacktestRunner;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::config::config::BacktestProperties;
-use std::sync::Arc;
+use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
 pub struct SigbotTickerBacktestRunner {
-    config: BacktestProperties,
+    schedule_cron: Option<String>,
+    schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
+    dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
 impl SigbotTickerBacktestRunner {
     pub const NAME: &'static str = "TICKER_BASED";
+    pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
+    pub const DEFAULT_CHANNELS: usize = 5;
+    pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
 
-    pub async fn new(config: &BacktestProperties) -> Arc<Self> {
+    pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
+            schedule_cron,
+            schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
+            dlock_handler: None, // TODO: Inject the dlock handler.
         })
     }
 
+    pub(super) async fn execute(&self) {
+        info!("Executing ticker based backtest runner ...");
+
+        // Acquire to distrbuted lock.
+        let dlock_name = "TICKER_BASED_BACKTEST";
+        let acquired = self
+            .dlock_handler
+            .clone()
+            .expect("Dlock handler is not injected.")
+            .acquire(dlock_name.to_string(), Duration::from_secs(10))
+            .await;
+        match acquired {
+            Ok(true) => {
+                self.process().await;
+            }
+            Ok(false) => {
+                info!("Unable to acquire dlock with {}", dlock_name);
+            }
+            Err(e) => {
+                info!("Failed to acquire dlock: {:?}", e.to_string());
+            }
+        }
+
+        info!("Executed ticker based backtest runner process ...");
+    }
+
     pub(super) async fn process(&self) {
-        info!("Processing ticker based backtest ...");
+        info!("Processing ticker based backtest runner ...");
         // TODO: Implement the logic to process ticker based backtest.
         // TODO: 1. Start the mock exchange APIs for receiving from strategy runner trade signals (via EMQx pub/sub event-driven).
         // TODO: 2. Start the ticker data extractor for pushing to strategy runner (via EMQx pub/sub event-driven).
@@ -60,50 +93,70 @@ impl ISigbotBacktestRunner for SigbotTickerBacktestRunner {
 
     async fn startup(&self) {
         let this = self.clone();
+        let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
+        let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
 
-        // Pre-check the cron expression is valid.
-        let cron = match Job::new_async(self.config.cron.as_str(), |_uuid, _lock| Box::pin(async {})) {
-            Ok(_) => self.config.cron.as_str(),
+        // Validate the cron expression.
+        let cron = match Job::new_async(cron_expression, |_uuid, _lock| Box::pin(async {})) {
+            Ok(_) => cron_expression,
             Err(e) => {
                 tracing::warn!(
-                    "Invalid cron expression '{}': {}. Using default '0/30 * * * * *'",
-                    self.config.cron,
-                    e
+                    "Invalid cron expression '{}': {}. Using default '{}'",
+                    cron_expression,
+                    e,
+                    Self::DEFAULT_CRON_EXPRESSION
                 );
-                "0/30 * * * * *" // every half minute
+                Self::DEFAULT_CRON_EXPRESSION
             }
         };
 
-        info!("Starting Ticker based backtest handler with cron '{}'", cron);
+        info!("Starting ticker based backtest runner with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Hi I ran", chrono::Utc::now());
-                that.process().await;
+                info!("{:?} Running ticker based backtest runner ...", chrono::Utc::now());
+                that.execute().await;
             })
         })
-        .unwrap();
+        .expect("Failed to create ticker based backtest runner job");
 
-        let scheduler = JobScheduler::new_with_channel_size(self.config.channel_size)
+        let scheduler = JobScheduler::new_with_channel_size(channel_size)
             .await
-            .unwrap();
-        scheduler.add(job).await.unwrap();
-        scheduler.start().await.unwrap();
+            .expect("Failed to create scheduler");
+        scheduler
+            .add(job)
+            .await
+            .expect("Failed to add ticker based backtest runner job");
+        scheduler
+            .start()
+            .await
+            .expect("Failed to start ticker based backtest runner scheduler");
+
         *self.scheduler.lock().await = Some(scheduler);
 
-        info!("Started Ticker based backtest handler.");
+        info!(
+            "Started ticker based backtest runner with cron '{}', channels '{}'",
+            cron, channel_size
+        );
     }
 
     async fn shutdown(&self) {
-        info!("Shutting down Ticker based backtest handler.");
-        let mut guard = self.scheduler.lock().await;
-        if let Some(scheduler) = guard.as_mut() {
+        info!(
+            "Closing ticker based backtest runner with cron '{}', channels '{}'",
+            self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
+            self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
+        );
+        if let Some(mut scheduler) = self.scheduler.lock().await.take() {
             scheduler
                 .shutdown()
                 .await
-                .expect("Failed to shutdown Ticker based backtest handler.");
+                .expect("Failed to shutdown ticker based backtest runner scheduler");
         }
-        info!("Ticker based backtest handler shutdown gracefully.");
+        info!(
+            "Closed ticker based backtest runner with cron '{}', channels '{}'",
+            self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
+            self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
+        );
     }
 }
 

@@ -29,7 +29,7 @@ use sigbot_core::mgmt::apm;
 use sigbot_datafeed::client::market::datafeed_binance::SigbotBinanceDatafeedClient;
 use sigbot_datafeed::client::news::datafeed_trushsocial::SigbotTrushSocialDatafeedClient;
 use sigbot_datafeed::client::news::datafeed_twitter::SigbotTwitterDatafeedClient;
-use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestorServer;
+use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
@@ -89,7 +89,7 @@ impl SigbotDatafeedIngestorStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotDatafeedIngestorServer::startup(matches, verbose).await;
+        SigbotDatafeedIngestor::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {

@@ -22,33 +22,8 @@ use anyhow::{Context, Result};
 use common_telemetry::{error, info};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule, PyString};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use sigbot_types::modules::strategy::models::strategy_embed::{StrategyContext, StrategyExecutionResult};
 use std::sync::{Arc, Mutex};
-
-/// Strategy execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategyExecutionResult {
-    /// Whether the execution is successful
-    pub success: bool,
-    /// Return result (JSON string)
-    pub result: Option<String>,
-    /// Error message
-    pub error: Option<String>,
-    /// Execution duration (milliseconds)
-    pub duration_ms: u64,
-}
-
-/// Strategy execution context data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategyContext {
-    /// Market Data（JSON format）
-    pub market_data: Option<String>,
-    /// Strategy parameters
-    pub parameters: Option<HashMap<String, String>>,
-    /// Other context data
-    pub extra_data: Option<HashMap<String, String>>,
-}
 
 /// PyO3 strategy executor
 ///
@@ -103,9 +78,9 @@ impl PyO3StrategyExecutor {
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
             match result {
-                Ok(result_value) => Ok(StrategyExecutionResult {
+                Ok(value) => Ok(StrategyExecutionResult {
                     success: true,
-                    result: Some(result_value),
+                    result: Some(value),
                     error: None,
                     duration_ms,
                 }),
@@ -334,6 +309,8 @@ impl Default for PyO3StrategyExecutor {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]

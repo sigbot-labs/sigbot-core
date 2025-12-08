@@ -19,14 +19,16 @@
 // This includes modifications and derived works.
 
 use crate::cmd::internal::management_server::SigbotManagementServer;
-use clap::Command;
+use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
+use sigbot_backtest::server::ticker::backtest_ticker::SigbotTickerBacktestRunner;
 use sigbot_core::config::config::get_config;
 use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
+use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -37,7 +39,31 @@ impl SigbotBacktestRunnerStarter {
     pub const COMMAND_NAME: &'static str = "backtest";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Backtest Runner.")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Tenant (Isolated) Backtest Runner.")
+            .arg_required_else_help(true) // When no args are provided, show help.
+            .arg(
+                Arg::new("provider")
+                    .short('p')
+                    .long("provider")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The backtest runner provider to use. (supported are: {})",
+                        SigbotTickerBacktestRunner::NAME,
+                    ))
+                    .default_value(SigbotTickerBacktestRunner::NAME),
+            )
+            .arg(
+                Arg::new("messaging")
+                    .short('m')
+                    .long("messaging")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The providers of messaging. (supported are: {})",
+                        SigbotMqttClient::NAME,
+                    ))
+                    .default_value(SigbotMqttClient::NAME),
+            )
     }
 
     #[tokio::main]

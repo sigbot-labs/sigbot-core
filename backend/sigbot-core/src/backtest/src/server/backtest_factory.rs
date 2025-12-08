@@ -21,9 +21,8 @@
 use crate::server::ticker::backtest_ticker::SigbotTickerBacktestRunner;
 use anyhow::Error;
 use async_trait::async_trait;
-use common_telemetry::info;
+use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_core::config::config;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -57,40 +56,52 @@ impl SigbotBacktestRunnerFactory {
 
     #[allow(unused_variables)]
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
-        info!("Startup All Sigbot backtesting ...");
+        info!("Starting backtest runners ...");
 
-        for config in &config::get_config().services.backtests {
-            if !config.enabled {
-                info!("Skipping implementation executor: {}", config.name);
-                continue;
+        // e.g '--provider=TICKER_BASED'
+        let provider = matches
+            .try_get_one::<String>("provider")
+            .map(|s| {
+                s.map(|s| s.to_owned())
+                    .unwrap_or_else(|| SigbotTickerBacktestRunner::NAME.to_owned())
+            })
+            .expect("Failed to parse the backtest runner provider from the command line arguments.");
+
+        info!("Registering backtest runner with provider: {}", &provider);
+        match provider.to_uppercase().as_str() {
+            SigbotTickerBacktestRunner::NAME => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(
+                        &SigbotTickerBacktestRunner::NAME.to_owned(),
+                        SigbotTickerBacktestRunner::new(None, None).await, // TODO: set up run configuration?
+                    )
+                    .expect(&format!("Failed to register the backtest runner with provider: {}.", &provider).as_str());
             }
-            // TODO: Full use similar java spi provider mechanism.
-            if config.kind == SigbotTickerBacktestRunner::NAME {
-                match Self::get()
-                    .write() // If acquire fails, then it block until acquired.
-                    .unwrap() // If acquire fails, then it should panic.
-                    .register(config.kind.to_owned(), SigbotTickerBacktestRunner::new(config).await)
-                {
-                    Ok(registered) => {
-                        info!("Initializing Sigbot backtest ...");
-                        let _ = registered.startup().await;
-                    }
-                    Err(e) => panic!("Failed to register Sigbot backtest: {}", e),
-                }
-            }
-        }
+            _ => panic!("Unsupported backtest runner provider : '{}'.", provider),
+        };
+
+        let registered = Self::get_implementation(provider.to_owned()).await.expect(&format!(
+            "Failed to get the registered backtest runner with provider: {}.",
+            &provider
+        ));
+
+        info!("Starting the backtest runner with provider: {}", &provider);
+        registered.startup().await;
+        info!("Started the backtest runner with provider: {}.", &provider);
     }
 
-    fn register<T: ISigbotBacktestRunner + Send + Sync + 'static>(
+    fn register0<T: ISigbotBacktestRunner + Send + Sync + 'static>(
         &mut self,
-        name: String,
+        name: &String,
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
-        if self.implementations.contains_key(&name) {
-            tracing::debug!("Already register the Verifier '{}'", name);
+        if self.implementations.contains_key(name) {
+            debug!("Already register the backtest runner '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.to_owned());
+        self.implementations.insert(name.to_owned(), handler.to_owned());
         Ok(handler)
     }
 
@@ -100,7 +111,7 @@ impl SigbotBacktestRunnerFactory {
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered Verifier '{}'.", name);
+            let errmsg = format!("Could not obtain registered backtest runner '{}'.", name);
             return Err(Error::msg(errmsg));
         }
     }

@@ -27,7 +27,7 @@ use sigbot_core::mgmt::apm;
 use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
 use sigbot_notification::client::notification_email::SigbotEmailClient;
 use sigbot_notification::client::notification_telegram::SigbotTelegramClient;
-use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarderServer;
+use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -86,7 +86,7 @@ impl SigbotNotificationForwarderStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotNotificationForwarderServer::startup(matches, verbose).await;
+        SigbotNotificationForwarder::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {

@@ -30,8 +30,8 @@ use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
-use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestorServer;
-use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarderServer;
+use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
+use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_strategy::server::strategy_factory::SigbotStrategyRunnerFactory;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
@@ -69,9 +69,9 @@ impl SigbotStandaloneStarter {
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
         SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotControllerServer::startup(matches, verbose).await;
-        SigbotDatafeedIngestorServer::startup(matches, verbose).await;
+        SigbotDatafeedIngestor::startup(matches, verbose).await;
         SigbotStrategyRunnerFactory::startup(matches, verbose).await;
-        SigbotNotificationForwarderServer::startup(matches, verbose).await;
+        SigbotNotificationForwarder::startup(matches, verbose).await;
         SigbotBacktestRunnerFactory::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;
     }

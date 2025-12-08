@@ -18,6 +18,4 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod embed;
-pub mod strategy_default;
-pub mod strategy_factory;
+pub mod strategy_embed;

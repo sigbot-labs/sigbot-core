@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::server::strategy_default::SigbotDefaultStrategyRunner;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -26,8 +27,6 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
-
-use crate::server::embed::strategy_default::SigbotDefaultStrategyRunner;
 
 #[async_trait]
 pub trait ISigbotStrategyRunner: Send + Sync {

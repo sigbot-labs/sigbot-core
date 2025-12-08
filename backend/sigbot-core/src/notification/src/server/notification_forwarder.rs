@@ -24,12 +24,12 @@ use common_telemetry::info;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use std::{future::Future, pin::Pin, sync::Arc};
 
-pub struct SigbotNotificationForwarderServer {
+pub struct SigbotNotificationForwarder {
     // TODO: email client.
     // TODO: telegram client.
 }
 
-impl SigbotNotificationForwarderServer {
+impl SigbotNotificationForwarder {
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
@@ -46,7 +46,7 @@ impl SigbotNotificationForwarderServer {
             .await
             .expect("Failed to initialize Messaging client.");
 
-        // TODO: Subscribe to the messaging from topics.
+        // TODO: Subscribe alarm messages.
         let handler: Arc<
             dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
         > = Arc::new(move |data: Vec<u8>| {
