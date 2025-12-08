@@ -18,29 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use common_telemetry::info;
-use std::sync::Arc;
-
-pub struct SigbotStrategyRunnerServer {
-    // TODO: PyO3 embedded-run Strategy executor.
-    // TODO: External exclusive-run Strategy executor.
-}
-
-impl SigbotStrategyRunnerServer {
-    pub async fn new() -> Arc<Self> {
-        Arc::new(Self {})
-    }
-
-    #[allow(unused_variables)]
-    pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
-        info!("Starting Strategy Runner.");
-    }
-
-    pub async fn shutdown() {
-        info!("Shutting down Strategy Runner.");
-        unimplemented!()
-    }
-}
-
-#[cfg(test)]
-mod tests {}
+pub mod pyo3_executor;
+pub mod pyo3_executor_test;
+pub mod strategy_default;

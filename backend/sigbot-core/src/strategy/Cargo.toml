@@ -42,6 +42,7 @@ openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true
 url.workspace = true
+pyo3.workspace = true
 
 [build-dependencies]
 chrono.workspace = true

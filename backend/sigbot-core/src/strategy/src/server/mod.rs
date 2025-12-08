@@ -18,4 +18,5 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod strategy_runner;
+pub mod embed;
+pub mod strategy_factory;

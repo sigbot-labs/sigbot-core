@@ -19,11 +19,12 @@
 // This includes modifications and derived works.
 
 use crate::cmd::internal::management_server::SigbotManagementServer;
-use clap::Command;
+use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_strategy::server::strategy_runner::SigbotStrategyRunnerServer;
+use sigbot_strategy::server::embed::strategy_default::SigbotDefaultStrategyRunner;
+use sigbot_strategy::server::strategy_factory::SigbotStrategyRunnerFactory;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -34,7 +35,20 @@ impl SigbotStrategyRunnerStarter {
     pub const COMMAND_NAME: &'static str = "strategy";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Tenant (Isolated) Strategy Runner.")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Tenant (Isolated) Strategy Runner.")
+            .arg_required_else_help(true) // When no args are provided, show help.
+            .arg(
+                Arg::new("provider")
+                    .short('p')
+                    .long("provider")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The strategy runner provider to use. (supported are: {})",
+                        SigbotDefaultStrategyRunner::NAME,
+                    ))
+                    .default_value(SigbotDefaultStrategyRunner::NAME),
+            )
     }
 
     #[tokio::main]
@@ -57,7 +71,7 @@ impl SigbotStrategyRunnerStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotStrategyRunnerServer::startup(matches, verbose).await;
+        SigbotStrategyRunnerFactory::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {

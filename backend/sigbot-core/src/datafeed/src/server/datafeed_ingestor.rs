@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use common_telemetry::info;
+use common_telemetry::{error, info};
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use std::sync::Arc;
 
@@ -37,12 +37,19 @@ impl SigbotDatafeedIngestorServer {
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         info!("Initializing Datafeed clients.");
-        SigbotDatafeedClientFactory::init(matches, verbose).await;
-        info!("Initialized Datafeed clients.");
+        let datafeeds = SigbotDatafeedClientFactory::init(matches, verbose)
+            .await
+            .expect("Failed to initialize Datafeed clients.");
+        info!("Initialized Datafeed clients. {:?}", datafeeds.len());
 
         info!("Initializing Messaging client.");
-        SigbotMessagingClientFactory::init(matches, verbose).await;
-        info!("Initialized Messaging client.");
+        let messaging = SigbotMessagingClientFactory::init(matches, verbose)
+            .await
+            .expect("Failed to initialize Messaging client.");
+        info!("Initialized Messaging client. {:?}", messaging.name());
+
+        // TODO: Publish the datafeed via messaging.
+        for datafeed in datafeeds.iter() {}
     }
 
     pub async fn shutdown() {

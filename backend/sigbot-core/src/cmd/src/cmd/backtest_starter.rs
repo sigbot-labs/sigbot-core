@@ -21,7 +21,7 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::Command;
 use common_telemetry::info;
-use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerServer;
+use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
 use sigbot_core::config::config::get_config;
 use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
@@ -60,7 +60,7 @@ impl SigbotBacktestRunnerStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotBacktestRunnerServer::startup(matches, verbose).await;
+        SigbotBacktestRunnerFactory::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {

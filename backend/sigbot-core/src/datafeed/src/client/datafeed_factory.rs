@@ -59,7 +59,10 @@ impl SigbotDatafeedClientFactory {
     }
 
     #[allow(unused_variables)]
-    pub async fn init(matches: &clap::ArgMatches, verbose: bool) {
+    pub async fn init(
+        matches: &clap::ArgMatches,
+        verbose: bool,
+    ) -> Result<Arc<Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>>>, Error> {
         // e.g '--datafeed=binance'
         let datafeed_provider = matches
             .try_get_one::<String>("datafeed")
@@ -71,6 +74,7 @@ impl SigbotDatafeedClientFactory {
 
         info!("Registering Sigbot Datafeed: {}", &datafeed_provider);
 
+        let mut datafeeds: Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>> = Vec::new();
         for provider in datafeed_provider.split(',').collect::<Vec<&str>>() {
             match provider.to_uppercase().as_str() {
                 SigbotBinanceDatafeedClient::NAME => {
@@ -112,8 +116,11 @@ impl SigbotDatafeedClientFactory {
 
             info!("Initializing the datafeed with name: {}", &provider);
             registered.init().await;
+            datafeeds.push(registered);
             info!("Initialized the datafeed with name: {}.", &provider);
         }
+
+        Ok(Arc::new(datafeeds))
     }
 
     fn register0(

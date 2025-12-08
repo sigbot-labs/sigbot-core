@@ -68,7 +68,7 @@ impl SigbotDeployerFactory {
     #[allow(unused_variables)]
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         // e.g '--deploy=kubernetes'
-        let deployer_provider = matches
+        let provider = matches
             .try_get_one::<String>("deploy")
             .map(|s| {
                 s.map(|s| s.to_owned())
@@ -76,8 +76,8 @@ impl SigbotDeployerFactory {
             })
             .expect("Failed to parse the deployer provider from the command line arguments.");
 
-        info!("Registering Sigbot Deployer: {}", &deployer_provider);
-        match deployer_provider.to_uppercase().as_str() {
+        info!("Registering Sigbot Deployer: {}", &provider);
+        match provider.to_uppercase().as_str() {
             SigbotKubernetesDeployer::NAME => {
                 Self::get()
                     .write()
@@ -98,16 +98,16 @@ impl SigbotDeployerFactory {
                     )
                     .expect("Failed to register the Hosted deployer.");
             }
-            _ => panic!("Unsupported sigbot deployer provider : '{}'.", deployer_provider),
+            _ => panic!("Unsupported sigbot deployer provider : '{}'.", provider),
         };
 
-        let registered_deployer = Self::get_implementation(deployer_provider.to_owned())
+        let registered = Self::get_implementation(provider.to_owned())
             .await
             .expect("Failed to get the registered deployer.");
 
-        info!("Starting the deployer with provider: {}", &deployer_provider);
-        registered_deployer.startup().await;
-        info!("Started the deployer with provider: {}.", &deployer_provider);
+        info!("Starting the deployer with provider: {}", &provider);
+        registered.startup().await;
+        info!("Started the deployer with provider: {}.", &provider);
     }
 
     pub(crate) async fn do_scan_process<F, FutF, G, FutG>(

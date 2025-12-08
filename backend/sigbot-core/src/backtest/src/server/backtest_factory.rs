@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::ticker::backtest_ticker::TickerBasedBacktestServer;
+use crate::server::ticker::backtest_ticker::SigbotTickerBacktestRunner;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -30,27 +30,28 @@ use std::{
 };
 
 #[async_trait]
-pub trait ISigbotBacktestServer: Send + Sync {
+pub trait ISigbotBacktestRunner: Send + Sync {
+    fn name(&self) -> &'static str;
     async fn startup(&self);
     async fn shutdown(&self);
 }
 
 lazy_static! {
-    static ref SINGLE_INSTANCE: RwLock<SigbotBacktestRunnerServer> = RwLock::new(SigbotBacktestRunnerServer::new());
+    static ref SINGLE_INSTANCE: RwLock<SigbotBacktestRunnerFactory> = RwLock::new(SigbotBacktestRunnerFactory::new());
 }
 
-pub struct SigbotBacktestRunnerServer {
-    pub implementations: HashMap<String, Arc<dyn ISigbotBacktestServer + Send + Sync>>,
+pub struct SigbotBacktestRunnerFactory {
+    pub implementations: HashMap<String, Arc<dyn ISigbotBacktestRunner + Send + Sync>>,
 }
 
-impl SigbotBacktestRunnerServer {
+impl SigbotBacktestRunnerFactory {
     fn new() -> Self {
-        SigbotBacktestRunnerServer {
+        SigbotBacktestRunnerFactory {
             implementations: HashMap::new(),
         }
     }
 
-    pub fn get() -> &'static RwLock<SigbotBacktestRunnerServer> {
+    pub fn get() -> &'static RwLock<SigbotBacktestRunnerFactory> {
         &SINGLE_INSTANCE
     }
 
@@ -64,11 +65,11 @@ impl SigbotBacktestRunnerServer {
                 continue;
             }
             // TODO: Full use similar java spi provider mechanism.
-            if config.kind == TickerBasedBacktestServer::KIND {
+            if config.kind == SigbotTickerBacktestRunner::NAME {
                 match Self::get()
                     .write() // If acquire fails, then it block until acquired.
                     .unwrap() // If acquire fails, then it should panic.
-                    .register(config.kind.to_owned(), TickerBasedBacktestServer::new(config).await)
+                    .register(config.kind.to_owned(), SigbotTickerBacktestRunner::new(config).await)
                 {
                     Ok(registered) => {
                         info!("Initializing Sigbot backtest ...");
@@ -80,7 +81,7 @@ impl SigbotBacktestRunnerServer {
         }
     }
 
-    fn register<T: ISigbotBacktestServer + Send + Sync + 'static>(
+    fn register<T: ISigbotBacktestRunner + Send + Sync + 'static>(
         &mut self,
         name: String,
         handler: Arc<T>,
@@ -93,9 +94,9 @@ impl SigbotBacktestRunnerServer {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotBacktestServer + Send + Sync>, Error> {
+    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotBacktestRunner + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
-        let this = SigbotBacktestRunnerServer::get().read().unwrap();
+        let this = SigbotBacktestRunnerFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
@@ -105,7 +106,7 @@ impl SigbotBacktestRunnerServer {
     }
 
     pub async fn shutdown() {
-        let this = SigbotBacktestRunnerServer::get().read().unwrap();
+        let this = SigbotBacktestRunnerFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
             implementation.shutdown().await;
         }
