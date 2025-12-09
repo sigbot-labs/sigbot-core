@@ -23,6 +23,7 @@ use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use common_telemetry::info;
 use sigbot_core::{config::config::get_config, mgmt};
+use sigbot_utils::tokio_signal::tokio_graceful_shutdown_handler;
 use tokio::{sync::oneshot, task::JoinHandle};
 
 pub struct SigbotManagementServer {}
@@ -51,6 +52,7 @@ impl SigbotManagementServer {
                 tokio::net::TcpListener::bind(&bind_addr).await.unwrap(),
                 app.into_make_service(),
             )
+            .with_graceful_shutdown(tokio_graceful_shutdown_handler())
             .await
             .unwrap_or_else(|e| panic!("Error starting Management server: {}", e));
         })

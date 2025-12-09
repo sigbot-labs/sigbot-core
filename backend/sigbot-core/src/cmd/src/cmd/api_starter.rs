@@ -40,7 +40,7 @@ use sigbot_core::{
         user_router::init as user_router,
     },
 };
-use sigbot_utils::{panics::PanicHelper, tokio_signal::tokio_graceful_shutdown_signal};
+use sigbot_utils::{panics::PanicHelper, tokio_signal::tokio_graceful_shutdown_handler};
 use std::{env, future::Future, pin::Pin};
 use tokio::{net::TcpListener, sync::oneshot};
 use tower::ServiceBuilder;
@@ -170,7 +170,7 @@ impl SigbotAPIServer {
         };
 
         match axum::serve(listener, app_router.into_make_service())
-            .with_graceful_shutdown(tokio_graceful_shutdown_signal())
+            .with_graceful_shutdown(tokio_graceful_shutdown_handler())
             // .tcp_nodelay(true)
             .await
         {

@@ -22,40 +22,40 @@ pub struct PanicHelper {}
 
 impl PanicHelper {
     pub fn set_hook_default() {
-        // std::panic::set_hook(Box::new(|info| {
-        //     if let Some(location) = info.location() {
-        //         let file_path = location.file();
+        std::panic::set_hook(Box::new(|info| {
+            if let Some(location) = info.location() {
+                let file_path = location.file();
 
-        //         // Only print source relative file path instead of full path.
-        //         let re = regex::Regex::new(r".*/src/(.*)").unwrap();
-        //         let relative_path = if let Some(captures) = re.captures(file_path) {
-        //             if let Some(path_match) = captures.get(1) {
-        //                 format!("src/{}", path_match.as_str())
-        //             } else {
-        //                 file_path.to_string()
-        //             }
-        //         } else {
-        //             // If there no match, return the original file path.
-        //             std::path::Path::new(file_path)
-        //                 .file_name()
-        //                 .unwrap_or_default()
-        //                 .to_string_lossy()
-        //                 .to_string()
-        //         };
+                // Only print source relative file path instead of full path.
+                let re = regex::Regex::new(r".*/src/(.*)").unwrap();
+                let relative_path = if let Some(captures) = re.captures(file_path) {
+                    if let Some(path_match) = captures.get(1) {
+                        format!("src/{}", path_match.as_str())
+                    } else {
+                        file_path.to_string()
+                    }
+                } else {
+                    // If there no match, return the original file path.
+                    std::path::Path::new(file_path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                };
 
-        //         eprintln!(
-        //             "Oh, Occurred Panic Error panicked at {}:{}: {}",
-        //             relative_path,
-        //             location.line(),
-        //             info.payload().downcast_ref::<&str>().unwrap_or(&"")
-        //         );
+                eprintln!(
+                    "Oh, Occurred Panic Error panicked at {}:{}: {}",
+                    relative_path,
+                    location.line(),
+                    info.payload().downcast_ref::<&str>().unwrap_or(&"")
+                );
 
-        //         // Print the full backtrace
-        //         let backtrace = std::backtrace::Backtrace::capture();
-        //         eprintln!("Backtrace:\n{}", backtrace);
-        //     } else {
-        //         println!("panic occurred but can't get location information...");
-        //     }
-        // }));
+                // Print the full backtrace
+                let backtrace = std::backtrace::Backtrace::capture();
+                eprintln!("Backtrace:\n{}", backtrace);
+            } else {
+                println!("panic occurred but can't get location information...");
+            }
+        }));
     }
 }

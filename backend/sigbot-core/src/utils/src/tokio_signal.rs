@@ -20,15 +20,15 @@
 
 use tokio::signal;
 
-pub async fn tokio_graceful_shutdown_signal() {
+pub async fn tokio_graceful_shutdown_handler() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c().await.expect("Failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
+            .expect("Failed to install signal handler")
             .recv()
             .await;
     };
@@ -39,10 +39,10 @@ pub async fn tokio_graceful_shutdown_signal() {
     // Wait for Ctrl+C or `kill` signal to exit.
     tokio::select! {
         _ = ctrl_c => {
-            println!("Received Ctrl+C signal, shutting down...");
+            println!("Graceful shutting down ...");
         },
         _ = terminate => {
-            println!("Received SIGTERM signal, shutting down...");
+            println!("Graceful shutting down ...");
         },
     }
 }
