@@ -69,13 +69,14 @@ impl SigbotNotificationClientFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())
             })
-            .context("Failed to parse the notification provider from the command line arguments.")?;
+            .context("Failed to parse the notification provider from the command line arguments.")?
+            .to_uppercase();
 
         info!("Registering Sigbot Notification: {}", &notification_provider);
 
         let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();
         for provider in notification_provider.split(',').collect::<Vec<&str>>() {
-            match provider.to_uppercase().as_str() {
+            match provider.to_owned().as_str() {
                 SigbotEmailClient::NAME => {
                     Self::get()
                         .write()

@@ -65,10 +65,11 @@ impl SigbotStrategyRunnerFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotDefaultStrategyRunner::NAME.to_owned())
             })
-            .expect("Failed to parse the strategy runner provider from the command line arguments.");
+            .expect("Failed to parse the strategy runner provider from the command line arguments.")
+            .to_uppercase();
 
         info!("Registering strategy runner with provider: {}", &provider);
-        match provider.to_uppercase().as_str() {
+        match provider.as_str() {
             SigbotDefaultStrategyRunner::NAME => {
                 Self::get()
                     .write()

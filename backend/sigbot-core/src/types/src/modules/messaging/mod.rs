@@ -19,3 +19,9 @@
 // This includes modifications and derived works.
 
 pub mod messaging;
+
+/// This topic for strategy runner to receive market kline/tick data.
+pub const TOPIC_MARKET_DATA: &str = "sigbot/market/data";
+
+/// This topic for notification forwarder to receive alarm messages.
+pub const TOPIC_NOTIFICATION_ALARM: &str = "sigbot/notification/alarm";

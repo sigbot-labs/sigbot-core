@@ -75,11 +75,12 @@ impl SigbotMessagingClientFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotMqttClient::NAME.to_owned())
             })
-            .context("Failed to parse the messaging provider from the command line arguments.")?;
+            .context("Failed to parse the messaging provider from the command line arguments.")?
+            .to_uppercase();
 
         info!("Registering Sigbot Messaging: {}", &provider);
 
-        match provider.to_uppercase().as_str() {
+        match provider.as_str() {
             SigbotMqttClient::NAME => {
                 Self::get()
                     .write()

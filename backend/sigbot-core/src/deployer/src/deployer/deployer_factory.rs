@@ -74,10 +74,12 @@ impl SigbotDeployerFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotKubernetesDeployer::NAME.to_owned())
             })
-            .expect("Failed to parse the deployer provider from the command line arguments.");
+            .expect("Failed to parse the deployer provider from the command line arguments.")
+            .to_uppercase();
 
         info!("Registering Sigbot Deployer: {}", &provider);
-        match provider.to_uppercase().as_str() {
+
+        match provider.as_str() {
             SigbotKubernetesDeployer::NAME => {
                 Self::get()
                     .write()

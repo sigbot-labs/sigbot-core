@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::ticker::backtest_ticker::SigbotTickerBacktestRunner;
+use crate::server::{
+    kline::backtest_kline::SigbotKlineBacktestRunner, trades::backtest_trades::SigbotTradesBacktestRunner,
+};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -63,19 +65,29 @@ impl SigbotBacktestRunnerFactory {
             .try_get_one::<String>("provider")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotTickerBacktestRunner::NAME.to_owned())
+                    .unwrap_or_else(|| SigbotTradesBacktestRunner::NAME.to_owned())
             })
             .expect("Failed to parse the backtest runner provider from the command line arguments.");
 
         info!("Registering backtest runner with provider: {}", &provider);
         match provider.to_uppercase().as_str() {
-            SigbotTickerBacktestRunner::NAME => {
+            SigbotTradesBacktestRunner::NAME => {
                 Self::get()
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotTickerBacktestRunner::NAME.to_owned(),
-                        SigbotTickerBacktestRunner::new(None, None).await, // TODO: set up run configuration?
+                        &SigbotTradesBacktestRunner::NAME.to_owned(),
+                        SigbotTradesBacktestRunner::new(None, None).await, // TODO: set up run configuration?
+                    )
+                    .expect(&format!("Failed to register the backtest runner with provider: {}.", &provider).as_str());
+            }
+            SigbotKlineBacktestRunner::NAME => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(
+                        &SigbotKlineBacktestRunner::NAME.to_owned(),
+                        SigbotKlineBacktestRunner::new(None, None).await, // TODO: set up run configuration?
                     )
                     .expect(&format!("Failed to register the backtest runner with provider: {}.", &provider).as_str());
             }

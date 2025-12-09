@@ -27,15 +27,15 @@ use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
-pub struct SigbotTickerBacktestRunner {
+pub struct SigbotTradesBacktestRunner {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
     dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
-impl SigbotTickerBacktestRunner {
-    pub const NAME: &'static str = "TICKER_BASED";
+impl SigbotTradesBacktestRunner {
+    pub const NAME: &'static str = "TRADES";
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
@@ -50,10 +50,10 @@ impl SigbotTickerBacktestRunner {
     }
 
     pub(super) async fn execute(&self) {
-        info!("Executing ticker based backtest runner ...");
+        info!("Executing trades based backtest runner ...");
 
         // Acquire to distrbuted lock.
-        let dlock_name = "TICKER_BASED_BACKTEST";
+        let dlock_name = "TRADES_BACKTEST";
         let acquired = self
             .dlock_handler
             .clone()
@@ -72,12 +72,12 @@ impl SigbotTickerBacktestRunner {
             }
         }
 
-        info!("Executed ticker based backtest runner process ...");
+        info!("Executed trades based backtest runner process ...");
     }
 
     pub(super) async fn process(&self) {
-        info!("Processing ticker based backtest runner ...");
-        // TODO: Implement the logic to process ticker based backtest.
+        info!("Processing trades based backtest runner ...");
+        // TODO: Implement the logic to process trades based backtest.
         // TODO: 1. Start the mock exchange APIs for receiving from strategy runner trade signals (via EMQx pub/sub event-driven).
         // TODO: 2. Start the ticker data extractor for pushing to strategy runner (via EMQx pub/sub event-driven).
         // TODO: 3. Start the summarizer for calculating the loss/profit and updating to balances (via EMQx pub/sub event-driven).
@@ -86,7 +86,7 @@ impl SigbotTickerBacktestRunner {
 }
 
 #[async_trait]
-impl ISigbotBacktestRunner for SigbotTickerBacktestRunner {
+impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
     fn name(&self) -> &'static str {
         Self::NAME
     }
@@ -110,15 +110,15 @@ impl ISigbotBacktestRunner for SigbotTickerBacktestRunner {
             }
         };
 
-        info!("Starting ticker based backtest runner with cron '{}'", cron);
+        info!("Starting trades based backtest runner with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Running ticker based backtest runner ...", chrono::Utc::now());
+                info!("{:?} Running trades based backtest runner ...", chrono::Utc::now());
                 that.execute().await;
             })
         })
-        .expect("Failed to create ticker based backtest runner job");
+        .expect("Failed to create trades based backtest runner job");
 
         let scheduler = JobScheduler::new_with_channel_size(channel_size)
             .await
@@ -126,23 +126,23 @@ impl ISigbotBacktestRunner for SigbotTickerBacktestRunner {
         scheduler
             .add(job)
             .await
-            .expect("Failed to add ticker based backtest runner job");
+            .expect("Failed to add trades based backtest runner job");
         scheduler
             .start()
             .await
-            .expect("Failed to start ticker based backtest runner scheduler");
+            .expect("Failed to start trades based backtest runner scheduler");
 
         *self.scheduler.lock().await = Some(scheduler);
 
         info!(
-            "Started ticker based backtest runner with cron '{}', channels '{}'",
+            "Started trades based backtest runner with cron '{}', channels '{}'",
             cron, channel_size
         );
     }
 
     async fn shutdown(&self) {
         info!(
-            "Closing ticker based backtest runner with cron '{}', channels '{}'",
+            "Closing trades based backtest runner with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );
@@ -150,10 +150,10 @@ impl ISigbotBacktestRunner for SigbotTickerBacktestRunner {
             scheduler
                 .shutdown()
                 .await
-                .expect("Failed to shutdown ticker based backtest runner scheduler");
+                .expect("Failed to shutdown trades based backtest runner scheduler");
         }
         info!(
-            "Closed ticker based backtest runner with cron '{}', channels '{}'",
+            "Closed trades based backtest runner with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );

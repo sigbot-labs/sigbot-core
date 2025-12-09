@@ -49,7 +49,9 @@ impl SigbotDatafeedIngestor {
         info!("Initialized Messaging client. {:?}", messaging.name());
 
         // TODO: Publish the datafeed data to messaging topics.
-        for datafeed in datafeeds.iter() {}
+        for datafeed in datafeeds.iter() {
+            // datafeed
+        }
     }
 
     pub async fn shutdown() {

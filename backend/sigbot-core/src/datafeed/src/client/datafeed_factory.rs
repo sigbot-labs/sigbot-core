@@ -70,13 +70,14 @@ impl SigbotDatafeedClientFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotBinanceDatafeedClient::NAME.to_owned())
             })
-            .expect("Failed to parse the datafeed provider from the command line arguments.");
+            .expect("Failed to parse the datafeed provider from the command line arguments.")
+            .to_uppercase();
 
         info!("Registering Sigbot Datafeed: {}", &datafeed_provider);
 
         let mut datafeeds: Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>> = Vec::new();
         for provider in datafeed_provider.split(',').collect::<Vec<&str>>() {
-            match provider.to_uppercase().as_str() {
+            match provider.to_owned().as_str() {
                 SigbotBinanceDatafeedClient::NAME => {
                     Self::get()
                         .write()
@@ -122,7 +123,6 @@ impl SigbotDatafeedClientFactory {
 
         Ok(Arc::new(datafeeds))
     }
-
     fn register0(
         &mut self,
         name: &String,

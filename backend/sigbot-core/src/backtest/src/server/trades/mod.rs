@@ -18,4 +18,4 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest_ticker;
+pub mod backtest_trades;

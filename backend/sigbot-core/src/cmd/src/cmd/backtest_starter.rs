@@ -22,7 +22,8 @@ use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
-use sigbot_backtest::server::ticker::backtest_ticker::SigbotTickerBacktestRunner;
+use sigbot_backtest::server::kline::backtest_kline::SigbotKlineBacktestRunner;
+use sigbot_backtest::server::trades::backtest_trades::SigbotTradesBacktestRunner;
 use sigbot_core::config::config::get_config;
 use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
@@ -48,10 +49,11 @@ impl SigbotBacktestRunnerStarter {
                     .long("provider")
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
-                        "The backtest runner provider to use. (supported are: {})",
-                        SigbotTickerBacktestRunner::NAME,
+                        "The backtest runner provider to use. (supported are: {}, {})",
+                        SigbotKlineBacktestRunner::NAME,
+                        SigbotTradesBacktestRunner::NAME,
                     ))
-                    .default_value(SigbotTickerBacktestRunner::NAME),
+                    .default_value(SigbotKlineBacktestRunner::NAME),
             )
             .arg(
                 Arg::new("messaging")

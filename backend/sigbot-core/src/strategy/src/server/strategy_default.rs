@@ -23,7 +23,7 @@ use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::strategy::models::strategy_embed::StrategyExecutionInput;
+use sigbot_types::modules::{messaging::TOPIC_MARKET_DATA, strategy::models::strategy_embed::StrategyExecutionInput};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone)]
@@ -101,7 +101,7 @@ impl SigbotDefaultStrategyRunner {
         });
 
         let _ = messaging
-            .subscribe("sigbot/notification/alarm", handler) // TODO: configuable
+            .subscribe(TOPIC_MARKET_DATA, handler) // TODO: configuable
             .await
             .expect("Failed to subscribe to the messaging topic.");
         info!("Initialized Messaging client with provider: {:?}.", messaging.name());
