@@ -19,9 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
+use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
-use std::sync::Arc;
+use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone)]
 pub struct SigbotTrushSocialDatafeedClient {
@@ -50,12 +52,19 @@ impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedClient {
         Self::NAME
     }
 
-    async fn init(&self) {
+    async fn init(&self, _: Arc<SigbotDatefeedArgument>) {
         info!("Started Trush Social Datafeed.");
     }
 
     async fn close(&self) {
         info!("Shutting down Trush Social Datafeed.");
+    }
+
+    async fn subscribe(
+        &self,
+        _: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+    ) {
+        info!("Subscribed to Twitter data feed.");
     }
 }
 

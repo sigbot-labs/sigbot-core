@@ -20,6 +20,8 @@ async-trait.workspace = true
 lazy_static.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+clap.workspace = true
+serde_json.workspace = true
 # see:https://crates.io/crates/binance-sdk
 binance-sdk = { version = "33.0.0", features = ["derivatives_trading_usds_futures", "spot"] }
 rust_decimal = "1.39.0"

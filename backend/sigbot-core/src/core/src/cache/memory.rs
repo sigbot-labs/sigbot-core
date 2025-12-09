@@ -18,20 +18,17 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::Arc;
-use std::time::Duration;
-
+use super::ICache;
+use crate::config::config::MemoryProperties;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use moka::future::Cache;
 use moka::policy::EvictionPolicy;
 use regex::Regex;
-
-use crate::config::config::MemoryProperties;
-
-use super::ICache;
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub struct StringMemoryCache {
     cache: Arc<Cache<String, String>>,
@@ -244,7 +241,9 @@ impl ICache<String> for StringMemoryCache {
         };
 
         bytes[byte_offset] = new_byte;
-        self.cache.insert(key, String::from_utf8_lossy(&bytes).to_string()).await;
+        self.cache
+            .insert(key, String::from_utf8_lossy(&bytes).to_string())
+            .await;
 
         Ok(((old_byte >> (7 - bit_offset)) & 1) == 1)
     }
@@ -280,8 +279,14 @@ mod tests {
     #[tokio::test]
     async fn test_set_nx() {
         let cache = create_test_cache();
-        assert!(cache.set_nx("key2".to_string(), Some("value2".to_string())).await.unwrap());
-        assert!(!cache.set_nx("key2".to_string(), Some("value3".to_string())).await.unwrap());
+        assert!(cache
+            .set_nx("key2".to_string(), Some("value2".to_string()))
+            .await
+            .unwrap());
+        assert!(!cache
+            .set_nx("key2".to_string(), Some("value3".to_string()))
+            .await
+            .unwrap());
         assert_eq!(cache.get("key2".to_string()).await.unwrap(), Some("value2".to_string()));
     }
 
@@ -319,7 +324,11 @@ mod tests {
             .unwrap());
 
         // hget
-        let result1 = cache.hget(key.clone(), Some("field1".to_string())).await.unwrap().unwrap();
+        let result1 = cache
+            .hget(key.clone(), Some("field1".to_string()))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(result1, "value1".to_string());
 
         let result2 = cache.hget_all(key.clone()).await.unwrap().unwrap();
@@ -342,7 +351,11 @@ mod tests {
             .await
             .unwrap());
 
-        let result = cache.hget(key.clone(), Some("field1".to_string())).await.unwrap().unwrap();
+        let result = cache
+            .hget(key.clone(), Some("field1".to_string()))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(result, "value1".to_string());
 
         let mut expected = vec!["field1".to_string(), "field2".to_string()];

@@ -18,5 +18,54 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::modules::{messaging::messaging::MessagingInfo, strategy::strategy::StrategyInfo};
+use anyhow::{Context, Error};
+use serde::{Deserialize, Serialize};
+
 pub mod models;
 pub mod strategy;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+
+pub struct SigbotStrategyArgument {
+    strategy_config: StrategyInfo,
+    messaging_config: MessagingInfo,
+}
+
+impl SigbotStrategyArgument {
+    pub fn from_json(json: &str) -> Result<Self, Error> {
+        serde_json::from_str(json).context("Failed to parse strategy info from JSON.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_from_json() {
+        let json = r#"{
+            "strategy_config": {"name": "tenant101_strategy", "provider": "MJEMA", "parameters": {"period": "20", "signal_threshold": "0.01"}}, 
+            "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "#;
+        let argument = SigbotStrategyArgument::from_json(json).unwrap();
+        assert_eq!(argument.strategy_config.name, Some("tenant101_strategy".to_string()));
+        assert_eq!(argument.messaging_config.name, Some("MQTT".to_string()));
+        assert_eq!(
+            argument.strategy_config.parameters,
+            Some(HashMap::from([
+                ("period".to_string(), "20".to_string()),
+                ("signal_threshold".to_string(), "0.01".to_string())
+            ]))
+        );
+
+        assert_eq!(
+            argument.messaging_config.configuration,
+            Some(HashMap::from([(
+                "endpoint".to_string(),
+                "https://localhost:1883".to_string()
+            )]))
+        );
+    }
+}

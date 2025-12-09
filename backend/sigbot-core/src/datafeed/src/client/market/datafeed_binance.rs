@@ -19,9 +19,12 @@
 // This includes modifications and derived works.
 
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
+use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
-use std::sync::Arc;
+use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
+use sigbot_types::modules::{datafeed::SigbotDatefeedArgument, exchange::exchange::ExchangeInfo};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone)]
 pub struct SigbotBinanceDatafeedClient {
@@ -34,14 +37,6 @@ impl SigbotBinanceDatafeedClient {
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
-
-    pub(super) async fn execute(&self) {
-        info!("Executing Binance Datafeed ...");
-        // TODO: Implement the logic to execute Binance market gateway.
-        // TODO: 1. Start the Binance market websocket subscription and pushing to EMQx(hot data cache).
-        // TODO: 2. Start the consumer to market data to database(cold data persist) from EMQx.
-        info!("Executed Binance Datafeed.");
-    }
 }
 
 #[async_trait]
@@ -50,14 +45,57 @@ impl ISigbotDatafeedClient for SigbotBinanceDatafeedClient {
         Self::NAME
     }
 
-    async fn init(&self) {
-        info!("Started Binance Datafeed.");
+    async fn init(&self, argument: Arc<SigbotDatefeedArgument>) {
+        info!("Initializing Binance Datafeed ...");
+        // TODO: Implement the logic to execute Binance market gateway.
+        // TODO: 1. Start the Binance market websocket subscription and pushing to EMQx(hot data cache).
+        // TODO: 2. Start the consumer to market data to database(cold data persist) from EMQx.
+
+        // TODO: create from datafeed configuration.
+        let _ = Arc::new(ExchangeInfo::default());
+
+        let kline_params = argument
+            .datafeed_config
+            .configuration
+            .as_ref()
+            .context("Datafeed config is required")
+            .map(|config| {
+                (
+                    config
+                        .get("symbol")
+                        .context("Symbol is required")
+                        .map(|s| s.clone())
+                        .unwrap_or(String::from("BTCUSDC")),
+                    config
+                        .get("interval")
+                        .context("Interval is required")
+                        .map(|s| s.clone())
+                        .unwrap_or(String::from("1m")),
+                )
+            })
+            .expect("Failed to get kline params from datafeed config");
+
+        // let exchange_client = SigbotExchangeClientFactory::init(exchange)
+        //     .await
+        //     .expect("Failed to initialize Exchange client.");
+        // let klines = exchange_client
+        //     .get_klines(&kline_params.0, &kline_params.1, None, None, 100)
+        //     .await
+        //     .expect("Failed to get klines");
+
+        // info!("Klines: {:?}", klines);
+
+        info!("Initialized Binance Datafeed.");
     }
 
     async fn close(&self) {
         info!("Shut down Binance Datafeed.");
     }
-}
 
-#[cfg(test)]
-mod tests {}
+    async fn subscribe(
+        &self,
+        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+    ) {
+        info!("Subscribed to Binance Datafeed with handler.");
+    }
+}

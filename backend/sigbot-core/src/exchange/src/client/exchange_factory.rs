@@ -18,10 +18,11 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use sigbot_types::modules::exchange::exchange::{ExchangeInfo, ExchangeProvider};
 use sigbot_types::modules::exchange::models::trade_market::{KlineResult, PriceResult};
 use sigbot_types::modules::exchange::models::trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult};
 use std::{
@@ -29,8 +30,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::client::cex::exchange_binance::SigbotBinanceClient;
+
 #[async_trait]
 pub trait ISigbotExchangeClient: Send + Sync {
+    fn name(&self) -> &'static str;
     async fn init(&self);
     async fn close(&self);
     async fn get_current_price(&self, symbol: &str) -> Result<PriceResult, Error>;
@@ -74,22 +78,46 @@ impl SigbotExchangeClientFactory {
         &SINGLE_INSTANCE
     }
 
-    pub async fn init() {
-        info!("Register to All Sigbot exchange operators ...");
+    #[allow(unused_variables)]
+    pub async fn init(exchange: Arc<ExchangeInfo>) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
+        let provider = exchange.provider.to_owned().context("Exchange provider is required")?;
+        info!("Registering exchange with provider: {:?}", &provider);
 
-        unimplemented!()
+        match provider {
+            ExchangeProvider::BINANCE => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(
+                        &SigbotBinanceClient::NAME.to_owned(),
+                        SigbotBinanceClient::new(exchange).await, // TODO: set up run configuration?
+                    )
+                    .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
+            }
+            _ => panic!("Unsupported exchange provider : '{:?}'.", &provider),
+        };
+
+        let registered = Self::get_implementation(provider.as_string())
+            .await
+            .expect(&format!("Failed to get the registered exchange with provider: {:?}.", &provider).as_str());
+
+        info!("Initializing the exchange with provider: {:?}", &provider);
+        registered.init().await;
+        info!("Initialized the exchange with provider: {:?}.", &provider);
+
+        Ok(registered)
     }
 
-    fn register<T: ISigbotExchangeClient + Send + Sync + 'static>(
+    fn register0(
         &mut self,
-        name: String,
-        handler: Arc<T>,
-    ) -> Result<Arc<T>, Error> {
-        if self.implementations.contains_key(&name) {
-            debug!("Already register the sigbot operator '{}'", name);
+        name: &String,
+        handler: Arc<dyn ISigbotExchangeClient + Send + Sync>,
+    ) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
+        if self.implementations.contains_key(name) {
+            debug!("Already register the sigbot exchange client '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.to_owned());
+        self.implementations.insert(name.to_owned(), handler.to_owned());
         Ok(handler)
     }
 

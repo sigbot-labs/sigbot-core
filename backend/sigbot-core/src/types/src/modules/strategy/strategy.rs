@@ -18,13 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::collections::HashMap;
-
 use crate::{EntityBase, PageResponse};
 use common_makestruct::MakeStructWith;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
+use std::collections::HashMap;
 use validator::Validate;
 
 // ---- Entity ---

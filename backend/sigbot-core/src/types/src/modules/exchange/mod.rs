@@ -18,5 +18,53 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::modules::{exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo};
+use anyhow::{Context, Error};
+use serde::{Deserialize, Serialize};
+
 pub mod exchange;
 pub mod models;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+
+pub struct SigbotExchangeArgument {
+    exchange_config: ExchangeInfo,
+    messaging_config: MessagingInfo,
+}
+
+impl SigbotExchangeArgument {
+    pub fn from_json(json: &str) -> Result<Self, Error> {
+        serde_json::from_str(json).context("Failed to parse exchange info from JSON.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_from_json() {
+        let json = r#"{
+            "exchange_config": {"name": "tenant101_exchange", "provider": "BINANCE", "configuration": {"endpoint": "https://api.binance.com"}, "secrets": {"api_secret": "1234567890"}}, 
+            "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "#;
+        let argument = SigbotExchangeArgument::from_json(json).unwrap();
+        assert_eq!(argument.exchange_config.name, Some("BINANCE".to_string()));
+        assert_eq!(argument.messaging_config.name, Some("MQTT".to_string()));
+        assert_eq!(
+            argument.exchange_config.configuration,
+            Some(HashMap::from([(
+                "endpoint".to_string(),
+                "https://api.binance.com".to_string()
+            )]))
+        );
+        assert_eq!(
+            argument.messaging_config.configuration,
+            Some(HashMap::from([(
+                "endpoint".to_string(),
+                "https://localhost:1883".to_string()
+            )]))
+        );
+    }
+}

@@ -40,7 +40,7 @@ use binance_sdk::{
 };
 use common_telemetry::{debug, error, info};
 use rust_decimal::Decimal;
-use sigbot_core::cache::ICache;
+use sigbot_core::cache::{CacheContainer, ICache};
 use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
     modules::exchange::models::{
@@ -124,12 +124,16 @@ impl std::fmt::Display for SigbotBinanceClientConfig {
 }
 
 impl SigbotBinanceClientConfig {
-    pub fn from_exchange(exchange: ExchangeInfo) -> Self {
-        let plain_config = exchange.configuration.expect("Plain configuration is required");
-        let secret_config = exchange.secrets.expect("Secret configuration is required");
+    pub fn from_exchange(exchange: Arc<ExchangeInfo>) -> Self {
+        let plain_config = exchange
+            .configuration
+            .as_ref()
+            .expect("Plain configuration is required");
+        let secret_config = exchange.secrets.as_ref().expect("Secret configuration is required");
+
         Self {
             id: exchange.base.id.expect("Exchange ID is required"),
-            name: exchange.name.expect("Exchange name is required"),
+            name: exchange.name.as_ref().expect("Exchange name is required").to_string(),
             spot_api_mainnet_endpoint: plain_config
                 .get("spot_api_mainnet_endpoint")
                 .expect("Spot API mainnet endpoint is required")
@@ -246,7 +250,7 @@ impl SigbotBinanceClientConfig {
                 .expect("WebSocket streams max concurrent is required")
                 .parse::<usize>()
                 .expect("WebSocket streams max concurrent must be a valid number"),
-            description: exchange.description,
+            description: exchange.description.as_ref().map(|s| s.to_string()),
         }
     }
 }
@@ -259,24 +263,24 @@ pub struct SigbotBinanceClient {
     ws_market_client: Arc<Mutex<Option<WebsocketApi>>>,
     ws_market_stream: Arc<Mutex<Option<WebsocketStreams>>>,
     // Kline store for websocket streams.
-    kline_store: Arc<dyn ICache<Vec<KlineResult>>>,
+    kline_store: Arc<Box<dyn ICache<String>>>,
     // Kline subscription map for websocket streams.
     kline_subscription_registrations:
         Arc<Mutex<HashMap<String, Arc<WebsocketStream<KlineCandlestickStreamsResponse>>>>>,
 }
 
 impl SigbotBinanceClient {
-    pub const KIND: &'static str = "BINANCE"; // ExchangeProvider::BINANCE
+    pub const NAME: &'static str = "BINANCE"; // ExchangeProvider::BINANCE
 
-    pub async fn new(config: &SigbotBinanceClientConfig, kline_store: Box<dyn ICache<Vec<KlineResult>>>) -> Arc<Self> {
+    pub async fn new(exchange: Arc<ExchangeInfo>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.to_owned(),
+            config: SigbotBinanceClientConfig::from_exchange(exchange),
             rest_api_client: Arc::new(Mutex::new(None)),
             rest_market_client: Arc::new(Mutex::new(None)),
             ws_api_client: Arc::new(Mutex::new(None)),
             ws_market_client: Arc::new(Mutex::new(None)),
             ws_market_stream: Arc::new(Mutex::new(None)),
-            kline_store: Arc::from(kline_store),
+            kline_store: Arc::from(CacheContainer::<String>::new()),
             kline_subscription_registrations: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -294,6 +298,10 @@ impl SigbotBinanceClient {
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/websocket_api/trade_api/new_order.rs
 #[async_trait]
 impl ISigbotExchangeClient for SigbotBinanceClient {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
     async fn init(&self) {
         info!("Starting Binance exchange manager with config={}", self.config);
 
@@ -579,9 +587,10 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                     let store_key1 = store_key0.clone();
                     if let Some(kline) = kline {
                         tokio::spawn(async move {
+                            let kline_str = serde_json::to_string(&kline).unwrap_or_default();
                             if let Err(e) = kline_store1
                                 // TODO: using simailar redis list to store klines, and use the last kline as the current kline.
-                                .set(store_key1, vec![kline], None)
+                                .set(store_key1, kline_str, None)
                                 .await
                                 .context("Failed to set klines to cache")
                             {
@@ -617,7 +626,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                 return Err(Error::msg("No klines found in cache"));
             }
 
-            Ok(klines)
+            serde_json::from_str(&klines).context("Failed to parse klines from cache")
         } else {
             info!("Getting klines for symbol={} from Binance using REST API", symbol);
 

@@ -22,9 +22,9 @@ use crate::config::config::{AppDBType, CacheProvider};
 use crate::context::state::SigbotState;
 use async_trait::async_trait;
 use axum::{extract::State, response::IntoResponse, routing::get, Router};
-use sigbot_types::{sys::user::User, PageRequest};
 use hyper::StatusCode;
 use serde::Serialize;
+use sigbot_types::{sys::user::User, PageRequest};
 use std::collections::HashMap;
 
 pub(crate) const HEALTHZ_URI: &str = "/_/healthz";
@@ -143,7 +143,7 @@ impl RedisClusterChecker {
     async fn is_redis_cluster_connected(&self, state: &SigbotState) -> bool {
         match &state.config.cache.provider {
             CacheProvider::REDIS => {
-                let cache = state.string_cache.get(&state.config);
+                let cache = state.string_cache.to_owned();
                 match cache.get("".to_string()).await {
                     Ok(_) => true,
                     Err(e) => {

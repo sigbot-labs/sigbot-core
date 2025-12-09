@@ -34,14 +34,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sigbot_types::{
-    sys::auth::{
-        CallbackGithubRequest, CallbackOidcRequest, EthersWalletLoginRequest, GithubUserInfo, LogoutRequest,
-        PasswordLoginRequest, PasswordPubKeyRequest, PasswordPubKeyResponse,
-    },
-    RespBase,
-};
-use sigbot_utils::{self, webs};
 use common_telemetry::info;
 use hyper::HeaderMap;
 use oauth2::{AuthorizationCode, CsrfToken, Scope, TokenResponse};
@@ -50,6 +42,14 @@ use openidconnect::{
     reqwest::async_http_client,
     Nonce,
 };
+use sigbot_types::{
+    sys::auth::{
+        CallbackGithubRequest, CallbackOidcRequest, EthersWalletLoginRequest, GithubUserInfo, LogoutRequest,
+        PasswordLoginRequest, PasswordPubKeyRequest, PasswordPubKeyResponse,
+    },
+    RespBase,
+};
+use sigbot_utils::{self, webs};
 use std::result::Result;
 use std::result::Result::Ok;
 use tower_cookies::{
@@ -184,7 +184,7 @@ async fn validate_token(state: &SigbotState, ak: &str) -> (bool, Option<AuthUser
             let now = time::OffsetDateTime::now_utc();
             if exp > now {
                 // 2. Verify whether the token is in the cancelled blacklist.
-                let cache = state.string_cache.get(&state.config);
+                let cache = state.string_cache.to_owned();
                 match cache.get(get_auth_handler(state).build_logout_blacklist_key(ak)).await {
                     std::result::Result::Ok(logout) => {
                         tracing::warn!("Invalid the token because in blacklist for {}", ak);

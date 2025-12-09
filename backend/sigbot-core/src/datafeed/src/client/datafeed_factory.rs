@@ -18,12 +18,15 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use anyhow::{Error, Ok};
+use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
 use std::{
     collections::HashMap,
+    future::Future,
+    pin::Pin,
     sync::{Arc, RwLock},
 };
 
@@ -35,8 +38,12 @@ use crate::client::{
 #[async_trait]
 pub trait ISigbotDatafeedClient: Send + Sync {
     fn name(&self) -> &'static str;
-    async fn init(&self);
+    async fn init(&self, argument: Arc<SigbotDatefeedArgument>);
     async fn close(&self);
+    async fn subscribe(
+        &self,
+        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+    );
 }
 
 lazy_static! {
@@ -74,6 +81,20 @@ impl SigbotDatafeedClientFactory {
             .to_uppercase();
 
         info!("Registering Sigbot Datafeed: {}", &datafeed_provider);
+
+        // e.g '--configuration=<base64_encoded_json_string>'
+        let configuration = matches
+            .try_get_one::<String>("configuration")
+            .map(|s| {
+                s.map(|s| s.to_owned())
+                    .unwrap_or_else(|| SigbotBinanceDatafeedClient::NAME.to_owned())
+            })
+            .expect("Failed to parse the configuration from the command line arguments.")
+            .to_uppercase();
+        let argument = Arc::new(
+            SigbotDatefeedArgument::from_json(&configuration)
+                .context("Failed to parse the configuration from the command line arguments.")?,
+        );
 
         let mut datafeeds: Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>> = Vec::new();
         for provider in datafeed_provider.split(',').collect::<Vec<&str>>() {
@@ -116,13 +137,14 @@ impl SigbotDatafeedClientFactory {
                 .expect("Failed to get the registered datafeed.");
 
             info!("Initializing the datafeed with name: {}", &provider);
-            registered.init().await;
+            registered.init(argument.to_owned()).await;
             datafeeds.push(registered);
             info!("Initialized the datafeed with name: {}.", &provider);
         }
 
         Ok(Arc::new(datafeeds))
     }
+
     fn register0(
         &mut self,
         name: &String,

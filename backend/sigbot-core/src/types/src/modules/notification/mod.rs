@@ -18,4 +18,44 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::modules::{messaging::messaging::MessagingInfo, notification::notification::NotificationInfo};
+use anyhow::{Context, Error};
+use serde::{Deserialize, Serialize};
+
 pub mod notification;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct SigbotNotificationArgument {
+    notification_config: NotificationInfo,
+    messaging_config: MessagingInfo,
+}
+
+impl SigbotNotificationArgument {
+    pub fn from_json(json: &str) -> Result<Self, Error> {
+        serde_json::from_str(json).context("Failed to parse notification info from JSON.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_from_json() {
+        let json = r#"{
+            "datafeed_config": {"name": "tenant101_email", "provider": "EMAIL", "configuration": {"endpoint": "smtp.gmail.com:587"}, "secrets": {"api_secret": "1234567890"}}, 
+            "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "#;
+        let argument = SigbotNotificationArgument::from_json(json).unwrap();
+        assert_eq!(argument.notification_config.name, Some("EMAIL".to_string()));
+        assert_eq!(argument.messaging_config.name, Some("MQTT".to_string()));
+        assert_eq!(
+            argument.messaging_config.configuration,
+            Some(HashMap::from([(
+                "endpoint".to_string(),
+                "https://localhost:1883".to_string()
+            )]))
+        );
+    }
+}

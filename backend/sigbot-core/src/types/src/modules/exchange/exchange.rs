@@ -18,13 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::collections::HashMap;
-
 use crate::{EntityBase, PageResponse};
 use common_makestruct::MakeStructWith;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
+use std::collections::HashMap;
 use validator::Validate;
 
 // ---- Entity ---
@@ -126,15 +125,32 @@ pub enum ExchangeProvider {
 impl ExchangeProvider {
     pub fn of(provider: &str) -> Result<ExchangeProvider, String> {
         match provider.to_uppercase().as_str() {
+            // CEX
             "BINANCE" => Ok(ExchangeProvider::BINANCE),
             "OKX" => Ok(ExchangeProvider::OKX),
             "COINBASE" => Ok(ExchangeProvider::COINBASE),
             "BITGET" => Ok(ExchangeProvider::BITGET),
             "BYBIT" => Ok(ExchangeProvider::BYBIT),
             "KRAKEN" => Ok(ExchangeProvider::KRAKEN),
+            // DEX
             "HYPERLIQUID" => Ok(ExchangeProvider::HYPERLIQUID),
             "LIGHTER" => Ok(ExchangeProvider::LIGHTER),
             _ => Err(format!("Unsupported the exchange provider: {}", provider)),
+        }
+    }
+
+    pub fn as_string(&self) -> String {
+        match self {
+            // CEX
+            ExchangeProvider::BINANCE => "BINANCE".to_string(),
+            ExchangeProvider::OKX => "OKX".to_string(),
+            ExchangeProvider::COINBASE => "COINBASE".to_string(),
+            ExchangeProvider::BITGET => "BITGET".to_string(),
+            ExchangeProvider::BYBIT => "BYBIT".to_string(),
+            ExchangeProvider::KRAKEN => "KRAKEN".to_string(),
+            // DEX
+            ExchangeProvider::HYPERLIQUID => "HYPERLIQUID".to_string(),
+            ExchangeProvider::LIGHTER => "LIGHTER".to_string(),
         }
     }
 }

@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-#[derive(Clone, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KlineResult {
     // open time in milliseconds
     pub open_time: u64,

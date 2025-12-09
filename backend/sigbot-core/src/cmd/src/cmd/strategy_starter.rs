@@ -49,6 +49,13 @@ impl SigbotStrategyRunnerStarter {
                     ))
                     .default_value(SigbotDefaultStrategyRunner::NAME),
             )
+            .arg(
+                Arg::new("configuration")
+                    .short('c')
+                    .long("configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .help("The configuration of strategy. (base64 encoded JSON string)"),
+            )
     }
 
     #[tokio::main]

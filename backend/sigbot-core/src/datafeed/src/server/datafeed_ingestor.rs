@@ -18,11 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
+use anyhow::{Context, Error};
 use common_telemetry::info;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use std::sync::Arc;
-
-use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
+use sigbot_types::modules::messaging::TOPIC_MARKET_DATA;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotDatafeedIngestor {
     // TODO: binance client.
@@ -36,22 +37,39 @@ impl SigbotDatafeedIngestor {
     }
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
-        info!("Initializing Datafeed clients.");
-        let datafeeds = SigbotDatafeedClientFactory::init(matches, verbose)
-            .await
-            .expect("Failed to initialize Datafeed clients.");
-        info!("Initialized Datafeed clients. {:?}", datafeeds.len());
-
         info!("Initializing Messaging client.");
         let messaging = SigbotMessagingClientFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Messaging client.");
         info!("Initialized Messaging client. {:?}", messaging.name());
 
+        info!("Initializing Datafeed clients.");
+        let datafeeds = SigbotDatafeedClientFactory::init(matches, verbose)
+            .await
+            .expect("Failed to initialize Datafeed clients.");
+        info!("Initialized Datafeed clients. {:?}", datafeeds.len());
+
         // TODO: Publish the datafeed data to messaging topics.
+        let handler: Arc<
+            dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
+        > = Arc::new(move |data: Vec<u8>| {
+            let messaging0 = messaging.to_owned();
+            Box::pin(async move {
+                let data0 = String::from_utf8(data.clone())
+                    .context("Failed to convert data to string.")
+                    .unwrap_or_default();
+                info!("Received data: {:?}", data0);
+                messaging0
+                    .publish(TOPIC_MARKET_DATA, &data0)
+                    .await
+                    .context("Failed to publish data to messaging topic.")?;
+                Ok(data)
+            })
+        });
         for datafeed in datafeeds.iter() {
-            // datafeed
+            datafeed.subscribe(handler.to_owned()).await;
         }
+        info!("Subscribed to Datafeed clients.");
     }
 
     pub async fn shutdown() {

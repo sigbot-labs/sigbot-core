@@ -67,6 +67,13 @@ impl SigbotDatafeedIngestorStarter {
                     ))
                     .default_value(SigbotMqttClient::NAME),
             )
+            .arg(
+                Arg::new("configuration")
+                    .short('c')
+                    .long("configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .help("The configuration of datafeed. (base64 encoded JSON string)"),
+            )
     }
 
     #[tokio::main]

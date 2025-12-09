@@ -19,7 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::{
-    cache::{memory::StringMemoryCache, redis::StringRedisCache, CacheContainer},
+    cache::{CacheContainer, ICache},
     config::config::{AppConfig, AppDBType},
     llm::handler::llm_factory::{ILLMOperation, SigbotLLMFactory},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
@@ -70,7 +70,7 @@ use tokio::sync::Mutex;
 pub struct SigbotState {
     pub config: Arc<AppConfig>,
     // The Basic operators.
-    pub string_cache: Arc<CacheContainer<String>>,
+    pub string_cache: Arc<Box<dyn ICache<String>>>,
     pub oidc_client: Option<Arc<openidconnect::core::CoreClient>>,
     pub github_client: Option<Arc<BasicClient>>,
     pub default_http_client: Arc<reqwest::Client>,
@@ -93,14 +93,6 @@ pub struct SigbotState {
 
 impl SigbotState {
     pub async fn new(config: &Arc<AppConfig>) -> Self {
-        let cache_config = &config.cache;
-
-        // Build cacher.
-        let cache_container = CacheContainer::new(
-            Box::new(StringMemoryCache::new(&cache_config.memory)),
-            Box::new(StringRedisCache::new(&cache_config.redis)),
-        );
-
         // Build auth clients.
         let auth_clients = (
             crate::util::oidcs::create_oidc_client(&config.auth.oidc)
@@ -268,7 +260,7 @@ impl SigbotState {
             // Notice: Arc object clone only increments the reference counter, and does not copy the actual data block.
             config: config.clone(),
             // The basic operators.
-            string_cache: Arc::new(cache_container),
+            string_cache: Arc::new(CacheContainer::<String>::new()),
             oidc_client: auth_clients.0,
             github_client: auth_clients.1,
             default_http_client: Arc::new(http_client),

@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::client::messaging_mqtt::SigbotMqttClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -28,8 +29,6 @@ use std::{
     pin::Pin,
     sync::{Arc, RwLock},
 };
-
-use crate::client::messaging_mqtt::SigbotMqttClient;
 
 #[async_trait]
 pub trait ISigbotMessagingClient: Send + Sync {
@@ -111,7 +110,7 @@ impl SigbotMessagingClientFactory {
         handler: Arc<dyn ISigbotMessagingClient + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotMessagingClient + Send + Sync>, Error> {
         if self.implementations.contains_key(name) {
-            debug!("Already register the sigbot messaging operation '{}'", name);
+            debug!("Already register the sigbot messaging client '{}'", name);
             return Ok(handler);
         }
         self.implementations.insert(name.to_owned(), handler.to_owned());
