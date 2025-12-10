@@ -25,6 +25,8 @@ use pyo3::types::{PyDict, PyModule, PyString};
 use sigbot_types::modules::strategy::models::strategy_embed::{StrategyContext, StrategyExecutionResult};
 use std::sync::{Arc, Mutex};
 
+pub use crate::server::embed::python_env::verify_required_packages;
+
 /// PyO3 strategy executor
 ///
 /// This executor uses PyO3 to embed the Python interpreter, supporting:
@@ -50,10 +52,27 @@ impl PyO3StrategyExecutor {
         let mut initialized = self.initialized.lock().unwrap();
         if !*initialized {
             // Initialize the Python interpreter
-            Python::with_gil(|_py| {
+            Python::with_gil(|py| {
                 // The Python interpreter will be automatically initialized when it is first called (because the auto-initialize feature is used)
                 info!("Python interpreter initialized");
-            });
+                
+                // Register sigbot_sdk module dynamically
+                // We create the module and register it in sys.modules
+                use crate::server::embed::sdk::lib::sigbot_sdk;
+                let module = PyModule::new_bound(py, "sigbot_sdk")?;
+                sigbot_sdk(&module)?;
+                py.import_bound("sys")?
+                    .getattr("modules")?
+                    .set_item("sigbot_sdk", module)?;
+                
+                // Verify required packages
+                if let Err(e) = verify_required_packages(py) {
+                    error!("Failed to verify required packages: {}", e);
+                }
+                
+                Ok::<(), anyhow::Error>(())
+            })
+            .context("Failed to initialize Python interpreter and register sigbot_sdk")?;
             *initialized = true;
         }
         Ok(())
@@ -108,8 +127,15 @@ impl PyO3StrategyExecutor {
 import sys
 import os
 
+# Import sigbot SDK (high-performance Rust functions)
+try:
+    import sigbot_sdk
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Failed to import sigbot_sdk: {e}")
+
 # Ensure that third-party libraries can be imported
-# Users can install polars, pandas, numpy, etc. using pip install
+# These are pre-installed in the Docker image
 try:
     import polars as pl
 except ImportError:
@@ -117,6 +143,11 @@ except ImportError:
 
 try:
     import pandas as pd
+except ImportError:
+    pass
+
+try:
+    import pyarrow
 except ImportError:
     pass
 

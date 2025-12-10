@@ -18,14 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod batch_executor;
-pub mod pyo3_executor;
-pub mod pyo3_executor_test;
-pub mod python_env;
-pub mod sdk;
-pub mod streaming_executor;
+pub mod momentum;
+pub mod trend;
+pub mod volatility;
+pub mod volume;
 
-// Register sigbot_sdk module at initialization time
-// This makes it available when Python code imports it
-// Note: append_to_inittab! must be called at the crate root level
-// We'll register it in pyo3_executor.rs during initialization
+pub use momentum::{cci, cci_batch, rsi, rsi_batch, stochastic, stochastic_batch};
+pub use trend::{ema, ema_batch, macd, macd_batch, sma, sma_batch};
+pub use volatility::{atr, atr_batch, bollinger_bands, bollinger_bands_batch};
+pub use volume::{obv, obv_batch, vwap, vwap_batch};

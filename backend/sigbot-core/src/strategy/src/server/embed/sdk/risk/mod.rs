@@ -18,14 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod batch_executor;
-pub mod pyo3_executor;
-pub mod pyo3_executor_test;
-pub mod python_env;
-pub mod sdk;
-pub mod streaming_executor;
+pub mod drawdown;
+pub mod position;
 
-// Register sigbot_sdk module at initialization time
-// This makes it available when Python code imports it
-// Note: append_to_inittab! must be called at the crate root level
-// We'll register it in pyo3_executor.rs during initialization
+pub use drawdown::{drawdown_duration, max_drawdown};
+pub use position::{calculate_leverage, calculate_position_size, check_margin_requirement};
