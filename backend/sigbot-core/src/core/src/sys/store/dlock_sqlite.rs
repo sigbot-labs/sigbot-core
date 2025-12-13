@@ -27,15 +27,19 @@ use async_trait::async_trait;
 use sigbot_types::sys::dlock::DLock;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
+use sigbot_utils::dash_maps::ConcurrentHashMap;
+use std::time::SystemTime;
 
 pub struct DLockSQLiteRepository {
     inner: SQLiteRepository<DLock>,
+    initializer: ConcurrentHashMap<String, u64>,
 }
 
 impl DLockSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(DLockSQLiteRepository {
             inner: SQLiteRepository::new(config).await?,
+            initializer: ConcurrentHashMap::new(),
         })
     }
 
@@ -46,6 +50,39 @@ impl DLockSQLiteRepository {
         let name = dlock.name.context("name is required")?;
         let holder = dlock.holder.context("holder is required")?;
         let timeout_ms = dlock.timeout.context("timeout is required")?.as_millis() as i64;
+
+        let name0 = name.clone();
+        let holder0 = holder.clone();
+        self.initializer
+            .compute_if_absent(name.to_owned(), || async move {
+                // 1. Assuming the first acquire lock, then it should be insert a new locked record.
+                // SQLite supports ON CONFLICT, but INSERT OR IGNORE is more commonly used and compatible
+                let insert_sql = r#"
+                    INSERT OR IGNORE INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
+                    VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                "#;
+                let mut tx = self
+                    .inner
+                    .get_pool()
+                    .begin()
+                    .await
+                    .expect("Failed to begin transaction.");
+                sqlx::query(&insert_sql)
+                    .bind(&name0)
+                    .bind(timeout_ms)
+                    .bind(&holder0)
+                    .execute(&mut *tx)
+                    .await
+                    // Panic if failed to acquire the distributed lock due to error for business safety (force consistency).
+                    .expect("Failed to acquire the distributed lock due to error.");
+                tx.commit().await.expect("Failed to commit transaction.");
+
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64
+            })
+            .await;
 
         let mut tx = self.inner.get_pool().begin().await?;
 
@@ -82,24 +119,7 @@ impl DLockSQLiteRepository {
             tx.commit().await?;
             Ok(1) // Acquired the distributed lock.
         } else {
-            // 1. Assuming the first acquire lock, then it should be insert a new locked record.
-            // SQLite supports ON CONFLICT, but INSERT OR IGNORE is more commonly used and compatible
-            let insert_sql = r#"
-                INSERT OR IGNORE INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
-                VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            "#;
-            let insert_result = sqlx::query(&insert_sql)
-                .bind(&name)
-                .bind(timeout_ms)
-                .bind(&holder)
-                .execute(&mut *tx)
-                .await?;
-            tx.commit().await?; // Commit transaction, return error if commit fails
-            if insert_result.rows_affected() > 0 {
-                return Ok(1); // Acquired the distributed lock after successful commit.
-            } else {
-                Ok(0) // Failed to acquire the distributed lock.
-            }
+            Ok(0) // Failed to acquire the distributed lock.
         }
     }
 

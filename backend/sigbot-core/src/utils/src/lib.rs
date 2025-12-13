@@ -20,12 +20,16 @@
 
 pub mod base64s;
 pub mod cgroup;
+pub mod dash_maps;
 pub mod ethers;
 pub mod httpclients;
 pub mod inets;
+// Note: If you need higher performance, consider using dashmap::DashMap
+// because it uses sharding locks instead of coarse-grained locks.
 pub mod mems;
 pub mod panics;
 pub mod rsa_ciphers;
+pub mod rwlock_maps;
 pub mod secrets;
 pub mod serde_beans;
 pub mod snowflake;

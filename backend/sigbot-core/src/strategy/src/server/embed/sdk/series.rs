@@ -57,9 +57,7 @@ impl Series {
         if index >= len || index < -len {
             return None;
         }
-
         let actual_index = if index >= 0 { len - 1 - index } else { len + index };
-
         self.data.get(actual_index as usize).copied()
     }
 

@@ -244,7 +244,6 @@ pub fn macd_batch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::embed::sdk::series::Series;
 
     #[test]
     fn test_sma_batch() {

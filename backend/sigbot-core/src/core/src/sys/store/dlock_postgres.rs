@@ -27,15 +27,19 @@ use async_trait::async_trait;
 use sigbot_types::sys::dlock::DLock;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
+use sigbot_utils::dash_maps::ConcurrentHashMap;
+use std::time::SystemTime;
 
 pub struct DLockPostgresRepository {
     inner: PostgresRepository<DLock>,
+    initializer: ConcurrentHashMap<String, u64>,
 }
 
 impl DLockPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(DLockPostgresRepository {
             inner: PostgresRepository::new(config).await?,
+            initializer: ConcurrentHashMap::new(),
         })
     }
 
@@ -47,19 +51,52 @@ impl DLockPostgresRepository {
         let holder = dlock.holder.context("holder is required")?;
         let timeout_ms = dlock.timeout.context("timeout is required")?.as_millis() as i64;
 
-        let mut tx = self.inner.get_pool().begin().await?;
+        let name0 = name.clone();
+        let holder0 = holder.clone();
+        self.initializer
+            .compute_if_absent(name.to_owned(), || async move {
+                // 1. Assuming the first acquire lock, then it should be insert a new locked record.
+                // compute_if_absent already has lock protection, so we can use pool directly
+                let insert_sql = r#"
+                    INSERT INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
+                    VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP(13), CURRENT_TIMESTAMP(13))
+                    ON CONFLICT (id, name) DO NOTHING
+                "#;
+                let mut tx = self
+                    .inner
+                    .get_pool()
+                    .begin()
+                    .await
+                    .expect("Failed to begin transaction.");
+                sqlx::query(&insert_sql)
+                    .bind(&name0)
+                    .bind(timeout_ms)
+                    .bind(&holder0)
+                    .execute(&mut *tx)
+                    .await
+                    // Panic if failed to acquire the distributed lock due to error for business safety (force consistency).
+                    .expect("Failed to acquire the distributed lock due to error.");
+                tx.commit().await.expect("Failed to commit transaction.");
 
-        // 1. Assuming the distributed lock (ID or name) has no holder, then the update will definitely succeed (affected=1),
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64
+            })
+            .await;
+
+        // 2. Assuming the distributed lock (ID or name) has no holder, then the update will definitely succeed (affected=1),
         //    meaning the current attempt to acquired the distributed lock.
-        // 2. If another holder crashes after acquiring the lock, a timeout period must be elapsed before allowing another
+        // 3. If another holder crashes after acquiring the lock, a timeout period must be elapsed before allowing another
         //    holder to acquire the lock.
         let acquire_sql = r#"
-            UPDATE sys_dlock SET status = 1, updated_time = CURRENT_TIMESTAMP(13), holder = ?
-            WHERE del_flag = 0 AND (
-                ((id = ? OR name = ?) AND status = 0)
-                OR (updated_time < ? - INTERVAL '? milliseconds')
+        UPDATE sys_dlock SET status = 1, updated_time = CURRENT_TIMESTAMP(13), holder = ?
+        WHERE del_flag = 0 AND (
+            ((id = ? OR name = ?) AND status = 0)
+            OR (updated_time < ? - INTERVAL '? milliseconds')
             )
-        "#;
+            "#;
+        let mut tx = self.inner.get_pool().begin().await?;
         let update_result = sqlx::query(&acquire_sql)
             .bind(&holder)
             .bind(dlock.base.id.context("id is required")?)
@@ -71,24 +108,7 @@ impl DLockPostgresRepository {
             tx.commit().await?;
             Ok(1) // Acquired the distributed lock.
         } else {
-            // 1. Assuming the first acquire lock, then it should be insert a new locked record.
-            let insert_sql = r#"
-                INSERT INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
-                VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP(13), CURRENT_TIMESTAMP(13))
-                ON CONFLICT (id, name) DO NOTHING
-            "#;
-            let insert_result = sqlx::query(&insert_sql)
-                .bind(&name)
-                .bind(timeout_ms)
-                .bind(&holder)
-                .execute(&mut *tx)
-                .await?;
-            tx.commit().await?; // Commit transaction, return error if commit fails
-            if insert_result.rows_affected() > 0 {
-                return Ok(1); // Acquired the distributed lock after successful commit.
-            } else {
-                Ok(0) // Failed to acquire the distributed lock.
-            }
+            Ok(0) // Unable to acquire the distributed lock.
         }
     }
 
