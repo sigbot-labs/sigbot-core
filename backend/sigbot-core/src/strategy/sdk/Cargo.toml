@@ -1,5 +1,5 @@
 [package]
-name = "sigbot-strategy"
+name = "sigbot-strategy-sdk"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

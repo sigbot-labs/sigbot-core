@@ -7439,7 +7439,7 @@ dependencies = [
  "sigbot-deployer",
  "sigbot-messaging",
  "sigbot-notification",
- "sigbot-strategy",
+ "sigbot-strategy-runner",
  "sigbot-types",
  "sigbot-utils",
  "snafu",
@@ -7625,7 +7625,7 @@ dependencies = [
  "sigbot-core",
  "sigbot-datafeed",
  "sigbot-notification",
- "sigbot-strategy",
+ "sigbot-strategy-runner",
  "sigbot-types",
  "sigbot-utils",
  "sqlx",
@@ -7694,7 +7694,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "sigbot-strategy"
+name = "sigbot-strategy-runner"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.3",
+ "chrono",
+ "clap 4.5.34",
+ "common-telemetry",
+ "config",
+ "dotenv",
+ "hyper 1.6.0",
+ "langchain-rust",
+ "lazy_static",
+ "moka",
+ "openai",
+ "pgvector",
+ "pyo3",
+ "redis",
+ "regex",
+ "reqwest 0.12.15",
+ "serde",
+ "serde_json",
+ "sigbot-core",
+ "sigbot-messaging",
+ "sigbot-strategy-sdk",
+ "sigbot-types",
+ "sigbot-utils",
+ "sqlx",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-cron-scheduler",
+ "tower 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "validator",
+]
+
+[[package]]
+name = "sigbot-strategy-sdk"
 version = "1.0.0"
 dependencies = [
  "anyhow",

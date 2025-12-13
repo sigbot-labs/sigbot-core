@@ -3,14 +3,14 @@
 适用于策略研究和回测分析
 """
 
-import sigbot_sdk
+import sigbotlib
 
 # klines, closes, highs, lows, opens, volumes 会自动注入
 
 # 并行计算所有指标
-ma5 = sigbot_sdk.sma_batch(closes, 5)
-ma30 = sigbot_sdk.sma_batch(closes, 30)
-rsi = sigbot_sdk.rsi_batch(closes, 14)
+ma5 = sigbotlib.sma_batch(closes, 5)
+ma30 = sigbotlib.sma_batch(closes, 30)
+rsi = sigbotlib.rsi_batch(closes, 14)
 
 # 生成信号列表
 signals = []

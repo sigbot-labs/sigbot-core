@@ -23,7 +23,7 @@ use pyo3::prelude::*;
 /// Convert timestamp (milliseconds) to datetime string
 #[pyfunction]
 pub fn timestamp_to_datetime(timestamp: u64) -> PyResult<String> {
-    use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+    use chrono::{DateTime, Utc};
 
     let secs = (timestamp / 1000) as i64;
     let millis = (timestamp % 1000) as u32;
@@ -43,10 +43,12 @@ pub fn datetime_to_timestamp(datetime: &str) -> PyResult<u64> {
     let dt_result: Result<DateTime<Utc>, _> = DateTime::parse_from_rfc3339(datetime)
         .map(|dt| dt.with_timezone(&Utc))
         .or_else(|_| {
-            NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S").map(|ndt| DateTime::from_utc(ndt, Utc))
+            NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S")
+                .map(|ndt| DateTime::from_naive_utc_and_offset(ndt, Utc))
         })
         .or_else(|_| {
-            NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S%.3f").map(|ndt| DateTime::from_utc(ndt, Utc))
+            NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S%.3f")
+                .map(|ndt| DateTime::from_naive_utc_and_offset(ndt, Utc))
         });
 
     let dt = dt_result.map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid datetime format"))?;

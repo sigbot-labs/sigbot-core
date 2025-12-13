@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::embed::sdk::series::Series;
+use crate::sdk::core::series::Series;
 use pyo3::prelude::*;
 
 /// Relative Strength Index (RSI) - Streaming mode
@@ -193,7 +193,7 @@ pub fn stochastic(
     }
 
     // Calculate %D (SMA of %K)
-    let d_values = crate::server::embed::sdk::indicators::trend::sma(&k_values, d_period)?;
+    let d_values = crate::sdk::core::indicators::trend::sma(&k_values, d_period)?;
 
     Ok((k_values, d_values))
 }
@@ -243,7 +243,7 @@ pub fn stochastic_batch(
     }
 
     // Calculate %D (SMA of %K)
-    let d_values = crate::server::embed::sdk::indicators::trend::sma_batch(k_values.clone(), d_period)?;
+    let d_values = crate::sdk::core::indicators::trend::sma_batch(k_values.clone(), d_period)?;
 
     Ok((k_values, d_values))
 }

@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use common_telemetry::{info, warn};
 use pyo3::prelude::*;
 
@@ -55,39 +55,36 @@ pub fn verify_required_packages(py: Python<'_>) -> Result<Vec<String>> {
 }
 
 /// Attempt to install Python packages (requires pip to be available)
-pub fn install_packages(py: Python<'_>, packages: &[String]) -> Result<()> {
-    if packages.is_empty() {
-        return Ok(());
-    }
-
-    // Try to use subprocess to install packages
-    let install_code = format!(
-        r#"
-import subprocess
-import sys
-
-packages = {}
-try:
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet"] + packages,
-        capture_output=True,
-        text=True,
-        timeout=60
-    )
-    if result.returncode != 0:
-        raise Exception(f"Failed to install packages: {{result.stderr}}")
-except Exception as e:
-    raise Exception(f"Error installing packages: {{str(e)}}")
-"#,
-        format!("{:?}", packages)
-    );
-
-    py.run_bound(&install_code, None, None)
-        .context("Failed to install Python packages")?;
-
-    info!("Successfully installed Python packages: {:?}", packages);
-    Ok(())
-}
+// pub fn install_packages(py: Python<'_>, packages: &[String]) -> Result<()> {
+//     use anyhow::Context;
+//     if packages.is_empty() {
+//         return Ok(());
+//     }
+//     // Try to use subprocess to install packages
+//     let install_code = format!(
+//         r#"
+// import subprocess
+// import sys
+// packages = {}
+// try:
+//     result = subprocess.run(
+//         [sys.executable, "-m", "pip", "install", "--quiet"] + packages,
+//         capture_output=True,
+//         text=True,
+//         timeout=60
+//     )
+//     if result.returncode != 0:
+//         raise Exception(f"Failed to install packages: {{result.stderr}}")
+// except Exception as e:
+//     raise Exception(f"Error installing packages: {{str(e)}}")
+// "#,
+//         format!("{:?}", packages)
+//     );
+//     py.run_bound(&install_code, None, None)
+//         .context("Failed to install Python packages")?;
+//     info!("Successfully installed Python packages: {:?}", packages);
+//     Ok(())
+// }
 
 #[cfg(test)]
 mod tests {

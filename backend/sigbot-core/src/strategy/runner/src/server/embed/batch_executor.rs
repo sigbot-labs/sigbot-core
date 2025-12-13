@@ -154,7 +154,7 @@ impl BatchStrategyExecutor {
             r#"
 import json
 import traceback
-import sigbot_sdk
+import sigbot_strategy_sdk
 
 try:
     # User strategy code

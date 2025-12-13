@@ -18,13 +18,13 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod data;
-pub mod indicators;
-pub mod lib;
-pub mod risk;
-pub mod series;
-pub mod signals;
-pub mod utils;
+pub mod batch_executor;
+pub mod pyo3_executor;
+pub mod pyo3_executor_test;
+pub mod python_env;
+pub mod streaming_executor;
 
-// Export the module function (not the module itself)
-pub use lib::sigbot_sdk;
+// Register sigbot_sdk module at initialization time
+// This makes it available when Python code imports it
+// Note: append_to_inittab! must be called at the crate root level
+// We'll register it in pyo3_executor.rs during initialization

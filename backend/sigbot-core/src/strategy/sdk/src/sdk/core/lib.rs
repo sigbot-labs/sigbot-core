@@ -18,30 +18,28 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::embed::sdk::data::{
+use crate::sdk::core::data::{
     filter_klines, parse_klines, resample_klines, resample_ohlcv, ticks_to_klines, validate_kline,
 };
-use crate::server::embed::sdk::indicators::{
+use crate::sdk::core::indicators::{
     atr, atr_batch, bollinger_bands, bollinger_bands_batch, cci, cci_batch, ema, ema_batch, macd, macd_batch, obv,
     obv_batch, rsi, rsi_batch, sma, sma_batch, stochastic, stochastic_batch, vwap, vwap_batch,
 };
-use crate::server::embed::sdk::risk::{
+use crate::sdk::core::risk::{
     calculate_leverage, calculate_position_size, check_margin_requirement, drawdown_duration, max_drawdown,
 };
-use crate::server::embed::sdk::series::{series_from_vec, Series};
-use crate::server::embed::sdk::signals::{
-    breakout, crossover, pattern_recognition, stop_loss, take_profit, trailing_stop,
-};
-use crate::server::embed::sdk::utils::{
+use crate::sdk::core::series::{series_from_vec, Series};
+use crate::sdk::core::signals::{breakout, crossover, pattern_recognition, stop_loss, take_profit, trailing_stop};
+use crate::sdk::core::utils::{
     align_timestamps, correlation, datetime_to_timestamp, normalize, sharpe_ratio, standardize, timestamp_to_datetime,
 };
 use pyo3::prelude::*;
 
-/// Sigbot SDK Python module
+/// Sigbot strategy Library Python module
 /// Provides high-performance technical indicators and data processing functions
 #[pymodule]
-#[pyo3(name = "sigbot_sdk")]
-pub fn sigbot_sdk(m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "sigbotlib")]
+pub fn sigbotlib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Series class
     m.add_class::<Series>()?;
 

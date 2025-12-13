@@ -19,10 +19,10 @@
 // This includes modifications and derived works.
 
 use crate::server::embed::pyo3_executor::PyO3StrategyExecutor;
-use crate::server::embed::sdk::series::Series;
 use anyhow::{Context, Result};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
+use sigbot_strategy_sdk::sdk::core::series::Series;
 use sigbot_types::modules::exchange::models::trade_market::KlineResult;
 use sigbot_types::modules::strategy::models::strategy_embed::StrategyExecutionResult;
 use std::collections::{HashMap, VecDeque};
@@ -196,7 +196,7 @@ impl StreamingStrategyExecutor {
             r#"
 import json
 import traceback
-import sigbot_sdk
+import sigbot_strategy_sdk
 
 try:
     # User strategy code

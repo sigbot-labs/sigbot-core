@@ -117,10 +117,10 @@ impl SigbotDefaultStrategyRunner {
                     .as_ref()
                     .and_then(|e| e.get("execution_mode"))
                     .map(|s| s.as_str())
-                    .unwrap_or("streaming");
+                    .unwrap_or("STREAMING");
 
                 let result = match mode {
-                    "batch" => {
+                    "BATCH" => {
                         // Batch mode: parse all K-lines from market_data
                         if let Some(market_data) = &input.context.market_data {
                             let klines: Vec<KlineResult> =
@@ -183,8 +183,10 @@ impl SigbotDefaultStrategyRunner {
 
                 if let Err(ref e) = result {
                     warn!("Failed to execute strategy: {}", e);
+                    // TODO: statistics the error metrics.
                 } else {
                     debug!("Executed strategy successfully. Result: {:?}", result);
+                    // TODO: statistics the success metrics.
                 }
                 Ok(data0)
             })

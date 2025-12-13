@@ -1,5 +1,5 @@
 [package]
-name = "sigbot-deployer"
+name = "sigbot-strategy-runner"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,9 +13,8 @@ common-telemetry.workspace = true
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
 sigbot-core.workspace = true
-sigbot-datafeed.workspace = true
-sigbot-strategy-runner.workspace = true
-sigbot-notification.workspace = true
+sigbot-strategy-sdk.workspace = true
+sigbot-messaging.workspace = true
 
 # Thirdparty dependencies.
 axum.workspace = true
@@ -45,6 +44,7 @@ openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true
 url.workspace = true
+pyo3.workspace = true
 
 [build-dependencies]
 chrono.workspace = true

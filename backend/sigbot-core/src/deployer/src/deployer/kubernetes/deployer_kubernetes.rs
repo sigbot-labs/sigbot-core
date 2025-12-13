@@ -27,8 +27,8 @@ use sigbot_types::{
         datafeed::datafeed::{DatafeedInfo, DatafeedProvider},
         strategy::strategy::StrategyInfo,
     },
-    sys::tenant::{QueryTenantRequest, Tenant},
-    EntityBase, PageRequest, PageResponse,
+    sys::tenant::Tenant,
+    EntityBase,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;

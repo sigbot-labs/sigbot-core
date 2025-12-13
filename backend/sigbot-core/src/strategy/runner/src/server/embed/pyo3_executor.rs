@@ -18,14 +18,13 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub use crate::server::embed::python_env::verify_required_packages;
 use anyhow::{Context, Result};
 use common_telemetry::{error, info};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule, PyString};
 use sigbot_types::modules::strategy::models::strategy_embed::{StrategyContext, StrategyExecutionResult};
 use std::sync::{Arc, Mutex};
-
-pub use crate::server::embed::python_env::verify_required_packages;
 
 /// PyO3 strategy executor
 ///
@@ -55,24 +54,23 @@ impl PyO3StrategyExecutor {
             Python::with_gil(|py| {
                 // The Python interpreter will be automatically initialized when it is first called (because the auto-initialize feature is used)
                 info!("Python interpreter initialized");
-                
-                // Register sigbot_sdk module dynamically
-                // We create the module and register it in sys.modules
-                use crate::server::embed::sdk::lib::sigbot_sdk;
-                let module = PyModule::new_bound(py, "sigbot_sdk")?;
-                sigbot_sdk(&module)?;
-                py.import_bound("sys")?
-                    .getattr("modules")?
-                    .set_item("sigbot_sdk", module)?;
-                
+
+                // Register sigbotlib module dynamically
+                // We create the module and register it in built-in core modules
+                let sigbotlib_module = PyModule::new_bound(py, "sigbotlib")?;
+                sigbot_strategy_sdk::sdk::core::lib::sigbotlib(&sigbotlib_module)?;
+                py.import_bound("sigbotlib")?
+                    // .getattr("core")?
+                    .set_item("sigbotlib", sigbotlib_module)?;
+
                 // Verify required packages
                 if let Err(e) = verify_required_packages(py) {
                     error!("Failed to verify required packages: {}", e);
                 }
-                
+
                 Ok::<(), anyhow::Error>(())
             })
-            .context("Failed to initialize Python interpreter and register sigbot_sdk")?;
+            .context("Failed to initialize Python interpreter and register sigbotlib")?;
             *initialized = true;
         }
         Ok(())
@@ -129,10 +127,10 @@ import os
 
 # Import sigbot SDK (high-performance Rust functions)
 try:
-    import sigbot_sdk
+    import sigbotlib
 except ImportError as e:
     import warnings
-    warnings.warn(f"Failed to import sigbot_sdk: {e}")
+    warnings.warn(f"Failed to import built-in core module sigbotlib: {e}")
 
 # Ensure that third-party libraries can be imported
 # These are pre-installed in the Docker image
@@ -140,30 +138,22 @@ try:
     import polars as pl
 except ImportError:
     pass
-
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
-try:
-    import pyarrow
-except ImportError:
-    pass
-
-try:
-    import numpy as np
-except ImportError:
-    pass
-
-try:
-    import json
-except ImportError:
-    pass
+#try:
+#    import pandas as pd
+#except ImportError:
+#    pass
+#try:
+#    import pyarrow
+#except ImportError:
+#    pass
+#try:
+#    import numpy as np
+#except ImportError:
+#    pass
 "#;
 
         // Execute the setup code
-        let setup_globals = strategy_module.dict();
+        let setup_globals: Bound<'_, PyDict> = strategy_module.dict();
         py.run_bound(setup_code, Some(&setup_globals), None)
             .context("Failed to setup strategy environment")?;
 
@@ -208,11 +198,9 @@ except ImportError:
             r#"
 import json
 import traceback
-
 try:
     # User strategy code
     {}
-    
     # Try to get the result variable, if not return None
     if 'result' in locals():
         result_value = result
@@ -220,8 +208,6 @@ try:
         result_value = result
     else:
         result_value = None
-    
-    # Convert the result to a JSON string
     if result_value is None:
         output = json.dumps({{"status": "success", "result": None}})
     else:

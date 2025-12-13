@@ -32,7 +32,7 @@ use sigbot_core::{
 };
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
-use sigbot_strategy::server::strategy_factory::SigbotStrategyRunnerFactory;
+use sigbot_strategy_runner::server::strategy_factory::SigbotStrategyRunnerFactory;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;

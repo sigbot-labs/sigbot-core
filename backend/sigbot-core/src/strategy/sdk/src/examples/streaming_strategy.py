@@ -3,7 +3,7 @@
 适用于实盘交易和事件驱动回测
 """
 
-import sigbot_sdk
+import sigbotlib
 
 # env 会自动注入，包含：
 # - env.close, env.high, env.low, env.open, env.volume (Series 对象)
@@ -11,9 +11,9 @@ import sigbot_sdk
 # - env.parameters (字典)
 
 # 计算技术指标
-ma5 = sigbot_sdk.sma(env.close, 5)
-ma30 = sigbot_sdk.sma(env.close, 30)
-rsi = sigbot_sdk.rsi(env.close, 14)
+ma5 = sigbotlib.sma(env.close, 5)
+ma30 = sigbotlib.sma(env.close, 30)
+rsi = sigbotlib.rsi(env.close, 14)
 
 # 获取最新值
 ma5_val = ma5.get(0)
