@@ -38,7 +38,7 @@ pub struct UserSQLiteRepository {
 impl UserSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(UserSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
         })
     }
 }

@@ -38,7 +38,7 @@ pub struct DatafeedInfoPostgresRepository {
 impl DatafeedInfoPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(DatafeedInfoPostgresRepository {
-            inner: PostgresRepository::new(config).await?,
+            inner: PostgresRepository::get_or_init(config).await?,
         })
     }
 }

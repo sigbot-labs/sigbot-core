@@ -38,7 +38,7 @@ pub struct MessagingInfoSQLiteRepository {
 impl MessagingInfoSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(MessagingInfoSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
         })
     }
 }

@@ -38,7 +38,7 @@ pub struct DatafeedInfoSQLiteRepository {
 impl DatafeedInfoSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(DatafeedInfoSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
         })
     }
 }

@@ -38,7 +38,7 @@ pub struct DLockSQLiteRepository {
 impl DLockSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(DLockSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
             initializer: ConcurrentHashMap::new(),
         })
     }

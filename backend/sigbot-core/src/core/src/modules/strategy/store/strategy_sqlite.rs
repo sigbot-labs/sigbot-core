@@ -38,7 +38,7 @@ pub struct StrategyInfoSQLiteRepository {
 impl StrategyInfoSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(StrategyInfoSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
         })
     }
 }

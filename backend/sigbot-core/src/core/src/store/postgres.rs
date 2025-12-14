@@ -22,19 +22,28 @@ use super::AsyncRepository;
 use crate::config::config::PostgresAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
+use common_telemetry::{debug, info};
 use sigbot_types::{PageRequest, PageResponse};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{PgPool, Postgres};
 use std::any::Any;
 use std::marker::PhantomData;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 
-pub struct PostgresRepository<T: Any + Send + Sync> {
-    phantom: PhantomData<T>,
-    pool: PgPool,
+// 单例的 Postgres pool 管理器
+struct PostgresPoolManager {
+    pool: Arc<PgPool>,
 }
 
-impl<T: Any + Send + Sync> PostgresRepository<T> {
-    pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
+static POOL_MANAGER: OnceCell<Arc<PostgresPoolManager>> = OnceCell::const_new();
+
+async fn init_pool_manager(config: PostgresAppDBProperties) -> Result<Arc<PostgresPoolManager>, Error> {
+    PostgresPoolManager::init(&config).await
+}
+
+impl PostgresPoolManager {
+    async fn init(config: &PostgresAppDBProperties) -> Result<Arc<Self>, Error> {
         let db_url = format!(
             "postgres://{}:{}@{}:{}/{}",
             config.username,
@@ -45,28 +54,24 @@ impl<T: Any + Send + Sync> PostgresRepository<T> {
         );
 
         if !Postgres::database_exists(&db_url).await.unwrap_or(false) {
-            tracing::info!("Creating database {}", db_url);
+            info!("Creating database {}", db_url);
             match Postgres::create_database(&db_url).await {
-                Ok(_) => tracing::info!("Create db success"),
+                Ok(_) => info!("Create db success"),
                 Err(error) => panic!("Error to create db: {}", error),
             }
         } else {
-            tracing::info!("Database already exists and skip init migration.");
+            debug!("Postgres DB already exists and skip init migration.");
         }
 
         match PgPool::connect(&db_url).await {
             Ok(pool) => {
-                tracing::info!("Successfully connected to the database");
+                info!("Successfully connected to the database");
                 let pool = Self::init_migration(pool).await;
-
-                Ok(PostgresRepository {
-                    phantom: PhantomData,
-                    pool,
-                })
+                Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
             }
             Err(e) => {
-                tracing::info!("Database postgres connection error: {:?}", e);
-                tracing::info!("Error details: {}", e);
+                info!("Database postgres connection error: {:?}", e);
+                info!("Error details: {}", e);
                 Err(e.into())
             }
         }
@@ -74,18 +79,36 @@ impl<T: Any + Send + Sync> PostgresRepository<T> {
 
     async fn init_migration(pool: PgPool) -> PgPool {
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        tracing::info!("Migration result: {:?}", results);
+        info!("Postgres DB migration result: {:?}", results);
         match results {
-            Ok(_) => tracing::info!("Migration success"),
+            Ok(_) => info!("Postgres DB migration successfully."),
             Err(error) => {
-                panic!("Error migration: {}", error);
+                panic!("Error to migrate Postgres DB: {}", error);
             }
         }
         pool
     }
+}
+
+pub struct PostgresRepository<T: Any + Send + Sync> {
+    phantom: PhantomData<T>,
+    pool: Arc<PgPool>,
+}
+
+impl<T: Any + Send + Sync> PostgresRepository<T> {
+    pub async fn get_or_init(config: &PostgresAppDBProperties) -> Result<Self, Error> {
+        let config = config.clone();
+        let manager = POOL_MANAGER
+            .get_or_try_init(|| async move { init_pool_manager(config).await })
+            .await?;
+        Ok(PostgresRepository {
+            phantom: PhantomData,
+            pool: manager.pool.clone(),
+        })
+    }
 
     pub fn get_pool(&self) -> &PgPool {
-        &self.pool
+        &*self.pool
     }
 }
 

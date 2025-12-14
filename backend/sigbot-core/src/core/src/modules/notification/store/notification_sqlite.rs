@@ -38,7 +38,7 @@ pub struct NotificationInfoSQLiteRepository {
 impl NotificationInfoSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(NotificationInfoSQLiteRepository {
-            inner: SQLiteRepository::new(config).await?,
+            inner: SQLiteRepository::get_or_init(config).await?,
         })
     }
 }

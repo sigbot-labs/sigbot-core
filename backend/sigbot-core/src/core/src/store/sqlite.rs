@@ -22,30 +22,34 @@ use super::AsyncRepository;
 use crate::config::config::SqliteAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
+use common_telemetry::{debug, info};
 use sigbot_types::{PageRequest, PageResponse};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite, SqlitePool};
 use std::any::Any;
 use std::fs;
 use std::marker::PhantomData;
 use std::path::Path;
-use tracing::{debug, info};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 
-//
-// const MIGRATION_INIT_SQL: &str = include_str!("../deployment/migrations/20240710083754_init.sql");
-
-pub struct SQLiteRepository<T: Any + Send + Sync> {
-    phantom: PhantomData<T>,
-    pool: SqlitePool,
+// 单例的 SQLite pool 管理器
+struct SQLitePoolManager {
+    pool: Arc<SqlitePool>,
 }
 
-impl<T: Any + Send + Sync> SQLiteRepository<T> {
-    // see:https://tms-dev-blog.com/rust-sqlx-basics-with-sqlite/#Adding_a_migration_script
-    pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
+static POOL_MANAGER: OnceCell<Arc<SQLitePoolManager>> = OnceCell::const_new();
+
+async fn init_pool_manager(config: SqliteAppDBProperties) -> Result<Arc<SQLitePoolManager>, Error> {
+    SQLitePoolManager::init(&config).await
+}
+
+impl SQLitePoolManager {
+    async fn init(config: &SqliteAppDBProperties) -> Result<Arc<Self>, Error> {
         let dir = config.dir.to_owned().expect("Sqlite dir missing configured");
         let db_dir = Path::new(&dir);
         if !db_dir.exists() {
             fs::create_dir_all(db_dir).map_err(|e| {
-                tracing::info!("Failed to sqlite db create directory: {:?}", e);
+                info!("Failed to sqlite db create directory: {:?}", e);
                 e
             })?;
         }
@@ -54,64 +58,62 @@ impl<T: Any + Send + Sync> SQLiteRepository<T> {
         if !Sqlite::database_exists(db_url.as_str()).await.unwrap_or(false) {
             info!("Creating database {}", db_url);
             match Sqlite::create_database(db_url.as_str()).await {
-                Ok(_) => tracing::info!("Create db success"),
+                Ok(_) => info!("Create db success"),
                 Err(error) => panic!("Error to create db: {}", error),
             }
         } else {
-            tracing::info!("Database already exists and skip init migration.");
+            debug!("SQLite DB already exists and skip init migration.");
         }
-        // SQLite in-memory database.
-        // let db_url = format!("sqlite::memory:");
 
         match SqlitePool::connect(&db_url).await {
             Ok(pool) => {
-                tracing::info!("Successfully connected to the database");
+                info!("Successfully connected to the database");
                 let pool = Self::init_migration(pool).await;
-
-                Ok(SQLiteRepository {
-                    phantom: PhantomData,
-                    pool,
-                })
+                Ok(Arc::new(SQLitePoolManager { pool: Arc::new(pool) }))
             }
             Err(e) => {
-                tracing::info!("Database sqlite connection error: {:?}", e);
-                tracing::info!("Error details: {}", e);
+                info!("Database sqlite connection error: {:?}", e);
+                info!("Error details: {}", e);
                 Err(e.into())
             }
         }
     }
 
     async fn init_migration(pool: Pool<Sqlite>) -> Pool<Sqlite> {
-        // let default_dir = std::env
-        //   ::current_dir()
-        //   .map(|s| s.to_str().unwrap())
-        //   .unwrap();
-        // let migrations_dir = std::env
-        //   ::var("CARGO_MANIFEST_DIR")
-        //   .unwrap_or_else(|_| default_dir.to_string());
-        // let migrations_dir = std::path::Path::new(&current_dir).join("../deployment/migrations");
-        // let results = sqlx::migrate::Migrator::new(migrations).await.unwrap().run(&pool).await;
-        // debug!("Migration result: {:?}", results);
-        // match results {
-        //   Ok(_) => tracing::info!("Migration success"),
-        //   Err(error) => {
-        //     panic!("error: {}", error);
-        //   }
-        // }
-
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        debug!("Migration result: {:?}", results);
+        info!("SQLite DB migration result: {:?}", results);
         match results {
-            Ok(_) => tracing::info!("Migration success"),
+            Ok(_) => info!("SQLite DB migration successfully."),
             Err(error) => {
-                panic!("Error migration: {}", error);
+                panic!("Error to migrate SQLite DB: {}", error);
             }
         }
         pool
     }
+}
+
+//
+// const MIGRATION_INIT_SQL: &str = include_str!("../deployment/migrations/20240710083754_init.sql");
+pub struct SQLiteRepository<T: Any + Send + Sync> {
+    phantom: PhantomData<T>,
+    pool: Arc<SqlitePool>,
+}
+
+impl<T: Any + Send + Sync> SQLiteRepository<T> {
+    // see:https://tms-dev-blog.com/rust-sqlx-basics-with-sqlite/#Adding_a_migration_script
+    pub async fn get_or_init(config: &SqliteAppDBProperties) -> Result<Self, Error> {
+        let config = config.clone();
+        let manager = POOL_MANAGER
+            .get_or_try_init(|| async move { init_pool_manager(config).await })
+            .await?;
+        Ok(SQLiteRepository {
+            phantom: PhantomData,
+            pool: manager.pool.clone(),
+        })
+    }
 
     pub fn get_pool(&self) -> &SqlitePool {
-        &self.pool
+        &*self.pool
     }
 }
 

@@ -38,7 +38,7 @@ pub struct DLockPostgresRepository {
 impl DLockPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(DLockPostgresRepository {
-            inner: PostgresRepository::new(config).await?,
+            inner: PostgresRepository::get_or_init(config).await?,
             initializer: ConcurrentHashMap::new(),
         })
     }

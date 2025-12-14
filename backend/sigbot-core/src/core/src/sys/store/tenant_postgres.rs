@@ -38,7 +38,7 @@ pub struct TenantPostgresRepository {
 impl TenantPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(TenantPostgresRepository {
-            inner: PostgresRepository::new(config).await?,
+            inner: PostgresRepository::get_or_init(config).await?,
         })
     }
 }

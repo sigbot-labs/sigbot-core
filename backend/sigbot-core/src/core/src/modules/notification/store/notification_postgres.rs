@@ -38,7 +38,7 @@ pub struct NotificationInfoPostgresRepository {
 impl NotificationInfoPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(NotificationInfoPostgresRepository {
-            inner: PostgresRepository::new(config).await?,
+            inner: PostgresRepository::get_or_init(config).await?,
         })
     }
 }

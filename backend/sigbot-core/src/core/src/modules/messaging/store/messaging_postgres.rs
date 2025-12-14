@@ -38,7 +38,7 @@ pub struct MessagingInfoPostgresRepository {
 impl MessagingInfoPostgresRepository {
     pub async fn new(config: &PostgresAppDBProperties) -> Result<Self, Error> {
         Ok(MessagingInfoPostgresRepository {
-            inner: PostgresRepository::new(config).await?,
+            inner: PostgresRepository::get_or_init(config).await?,
         })
     }
 }
