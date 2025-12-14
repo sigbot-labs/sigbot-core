@@ -19,15 +19,15 @@
 // This includes modifications and derived works.
 
 #[derive(Clone, Debug)]
-pub struct EntryTradeSignal {
+pub struct EntryTradePosition {
     pub open_pos: EntryPosition,
     pub stop_loss: Option<ExitTradePosition>,
     pub stop_profit: Option<ExitTradePosition>,
     pub description: String,
 }
 
-impl EntryTradeSignal {
-    pub fn validate(&self) -> Result<&EntryTradeSignal, String> {
+impl EntryTradePosition {
+    pub fn validate(&self) -> Result<&EntryTradePosition, String> {
         self.open_pos.validate()?;
         if let Some(pos) = &self.stop_loss {
             pos.validate()?;

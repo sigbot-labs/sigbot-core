@@ -39,7 +39,7 @@ pub trait ISigbotMessagingClient: Send + Sync {
     async fn subscribe(
         &self,
         topic: &str,
-        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync>,
     ) -> Result<(), Error>;
 }
 

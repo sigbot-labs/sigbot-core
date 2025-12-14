@@ -21,5 +21,22 @@
 pub mod entry;
 pub mod exit;
 
+use pyo3::prelude::*;
+
 pub use entry::{breakout, crossover, pattern_recognition};
 pub use exit::{stop_loss, take_profit, trailing_stop};
+
+/// Trading signals submodule for sigbotlib
+#[pymodule]
+#[pyo3(name = "signals")]
+pub fn signals(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // ===== Trading Signals =====
+    m.add_function(wrap_pyfunction!(crossover, m)?)?;
+    m.add_function(wrap_pyfunction!(breakout, m)?)?;
+    m.add_function(wrap_pyfunction!(pattern_recognition, m)?)?;
+    m.add_function(wrap_pyfunction!(stop_loss, m)?)?;
+    m.add_function(wrap_pyfunction!(take_profit, m)?)?;
+    m.add_function(wrap_pyfunction!(trailing_stop, m)?)?;
+
+    Ok(())
+}

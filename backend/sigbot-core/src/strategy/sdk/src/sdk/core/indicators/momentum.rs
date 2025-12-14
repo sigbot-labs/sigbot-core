@@ -18,20 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::series::Series;
+use crate::sdk::core::models::time_series::TimeSeries;
 use pyo3::prelude::*;
 
 /// Relative Strength Index (RSI) - Streaming mode
 /// Calculates RSI incrementally with state caching
 #[pyfunction]
-pub fn rsi(series: &Series, period: usize) -> PyResult<Series> {
+pub fn rsi(series: &TimeSeries, period: usize) -> PyResult<TimeSeries> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
         ));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let data_len = series.len();
 
     if data_len < period + 1 {
@@ -149,12 +149,12 @@ pub fn rsi_batch(prices: Vec<f64>, period: usize) -> PyResult<Vec<f64>> {
 /// Returns (%K, %D) as Series
 #[pyfunction]
 pub fn stochastic(
-    high: &Series,
-    low: &Series,
-    close: &Series,
+    high: &TimeSeries,
+    low: &TimeSeries,
+    close: &TimeSeries,
     k_period: usize,
     d_period: usize,
-) -> PyResult<(Series, Series)> {
+) -> PyResult<(TimeSeries, TimeSeries)> {
     if k_period == 0 || d_period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Periods must be greater than 0",
@@ -163,10 +163,10 @@ pub fn stochastic(
 
     let data_len = high.len().min(low.len()).min(close.len());
     if data_len < k_period {
-        return Ok((Series::new(None), Series::new(None)));
+        return Ok((TimeSeries::new(None), TimeSeries::new(None)));
     }
 
-    let mut k_values = Series::new(None);
+    let mut k_values = TimeSeries::new(None);
 
     // Calculate %K
     for i in 0..=(data_len - k_period) {
@@ -250,7 +250,7 @@ pub fn stochastic_batch(
 
 /// Commodity Channel Index (CCI) - Streaming mode
 #[pyfunction]
-pub fn cci(high: &Series, low: &Series, close: &Series, period: usize) -> PyResult<Series> {
+pub fn cci(high: &TimeSeries, low: &TimeSeries, close: &TimeSeries, period: usize) -> PyResult<TimeSeries> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
@@ -259,10 +259,10 @@ pub fn cci(high: &Series, low: &Series, close: &Series, period: usize) -> PyResu
 
     let data_len = high.len().min(low.len()).min(close.len());
     if data_len < period {
-        return Ok(Series::new(None));
+        return Ok(TimeSeries::new(None));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
 
     for i in 0..=(data_len - period) {
         let mut typical_prices = Vec::with_capacity(period);

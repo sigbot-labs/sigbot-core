@@ -18,13 +18,17 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::series::Series;
+use crate::sdk::core::models::time_series::TimeSeries;
 use pyo3::prelude::*;
 
 /// Bollinger Bands - Streaming mode
 /// Returns (upper_band, middle_band, lower_band) as Series
 #[pyfunction]
-pub fn bollinger_bands(series: &Series, period: usize, std_dev: f64) -> PyResult<(Series, Series, Series)> {
+pub fn bollinger_bands(
+    series: &TimeSeries,
+    period: usize,
+    std_dev: f64,
+) -> PyResult<(TimeSeries, TimeSeries, TimeSeries)> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
@@ -33,12 +37,12 @@ pub fn bollinger_bands(series: &Series, period: usize, std_dev: f64) -> PyResult
 
     let data_len = series.len();
     if data_len < period {
-        return Ok((Series::new(None), Series::new(None), Series::new(None)));
+        return Ok((TimeSeries::new(None), TimeSeries::new(None), TimeSeries::new(None)));
     }
 
-    let mut upper = Series::new(None);
-    let mut middle = Series::new(None);
-    let mut lower = Series::new(None);
+    let mut upper = TimeSeries::new(None);
+    let mut middle = TimeSeries::new(None);
+    let mut lower = TimeSeries::new(None);
 
     // Calculate SMA (middle band) and standard deviation
     for i in 0..=(data_len - period) {
@@ -105,7 +109,7 @@ pub fn bollinger_bands_batch(
 
 /// Average True Range (ATR) - Streaming mode
 #[pyfunction]
-pub fn atr(high: &Series, low: &Series, close: &Series, period: usize) -> PyResult<Series> {
+pub fn atr(high: &TimeSeries, low: &TimeSeries, close: &TimeSeries, period: usize) -> PyResult<TimeSeries> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
@@ -114,10 +118,10 @@ pub fn atr(high: &Series, low: &Series, close: &Series, period: usize) -> PyResu
 
     let data_len = high.len().min(low.len()).min(close.len());
     if data_len < period + 1 {
-        return Ok(Series::new(None));
+        return Ok(TimeSeries::new(None));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let mut tr_values = Vec::new();
 
     // Calculate True Range

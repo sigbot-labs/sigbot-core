@@ -18,14 +18,14 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::series::Series;
+use crate::sdk::core::models::time_series::TimeSeries;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 /// Detect crossover between two series
 /// Returns: 1 for golden cross (fast crosses above slow), -1 for death cross (fast crosses below slow), 0 for no cross
 #[pyfunction]
-pub fn crossover(fast: &Series, slow: &Series) -> PyResult<i32> {
+pub fn crossover(fast: &TimeSeries, slow: &TimeSeries) -> PyResult<i32> {
     let fast_len = fast.len();
     let slow_len = slow.len();
 

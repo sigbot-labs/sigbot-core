@@ -44,8 +44,8 @@ use sigbot_core::cache::{CacheContainer, ICache};
 use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
     modules::exchange::models::{
-        trade_market::{KlineResult, PriceResult},
-        trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult},
+        trade_market::{KlineModel, PriceModel},
+        trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
     },
 };
 use std::collections::HashMap;
@@ -420,7 +420,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
         info!("Closed Binance operator with {}", self.config);
     }
 
-    async fn get_current_price(&self, symbol: &str) -> Result<PriceResult, Error> {
+    async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error> {
         if self.config.use_websocket {
             info!(
                 "Getting current price for symbol={} from Binance using WebSocket API",
@@ -463,7 +463,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                     return Err(Error::msg("Unexpected response type from symbol price ticker API"))
                 }
             };
-            Ok(PriceResult {
+            Ok(PriceModel {
                 price: price.ok_or_else(|| Error::msg("No current price available"))?,
                 time: time.ok_or_else(|| Error::msg("No current time available"))?,
             })
@@ -494,7 +494,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                     return Err(Error::msg("Unexpected response type from symbol price ticker API"))
                 }
             };
-            Ok(PriceResult {
+            Ok(PriceModel {
                 price: price
                     .ok_or_else(|| Error::msg("No current price available"))?
                     .parse::<f64>()
@@ -511,7 +511,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
         start_time: Option<i64>,
         end_time: Option<i64>,
         limit: u32,
-    ) -> Result<Vec<KlineResult>, Error> {
+    ) -> Result<Vec<KlineModel>, Error> {
         if self.config.use_websocket {
             info!(
                 "Getting klines for symbol={} from Binance using WebSocket Streams with interval={}",
@@ -552,7 +552,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
 
                     let kline = data.k.map(|kline| {
                         // let kline0 = Arc::new(kline);
-                        return KlineResult {
+                        return KlineModel {
                             open_time: kline.to_owned().t.map(|v| v as u64).unwrap_or(0),
                             open_price: kline
                                 .to_owned()
@@ -650,7 +650,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
             let data = response.data().await?;
             let klines = data
                 .into_iter()
-                .map(|kline| KlineResult {
+                .map(|kline| KlineModel {
                     open_time: self._extract_kline_item(0, &kline) as u64,
                     open_price: self._extract_kline_item(1, &kline),
                     high_price: self._extract_kline_item(2, &kline),
@@ -664,7 +664,7 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
         }
     }
 
-    async fn entry_position(&self, signal: EntryTradeSignal) -> Result<TradeResult, Error> {
+    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
 
         let order_type_str = signal.open_pos.order_type.to_str();

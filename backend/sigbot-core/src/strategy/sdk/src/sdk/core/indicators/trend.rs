@@ -18,20 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::series::Series;
+use crate::sdk::core::models::time_series::TimeSeries;
 use pyo3::prelude::*;
 
 /// Simple Moving Average (SMA) - Streaming mode
 /// Calculates SMA incrementally, maintaining state
 #[pyfunction]
-pub fn sma(series: &Series, period: usize) -> PyResult<Series> {
+pub fn sma(series: &TimeSeries, period: usize) -> PyResult<TimeSeries> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
         ));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let data_len = series.len();
 
     if data_len < period {
@@ -56,14 +56,14 @@ pub fn sma(series: &Series, period: usize) -> PyResult<Series> {
 /// Exponential Moving Average (EMA) - Streaming mode
 /// Calculates EMA incrementally with state caching
 #[pyfunction]
-pub fn ema(series: &Series, period: usize) -> PyResult<Series> {
+pub fn ema(series: &TimeSeries, period: usize) -> PyResult<TimeSeries> {
     if period == 0 {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Period must be greater than 0",
         ));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let data_len = series.len();
 
     if data_len == 0 {
@@ -87,7 +87,7 @@ pub fn ema(series: &Series, period: usize) -> PyResult<Series> {
     }
 
     // Reverse to maintain chronological order
-    let mut reversed = Series::new(None);
+    let mut reversed = TimeSeries::new(None);
     for i in 0..result.len() {
         if let Some(val) = result.get(i as isize) {
             reversed.append(val);
@@ -155,11 +155,11 @@ pub fn ema_batch(prices: Vec<f64>, period: usize) -> PyResult<Vec<f64>> {
 /// Returns (macd_line, signal_line, histogram) as Series
 #[pyfunction]
 pub fn macd(
-    series: &Series,
+    series: &TimeSeries,
     fast_period: usize,
     slow_period: usize,
     signal_period: usize,
-) -> PyResult<(Series, Series, Series)> {
+) -> PyResult<(TimeSeries, TimeSeries, TimeSeries)> {
     if fast_period >= slow_period {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "Fast period must be less than slow period",
@@ -172,7 +172,7 @@ pub fn macd(
 
     // Calculate MACD line (fast EMA - slow EMA)
     let data_len = fast_ema.len().min(slow_ema.len());
-    let mut macd_line = Series::new(None);
+    let mut macd_line = TimeSeries::new(None);
 
     for i in 0..data_len {
         let fast_val = fast_ema.get(i as isize);
@@ -187,7 +187,7 @@ pub fn macd(
 
     // Calculate histogram (MACD - Signal)
     let hist_len = macd_line.len().min(signal_line.len());
-    let mut histogram = Series::new(None);
+    let mut histogram = TimeSeries::new(None);
 
     for i in 0..hist_len {
         let macd_val = macd_line.get(i as isize);

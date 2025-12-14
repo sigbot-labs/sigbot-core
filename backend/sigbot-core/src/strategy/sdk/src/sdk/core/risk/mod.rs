@@ -21,5 +21,21 @@
 pub mod drawdown;
 pub mod position;
 
+use pyo3::prelude::*;
+
 pub use drawdown::{drawdown_duration, max_drawdown};
 pub use position::{calculate_leverage, calculate_position_size, check_margin_requirement};
+
+/// Risk management submodule for sigbotlib
+#[pymodule]
+#[pyo3(name = "risk")]
+pub fn risk(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // ===== Risk Management =====
+    m.add_function(wrap_pyfunction!(calculate_position_size, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_leverage, m)?)?;
+    m.add_function(wrap_pyfunction!(check_margin_requirement, m)?)?;
+    m.add_function(wrap_pyfunction!(max_drawdown, m)?)?;
+    m.add_function(wrap_pyfunction!(drawdown_duration, m)?)?;
+
+    Ok(())
+}

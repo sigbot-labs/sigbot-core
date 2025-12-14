@@ -19,4 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod trade_market;
-pub mod trade_signal;
+pub mod trade_position;

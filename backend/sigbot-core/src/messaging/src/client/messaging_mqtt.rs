@@ -123,7 +123,7 @@ pub struct SigbotMqttClient {
         Mutex<
             HashMap<
                 String,
-                Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+                Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync>,
             >,
         >,
     >,
@@ -210,7 +210,7 @@ impl ISigbotMessagingClient for SigbotMqttClient {
     async fn subscribe(
         &self,
         topic: &str,
-        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
+        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync>,
     ) -> Result<(), Error> {
         let store_key = topic.to_string();
         if !self.subscription_registrations.lock().await.contains_key(&store_key) {

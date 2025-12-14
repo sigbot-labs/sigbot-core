@@ -36,7 +36,7 @@ impl SigbotStrategyRunnerStarter {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Tenant (Isolated) Strategy Runner.")
+            .about("Run Sigbot tenantization Strategy Runner.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("provider")

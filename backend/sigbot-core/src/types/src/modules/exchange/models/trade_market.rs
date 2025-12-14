@@ -21,7 +21,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KlineResult {
+pub struct KlineModel {
     // open time in milliseconds
     pub open_time: u64,
     pub open_price: f64,
@@ -33,7 +33,7 @@ pub struct KlineResult {
 }
 
 #[derive(Clone, Debug)]
-pub struct PriceResult {
+pub struct PriceModel {
     pub price: f64,
     pub time: u64,
 }

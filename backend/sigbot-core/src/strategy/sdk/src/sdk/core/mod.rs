@@ -18,11 +18,11 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod models;
 pub mod data;
 pub mod indicators;
 pub mod lib;
 pub mod risk;
-pub mod series;
 pub mod signals;
 pub mod utils;
 

@@ -55,7 +55,7 @@ impl SigbotAPIServer {
     pub const COMMAND_NAME: &'static str = "api";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Platform (Central) API Server.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot platformization API Server.")
     }
 
     #[tokio::main]

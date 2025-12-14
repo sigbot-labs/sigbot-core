@@ -38,7 +38,7 @@ impl SigbotDeployerManagerStarter {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Platform (Central) Deployer Manager (Lifecycle management for All components).")
+            .about("Run Sigbot platformization Deployer Manager (Lifecycle management for All components).")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("provider")

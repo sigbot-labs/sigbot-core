@@ -23,8 +23,8 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::exchange::exchange::{ExchangeInfo, ExchangeProvider};
-use sigbot_types::modules::exchange::models::trade_market::{KlineResult, PriceResult};
-use sigbot_types::modules::exchange::models::trade_signal::{EntryTradeSignal, ExitTradePosition, TradeResult};
+use sigbot_types::modules::exchange::models::trade_market::{KlineModel, PriceModel};
+use sigbot_types::modules::exchange::models::trade_position::{EntryTradePosition, ExitTradePosition, TradeResult};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -37,7 +37,7 @@ pub trait ISigbotExchangeClient: Send + Sync {
     fn name(&self) -> &'static str;
     async fn init(&self);
     async fn close(&self);
-    async fn get_current_price(&self, symbol: &str) -> Result<PriceResult, Error>;
+    async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error>;
     async fn get_klines(
         &self,
         symbol: &str,
@@ -45,8 +45,8 @@ pub trait ISigbotExchangeClient: Send + Sync {
         start_time: Option<i64>,
         end_time: Option<i64>,
         limit: u32,
-    ) -> Result<Vec<KlineResult>, Error>;
-    async fn entry_position(&self, signal: EntryTradeSignal) -> Result<TradeResult, Error>;
+    ) -> Result<Vec<KlineModel>, Error>;
+    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error>;
     async fn exit_loss_position(
         &self,
         original_order_id: u64,

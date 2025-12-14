@@ -19,63 +19,38 @@
 // This includes modifications and derived works.
 
 use crate::server::{
-    embed::{
-        batch_executor::BatchStrategyExecutor, pyo3_executor::PyO3StrategyExecutor,
-        streaming_executor::StreamingStrategyExecutor,
-    },
+    embed::{batch_executor::BatchStrategyExecutor, streaming_executor::StreamingStrategyExecutor},
     strategy_factory::ISigbotStrategyRunner,
 };
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
+use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use sigbot_types::modules::{
-    exchange::models::trade_market::KlineResult, messaging::TOPIC_MARKET_DATA,
-    strategy::models::strategy_embed::StrategyExecutionInput,
+    messaging::TOPIC_MARKET_DATA,
+    strategy::{models::strategy_embed::StrategyExecutionInput, SigbotStrategyArgument},
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone)]
 pub struct SigbotDefaultStrategyRunner {
-    pyo3_executor: Arc<PyO3StrategyExecutor>,
-    streaming_executor: Arc<StreamingStrategyExecutor>,
+    #[allow(unused)]
     batch_executor: Arc<BatchStrategyExecutor>,
+    streaming_executor: Arc<StreamingStrategyExecutor>,
 }
 
 impl SigbotDefaultStrategyRunner {
     pub const NAME: &'static str = "DEFAULT";
 
-    pub async fn new() -> Arc<Self> {
-        let pyo3_executor = Arc::new(PyO3StrategyExecutor::new());
-        let streaming_executor = Arc::new(StreamingStrategyExecutor::new(pyo3_executor.clone()));
-        let batch_executor = Arc::new(BatchStrategyExecutor::new(pyo3_executor.clone()));
-
-        // Check if the common data analysis packages are installed.
-        let installed_packages = pyo3_executor.get_installed_packages();
-        if installed_packages.is_empty() {
-            warn!("No common data analysis packages found. Users may need to install polars, pandas, numpy, etc.");
-        } else {
-            info!(
-                "Detected installed common data analysis packages: {:?}",
-                installed_packages
-            );
-        }
+    pub async fn new(strategy_argument: Arc<SigbotStrategyArgument>) -> Arc<Self> {
+        let batch_executor = Arc::new(BatchStrategyExecutor::new(strategy_argument.clone()));
+        let streaming_executor = Arc::new(StreamingStrategyExecutor::new(strategy_argument.clone()));
 
         Arc::new(Self {
-            pyo3_executor,
-            streaming_executor,
             batch_executor,
+            streaming_executor,
         })
-    }
-
-    /// Check if the specified Python package is installed
-    pub fn check_package(&self, package_name: &str) -> bool {
-        self.pyo3_executor.check_package_installed(package_name)
-    }
-
-    /// Get the list of installed Python packages
-    pub fn get_installed_packages(&self) -> Vec<String> {
-        self.pyo3_executor.get_installed_packages()
     }
 
     /// Execute strategy code
@@ -94,103 +69,101 @@ impl SigbotDefaultStrategyRunner {
         info!("Initialized Messaging client. {:?}", messaging.name());
 
         // Subscribe market data from messaging with topics.
+        // let batch_executor = self.batch_executor.clone();
         let streaming_executor = self.streaming_executor.clone();
-        let batch_executor = self.batch_executor.clone();
 
-        let handler: Arc<
-            dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
-        > = Arc::new(move |data: Vec<u8>| {
-            debug!("Received message: {:?}", data);
-            let streaming_executor0 = streaming_executor.clone();
-            let batch_executor0 = batch_executor.clone();
+        let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
+            Arc::new(move |data: Vec<u8>| {
+                debug!("Received message: {:?}", data);
+                // let batch_executor0 = batch_executor.clone();
+                let streaming_executor0 = streaming_executor.clone();
 
-            Box::pin(async move {
-                let data0 = data.to_owned();
-                let input: StrategyExecutionInput =
-                    serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
-                debug!("Parsed input: {:?}", input);
+                Box::pin(async move {
+                    let data0 = data.to_owned();
+                    let input: StrategyExecutionInput =
+                        serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
+                    debug!("Parsed input: {:?}", input);
 
-                // Determine execution mode (default to streaming)
-                let mode = input
-                    .context
-                    .extra_data
-                    .as_ref()
-                    .and_then(|e| e.get("execution_mode"))
-                    .map(|s| s.as_str())
-                    .unwrap_or("STREAMING");
+                    // Determine execution mode from input.run_mode (default to STREAMING)
+                    let mode = if input.run_mode.is_empty() {
+                        "STREAMING"
+                    } else {
+                        input.run_mode.as_str()
+                    };
 
-                let result = match mode {
-                    "BATCH" => {
-                        // Batch mode: parse all K-lines from market_data
-                        if let Some(market_data) = &input.context.market_data {
-                            let klines: Vec<KlineResult> =
-                                serde_json::from_str(market_data).context("Failed to parse K-lines for batch mode")?;
-                            batch_executor0.execute_batch(klines, &input.code, input.context.parameters.clone())
-                        } else {
-                            warn!("Batch mode requires market_data with K-lines array");
-                            Ok(
-                                sigbot_types::modules::strategy::models::strategy_embed::StrategyExecutionResult {
-                                    success: false,
-                                    result: None,
-                                    error: Some("Batch mode requires market_data".to_string()),
-                                    duration_ms: 0,
-                                },
-                            )
+                    let result: Result<String, Error> = match mode {
+                        "BATCH" => {
+                            // Batch mode: process all market data entries
+                            unimplemented!("Unsupported the strategy batch runtime.")
                         }
-                    }
-                    _ => {
-                        // Streaming mode: parse single K-line from market_data
-                        if let Some(market_data) = &input.context.market_data {
-                            let kline: KlineResult = serde_json::from_str(market_data)
-                                .context("Failed to parse K-line for streaming mode")?;
-
-                            // Extract symbol and timeframe from context
-                            let symbol = input
-                                .context
-                                .extra_data
-                                .as_ref()
-                                .and_then(|e| e.get("symbol"))
-                                .cloned()
-                                .unwrap_or_else(|| "UNKNOWN".to_string());
-                            let timeframe = input
-                                .context
-                                .extra_data
-                                .as_ref()
-                                .and_then(|e| e.get("timeframe"))
-                                .cloned()
-                                .unwrap_or_else(|| "1m".to_string());
-
-                            streaming_executor0.on_bar(
-                                &symbol,
-                                &timeframe,
-                                kline,
-                                &input.code,
-                                input.context.parameters.clone(),
-                            )
-                        } else {
-                            warn!("Streaming mode requires market_data with single K-line");
-                            Ok(
-                                sigbot_types::modules::strategy::models::strategy_embed::StrategyExecutionResult {
-                                    success: false,
-                                    result: None,
-                                    error: Some("Streaming mode requires market_data".to_string()),
-                                    duration_ms: 0,
-                                },
-                            )
+                        // Streaming mode
+                        _ => {
+                            // Pass the entire StrategyExecutionInput object directly
+                            let result = streaming_executor0.process(&input);
+                            match result {
+                                Ok((execution_result, trade_signal)) => {
+                                    if execution_result.success {
+                                        // If there's a trading signal, execute the trade
+                                        if let Some(signal) = trade_signal {
+                                            info!("Received trading signal: {:?}", signal);
+                                            // Get exchange client (assuming BINANCE for now, can be made configurable)
+                                            match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string())
+                                                .await
+                                            {
+                                                Ok(exchange_client) => {
+                                                    match exchange_client.entry_position(signal).await {
+                                                        Ok(trade_result) => {
+                                                            info!(
+                                                                "Trade executed successfully: order_id={}, success={}",
+                                                                trade_result.order_id, trade_result.success
+                                                            );
+                                                            Ok(format!(
+                                                                "Trade executed: order_id={}",
+                                                                trade_result.order_id
+                                                            ))
+                                                        }
+                                                        Err(e) => {
+                                                            warn!("Failed to execute trade: {}", e);
+                                                            Err(anyhow::anyhow!("Failed to execute trade: {}", e))
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    warn!("Failed to get exchange client: {}", e);
+                                                    Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
+                                                }
+                                            }
+                                        } else {
+                                            debug!("No trading signal generated");
+                                            Ok("No signal".to_string())
+                                        }
+                                    } else {
+                                        let error_msg = execution_result
+                                            .error
+                                            .clone()
+                                            .unwrap_or_else(|| "Unknown error".to_string());
+                                        warn!("Strategy execution failed: {}", error_msg);
+                                        Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to execute strategy: {}", e);
+                                    Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
+                                }
+                            }
                         }
-                    }
-                };
+                    };
 
-                if let Err(ref e) = result {
-                    warn!("Failed to execute strategy: {}", e);
-                    // TODO: statistics the error metrics.
-                } else {
-                    debug!("Executed strategy successfully. Result: {:?}", result);
-                    // TODO: statistics the success metrics.
-                }
-                Ok(data0)
-            })
-        });
+                    if let Err(ref e) = result {
+                        warn!("Failed to execute strategy: {}", e);
+                        // TODO: statistics the error metrics.
+                    } else {
+                        debug!("Executed strategy successfully. Result: {:?}", result);
+                        // TODO: statistics the success metrics.
+                    }
+                    result
+                })
+            });
 
         let _ = messaging
             .subscribe(TOPIC_MARKET_DATA, handler) // TODO: configuable
@@ -210,11 +183,13 @@ impl ISigbotStrategyRunner for SigbotDefaultStrategyRunner {
         info!("Starting Embed Strategy Runner.");
 
         // Warm up the Python interpreter.
-        if let Err(e) = self.pyo3_executor.ensure_initialized() {
-            warn!("Failed to initialize Python interpreter: {}", e);
-        } else {
-            info!("Python interpreter ready for strategy execution");
-        }
+        self.batch_executor
+            .init()
+            .expect("Failed to initializing batch executor.");
+
+        self.streaming_executor
+            .init()
+            .expect("Failed to initializing streaming executor.");
     }
 
     async fn shutdown(&self) {

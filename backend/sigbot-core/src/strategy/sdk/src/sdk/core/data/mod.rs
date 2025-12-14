@@ -22,6 +22,24 @@ pub mod kline;
 pub mod resample;
 pub mod tick;
 
+use pyo3::prelude::*;
+use pyo3::wrap_pymodule;
+
 pub use kline::{filter_klines, parse_klines, validate_kline};
 pub use resample::{resample_klines, resample_ohlcv};
 pub use tick::{parse_ticks, ticks_to_klines};
+
+/// Data processing submodule for sigbotlib
+#[pymodule]
+#[pyo3(name = "data")]
+pub fn data(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // ===== Data Processing =====
+    m.add_function(wrap_pyfunction!(parse_klines, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_kline, m)?)?;
+    m.add_function(wrap_pyfunction!(filter_klines, m)?)?;
+    m.add_function(wrap_pyfunction!(resample_klines, m)?)?;
+    m.add_function(wrap_pyfunction!(resample_ohlcv, m)?)?;
+    m.add_function(wrap_pyfunction!(ticks_to_klines, m)?)?;
+
+    Ok(())
+}

@@ -48,23 +48,22 @@ impl SigbotNotificationForwarder {
             .expect("Failed to initialize Messaging client.");
 
         // TODO: Subscribe alarm messages.
-        let handler: Arc<
-            dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
-        > = Arc::new(move |data: Vec<u8>| {
-            let notifications0 = notifications.to_owned();
-            Box::pin(async move {
-                info!("Received message: {:?}", data);
-                for notification in notifications0.iter() {
-                    // TODO: Forwarding message via notification client.
-                    let res = notification
-                        .send_message("test@example.com", "Hello, world!")
-                        .await
-                        .context("Failed to send message.")?;
-                    info!("Sent notification message: {:?}.", res);
-                }
-                Ok(data)
-            })
-        });
+        let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
+            Arc::new(move |data: Vec<u8>| {
+                let notifications0 = notifications.to_owned();
+                Box::pin(async move {
+                    info!("Received message: {:?}", data);
+                    for notification in notifications0.iter() {
+                        // TODO: Forwarding message via notification client.
+                        let res = notification
+                            .send_message("test@example.com", "Hello, world!")
+                            .await
+                            .context("Failed to send message.")?;
+                        info!("Sent notification message: {:?}.", res);
+                    }
+                    Ok("OK".to_string())
+                })
+            });
         let _ = messaging
             .subscribe(TOPIC_NOTIFICATION_ALARM, handler) // TODO: configuable
             .await

@@ -7718,6 +7718,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sigbot-core",
+ "sigbot-exchange",
  "sigbot-messaging",
  "sigbot-strategy-sdk",
  "sigbot-types",

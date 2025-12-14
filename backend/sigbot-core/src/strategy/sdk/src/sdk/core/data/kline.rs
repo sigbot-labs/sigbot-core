@@ -20,13 +20,13 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use sigbot_types::modules::exchange::models::trade_market::KlineResult;
+use sigbot_types::modules::exchange::models::trade_market::KlineModel;
 
 /// Parse K-line data from JSON string
 #[pyfunction]
 pub fn parse_klines(json_data: &str) -> PyResult<Vec<PyObject>> {
     Python::with_gil(|py| {
-        let klines: Vec<KlineResult> = serde_json::from_str(json_data)
+        let klines: Vec<KlineModel> = serde_json::from_str(json_data)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Failed to parse JSON: {}", e)))?;
 
         let mut result = Vec::new();

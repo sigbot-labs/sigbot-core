@@ -21,22 +21,27 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::modules::exchange::models::trade_market::KlineModel;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyExecutionInput {
     /// Strategy code
     pub code: String,
-    /// Strategy execution context
+    /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
+    /// This is a system-level runtime parameter set during strategy runner initialization
+    pub run_mode: String,
+    /// Strategy execution context (event-driven data for each market data update)
     pub context: StrategyContext,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyContext {
-    /// Market Data（JSON format）
-    pub market_data: Option<String>,
-    /// Strategy parameters
-    pub parameters: Option<HashMap<String, String>>,
-    /// Other context data
-    pub extra_data: Option<HashMap<String, String>>,
+    /// Strategy input kline data map.
+    /// e.g: {"btcusdc_5m": {"close": 100000, "high": 100000, "low": 99000, "open": 100000, "volume": 10000}}
+    pub kline_data: Option<HashMap<String, KlineModel>>,
+    /// Strategy input market data map.  
+    /// e.g: {"truthsocial::trump_post": {"2025-10-25T12:54:52.605Z": "..."}, "twitter::elon_post": {"2025-12-14T12:54:52.605Z": "..."}}
+    pub market_data: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 /// Strategy execution result

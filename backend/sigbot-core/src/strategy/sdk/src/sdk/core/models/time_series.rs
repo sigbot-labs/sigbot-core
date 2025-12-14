@@ -25,13 +25,13 @@ use std::collections::VecDeque;
 /// Similar to banta's Series, maintains a rolling window of values
 #[pyclass]
 #[derive(Clone, Debug)]
-pub struct Series {
+pub struct TimeSeries {
     data: VecDeque<f64>,
     max_length: Option<usize>,
 }
 
 #[pymethods]
-impl Series {
+impl TimeSeries {
     #[new]
     #[pyo3(signature = (max_length=None))]
     pub fn new(max_length: Option<usize>) -> Self {
@@ -100,8 +100,8 @@ impl Series {
 /// Create a Series from a Vec<f64>
 #[pyfunction]
 #[pyo3(signature = (data, max_length=None))]
-pub fn series_from_vec(data: Vec<f64>, max_length: Option<usize>) -> Series {
-    let mut s = Series::new(max_length);
+pub fn series_from_vec(data: Vec<f64>, max_length: Option<usize>) -> TimeSeries {
+    let mut s = TimeSeries::new(max_length);
     for value in data {
         s.append(value);
     }

@@ -23,6 +23,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
 use lazy_static::lazy_static;
+use sigbot_types::modules::strategy::SigbotStrategyArgument;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -68,6 +69,16 @@ impl SigbotStrategyRunnerFactory {
             .expect("Failed to parse the strategy runner provider from the command line arguments.")
             .to_uppercase();
 
+        // e.g '--configuration=json_string'
+        let strategy_argument = matches
+            .try_get_one::<String>("configuration")
+            .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
+            .map(|c| {
+                SigbotStrategyArgument::from_json(&c)
+                    .expect("Failed to parse the strategy runner configuration from the command line arguments.")
+            })
+            .expect("Failed to parse the strategy runner configuration from the command line arguments.");
+
         info!("Registering strategy runner with provider: {}", &provider);
         match provider.as_str() {
             SigbotDefaultStrategyRunner::NAME => {
@@ -76,7 +87,7 @@ impl SigbotStrategyRunnerFactory {
                     .unwrap()
                     .register0(
                         &SigbotDefaultStrategyRunner::NAME.to_owned(),
-                        SigbotDefaultStrategyRunner::new().await, // TODO: set up run configuration?
+                        SigbotDefaultStrategyRunner::new(Arc::new(strategy_argument)).await, // TODO: set up run configuration?
                     )
                     .expect(&format!("Failed to register the strategy runner with provider: {}.", &provider).as_str());
             }

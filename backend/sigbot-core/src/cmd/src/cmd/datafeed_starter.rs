@@ -41,7 +41,7 @@ impl SigbotDatafeedIngestorStarter {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Tenant (Isolated) Datafeed Ingestor.")
+            .about("Run Sigbot tenantization Datafeed Ingestor.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("provider")

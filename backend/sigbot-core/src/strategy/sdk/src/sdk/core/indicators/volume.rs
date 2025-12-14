@@ -18,18 +18,18 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::series::Series;
+use crate::sdk::core::models::time_series::TimeSeries;
 use pyo3::prelude::*;
 
 /// On-Balance Volume (OBV) - Streaming mode
 #[pyfunction]
-pub fn obv(close: &Series, volume: &Series) -> PyResult<Series> {
+pub fn obv(close: &TimeSeries, volume: &TimeSeries) -> PyResult<TimeSeries> {
     let data_len = close.len().min(volume.len());
     if data_len < 2 {
-        return Ok(Series::new(None));
+        return Ok(TimeSeries::new(None));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let mut obv_value = 0.0;
 
     // First OBV value is the first volume
@@ -59,7 +59,7 @@ pub fn obv(close: &Series, volume: &Series) -> PyResult<Series> {
     }
 
     // Reverse to maintain chronological order
-    let mut reversed = Series::new(None);
+    let mut reversed = TimeSeries::new(None);
     for i in 0..result.len() {
         if let Some(val) = result.get(i as isize) {
             reversed.append(val);
@@ -101,14 +101,14 @@ pub fn obv_batch(closes: Vec<f64>, volumes: Vec<f64>) -> PyResult<Vec<f64>> {
 
 /// Volume Weighted Average Price (VWAP) - Streaming mode
 #[pyfunction]
-pub fn vwap(high: &Series, low: &Series, close: &Series, volume: &Series) -> PyResult<Series> {
+pub fn vwap(high: &TimeSeries, low: &TimeSeries, close: &TimeSeries, volume: &TimeSeries) -> PyResult<TimeSeries> {
     let data_len = high.len().min(low.len()).min(close.len()).min(volume.len());
 
     if data_len == 0 {
-        return Ok(Series::new(None));
+        return Ok(TimeSeries::new(None));
     }
 
-    let mut result = Series::new(None);
+    let mut result = TimeSeries::new(None);
     let mut cumulative_tpv = 0.0; // Typical Price * Volume
     let mut cumulative_volume = 0.0;
 

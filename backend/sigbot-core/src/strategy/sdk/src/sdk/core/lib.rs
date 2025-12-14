@@ -18,22 +18,18 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::sdk::core::data::{
-    filter_klines, parse_klines, resample_klines, resample_ohlcv, ticks_to_klines, validate_kline,
+use crate::sdk::core::models::time_series::{series_from_vec, TimeSeries};
+use crate::sdk::core::models::trade_signal::{
+    PyEntryPosition, PyExitPosition, PyOrderType, PyTradeSide, TradingSignal,
 };
-use crate::sdk::core::indicators::{
-    atr, atr_batch, bollinger_bands, bollinger_bands_batch, cci, cci_batch, ema, ema_batch, macd, macd_batch, obv,
-    obv_batch, rsi, rsi_batch, sma, sma_batch, stochastic, stochastic_batch, vwap, vwap_batch,
-};
-use crate::sdk::core::risk::{
-    calculate_leverage, calculate_position_size, check_margin_requirement, drawdown_duration, max_drawdown,
-};
-use crate::sdk::core::series::{series_from_vec, Series};
-use crate::sdk::core::signals::{breakout, crossover, pattern_recognition, stop_loss, take_profit, trailing_stop};
-use crate::sdk::core::utils::{
-    align_timestamps, correlation, datetime_to_timestamp, normalize, sharpe_ratio, standardize, timestamp_to_datetime,
-};
+use crate::sdk::core::data::data;
+use crate::sdk::core::indicators::indicators;
+use crate::sdk::core::risk::risk;
+use crate::sdk::core::signals::signals;
+use crate::sdk::core::utils::utils;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use pyo3::wrap_pymodule;
 
 /// Sigbot strategy Library Python module
 /// Provides high-performance technical indicators and data processing functions
@@ -41,82 +37,38 @@ use pyo3::prelude::*;
 #[pyo3(name = "sigbotlib")]
 pub fn sigbotlib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Series class
-    m.add_class::<Series>()?;
+    m.add_class::<TimeSeries>()?;
+
+    // Register trading signal classes
+    m.add_class::<TradingSignal>()?;
+    m.add_class::<PyEntryPosition>()?;
+    m.add_class::<PyExitPosition>()?;
+    m.add_class::<PyTradeSide>()?;
+    m.add_class::<PyOrderType>()?;
 
     // Register series utility functions
     m.add_function(wrap_pyfunction!(series_from_vec, m)?)?;
 
-    // ===== Trend Indicators =====
-    // Streaming mode
-    m.add_function(wrap_pyfunction!(sma, m)?)?;
-    m.add_function(wrap_pyfunction!(ema, m)?)?;
-    m.add_function(wrap_pyfunction!(macd, m)?)?;
+    // Register submodules
+    // This allows importing submodules nicely from Python
+    // e.g. import sigbotlib.indicators as ind
+    m.add_wrapped(wrap_pymodule!(indicators))?;
+    m.add_wrapped(wrap_pymodule!(risk))?;
+    m.add_wrapped(wrap_pymodule!(signals))?;
+    m.add_wrapped(wrap_pymodule!(utils))?;
+    m.add_wrapped(wrap_pymodule!(data))?;
 
-    // Batch mode
-    m.add_function(wrap_pyfunction!(sma_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(ema_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(macd_batch, m)?)?;
-
-    // ===== Momentum Indicators =====
-    // Streaming mode
-    m.add_function(wrap_pyfunction!(rsi, m)?)?;
-    m.add_function(wrap_pyfunction!(stochastic, m)?)?;
-    m.add_function(wrap_pyfunction!(cci, m)?)?;
-
-    // Batch mode
-    m.add_function(wrap_pyfunction!(rsi_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(stochastic_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(cci_batch, m)?)?;
-
-    // ===== Volatility Indicators =====
-    // Streaming mode
-    m.add_function(wrap_pyfunction!(bollinger_bands, m)?)?;
-    m.add_function(wrap_pyfunction!(atr, m)?)?;
-
-    // Batch mode
-    m.add_function(wrap_pyfunction!(bollinger_bands_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(atr_batch, m)?)?;
-
-    // ===== Volume Indicators =====
-    // Streaming mode
-    m.add_function(wrap_pyfunction!(obv, m)?)?;
-    m.add_function(wrap_pyfunction!(vwap, m)?)?;
-
-    // Batch mode
-    m.add_function(wrap_pyfunction!(obv_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(vwap_batch, m)?)?;
-
-    // ===== Data Processing =====
-    m.add_function(wrap_pyfunction!(parse_klines, m)?)?;
-    m.add_function(wrap_pyfunction!(validate_kline, m)?)?;
-    m.add_function(wrap_pyfunction!(filter_klines, m)?)?;
-    m.add_function(wrap_pyfunction!(resample_klines, m)?)?;
-    m.add_function(wrap_pyfunction!(resample_ohlcv, m)?)?;
-    m.add_function(wrap_pyfunction!(ticks_to_klines, m)?)?;
-
-    // ===== Trading Signals =====
-    m.add_function(wrap_pyfunction!(crossover, m)?)?;
-    m.add_function(wrap_pyfunction!(breakout, m)?)?;
-    m.add_function(wrap_pyfunction!(pattern_recognition, m)?)?;
-    m.add_function(wrap_pyfunction!(stop_loss, m)?)?;
-    m.add_function(wrap_pyfunction!(take_profit, m)?)?;
-    m.add_function(wrap_pyfunction!(trailing_stop, m)?)?;
-
-    // ===== Risk Management =====
-    m.add_function(wrap_pyfunction!(calculate_position_size, m)?)?;
-    m.add_function(wrap_pyfunction!(calculate_leverage, m)?)?;
-    m.add_function(wrap_pyfunction!(check_margin_requirement, m)?)?;
-    m.add_function(wrap_pyfunction!(max_drawdown, m)?)?;
-    m.add_function(wrap_pyfunction!(drawdown_duration, m)?)?;
-
-    // ===== Utility Functions =====
-    m.add_function(wrap_pyfunction!(normalize, m)?)?;
-    m.add_function(wrap_pyfunction!(standardize, m)?)?;
-    m.add_function(wrap_pyfunction!(correlation, m)?)?;
-    m.add_function(wrap_pyfunction!(sharpe_ratio, m)?)?;
-    m.add_function(wrap_pyfunction!(timestamp_to_datetime, m)?)?;
-    m.add_function(wrap_pyfunction!(datetime_to_timestamp, m)?)?;
-    m.add_function(wrap_pyfunction!(align_timestamps, m)?)?;
+    // Inserting to sys.modules allows importing submodules nicely from Python
+    // e.g. import sigbotlib.indicators as ind
+    let py = m.py();
+    let sys = py.import_bound("sys")?;
+    let sys_modules = sys.getattr("modules")?;
+    let sys_modules_dict = sys_modules.downcast::<PyDict>()?;
+    sys_modules_dict.set_item("sigbotlib.indicators", m.getattr("indicators")?)?;
+    sys_modules_dict.set_item("sigbotlib.risk", m.getattr("risk")?)?;
+    sys_modules_dict.set_item("sigbotlib.signals", m.getattr("signals")?)?;
+    sys_modules_dict.set_item("sigbotlib.utils", m.getattr("utils")?)?;
+    sys_modules_dict.set_item("sigbotlib.data", m.getattr("data")?)?;
 
     Ok(())
 }

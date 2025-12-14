@@ -23,7 +23,56 @@ pub mod trend;
 pub mod volatility;
 pub mod volume;
 
+use pyo3::prelude::*;
+
 pub use momentum::{cci, cci_batch, rsi, rsi_batch, stochastic, stochastic_batch};
 pub use trend::{ema, ema_batch, macd, macd_batch, sma, sma_batch};
 pub use volatility::{atr, atr_batch, bollinger_bands, bollinger_bands_batch};
 pub use volume::{obv, obv_batch, vwap, vwap_batch};
+
+/// Indicators submodule for sigbotlib
+#[pymodule]
+#[pyo3(name = "indicators")]
+pub fn indicators(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // ===== Trend Indicators =====
+    // Streaming mode
+    m.add_function(wrap_pyfunction!(sma, m)?)?;
+    m.add_function(wrap_pyfunction!(ema, m)?)?;
+    m.add_function(wrap_pyfunction!(macd, m)?)?;
+
+    // Batch mode
+    m.add_function(wrap_pyfunction!(sma_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(ema_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(macd_batch, m)?)?;
+
+    // ===== Momentum Indicators =====
+    // Streaming mode
+    m.add_function(wrap_pyfunction!(rsi, m)?)?;
+    m.add_function(wrap_pyfunction!(stochastic, m)?)?;
+    m.add_function(wrap_pyfunction!(cci, m)?)?;
+
+    // Batch mode
+    m.add_function(wrap_pyfunction!(rsi_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(stochastic_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(cci_batch, m)?)?;
+
+    // ===== Volatility Indicators =====
+    // Streaming mode
+    m.add_function(wrap_pyfunction!(bollinger_bands, m)?)?;
+    m.add_function(wrap_pyfunction!(atr, m)?)?;
+
+    // Batch mode
+    m.add_function(wrap_pyfunction!(bollinger_bands_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(atr_batch, m)?)?;
+
+    // ===== Volume Indicators =====
+    // Streaming mode
+    m.add_function(wrap_pyfunction!(obv, m)?)?;
+    m.add_function(wrap_pyfunction!(vwap, m)?)?;
+
+    // Batch mode
+    m.add_function(wrap_pyfunction!(obv_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(vwap_batch, m)?)?;
+
+    Ok(())
+}

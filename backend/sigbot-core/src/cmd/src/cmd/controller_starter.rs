@@ -36,7 +36,7 @@ impl SigbotControllerManagerStarter {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Tenant (Isolated) Controller Manager (lifecycle workflow, strategy, backtest runner)")
+            .about("Run Sigbot tenantization Controller Manager (lifecycle workflow, strategy, backtest runner)")
     }
 
     #[tokio::main]
