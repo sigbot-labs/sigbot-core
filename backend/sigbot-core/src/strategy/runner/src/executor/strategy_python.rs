@@ -64,210 +64,97 @@ impl SigbotPythonStrategyExecutor {
             .expect("Failed to lock batch executor.")
             .to_owned();
 
-        let streaming_executor = self
-            .streaming_executor
-            .lock()
-            .expect("Failed to lock streaming executor.")
-            .to_owned();
-
-        let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
-            Arc::new(move |data: Vec<u8>| {
-                let streaming_executor = streaming_executor.clone();
-                let batch_executor = batch_executor.clone();
-                debug!("Received message: {:?}", data);
-                Box::pin(async move {
-                    let data0 = data.to_owned();
-                    let input: StrategyExecutionInput =
-                        serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
-                    debug!("Parsed input: {:?}", input);
-
-                    // Determine execution mode from input.run_mode (default to STREAMING)
-                    let mode = if input.run_mode.is_empty() {
-                        "STREAMING"
-                    } else {
-                        input.run_mode.as_str()
-                    };
-
-                    let result: Result<String, Error> = match mode {
-                        "BATCH" => {
-                            // Batch mode: process all market data entries
-                            unimplemented!("Unsupported the strategy batch runtime.")
-                        }
-                        // Streaming mode
-                        _ => {
-                            // Pass the entire StrategyExecutionInput object directly
-                            let executor = streaming_executor
-                                .as_ref()
-                                .expect("Streaming executor is not initialized.");
-                            let result = executor.process(&input);
-                            match result {
-                                Ok((execution_result, trade_signal)) => {
-                                    if execution_result.success {
-                                        // If there's a trading signal, execute the trade
-                                        if let Some(signal) = trade_signal {
-                                            info!("Received trading signal: {:?}", signal);
-                                            // Get exchange client (assuming BINANCE for now, can be made configurable)
-                                            match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string())
-                                                .await
-                                            {
-                                                Ok(exchange_client) => {
-                                                    match exchange_client.entry_position(signal).await {
-                                                        Ok(trade_result) => {
-                                                            info!(
-                                                                "Trade executed successfully: order_id={}, success={}",
-                                                                trade_result.order_id, trade_result.success
-                                                            );
-                                                            Ok(format!(
-                                                                "Trade executed: order_id={}",
-                                                                trade_result.order_id
-                                                            ))
-                                                        }
-                                                        Err(e) => {
-                                                            warn!("Failed to execute trade: {}", e);
-                                                            Err(anyhow::anyhow!("Failed to execute trade: {}", e))
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    warn!("Failed to get exchange client: {}", e);
-                                                    Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
-                                                }
-                                            }
-                                        } else {
-                                            debug!("No trading signal generated");
-                                            Ok("No signal".to_string())
-                                        }
-                                    } else {
-                                        let error_msg = execution_result
-                                            .error
-                                            .clone()
-                                            .unwrap_or_else(|| "Unknown error".to_string());
-                                        warn!("Strategy execution failed: {}", error_msg);
-                                        Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("Failed to execute strategy: {}", e);
-                                    Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
-                                }
-                            }
-                        }
-                    };
-
-                    if let Err(ref e) = result {
-                        warn!("Failed to execute strategy: {}", e);
-                        // TODO: statistics the error metrics.
-                    } else {
-                        debug!("Executed strategy successfully. Result: {:?}", result);
-                        // TODO: statistics the success metrics.
-                    }
-                    result
-                })
-            });
-
-        let _ = messaging
-            .subscribe(TOPIC_MARKET_DATA, handler) // TODO: configuable
-            .await
-            .expect("Failed to subscribe to the messaging topic.");
-
-        info!("Subscribed to the messaging topic: {:?}.", TOPIC_MARKET_DATA);
+        unimplemented!()
     }
 
     #[allow(unused_variables)]
     pub async fn execute_streaming(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
-        // Clone executor Arc before moving into closure to avoid holding MutexGuard across await
-        let batch_executor = self
-            .batch_executor
-            .lock()
-            .expect("Failed to lock batch executor.")
-            .to_owned();
-
         let streaming_executor = self
             .streaming_executor
             .lock()
             .expect("Failed to lock streaming executor.")
             .to_owned();
 
+        let strategy_id = self
+            .argument
+            .strategy_config
+            .base
+            .id
+            .as_ref()
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+
         let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
             Arc::new(move |data: Vec<u8>| {
-                let streaming_executor = streaming_executor.clone();
-                let batch_executor = batch_executor.clone();
+                let executor0 = streaming_executor.clone();
+                let strategy_id0 = strategy_id.to_owned();
                 debug!("Received message: {:?}", data);
+
                 Box::pin(async move {
                     let data0 = data.to_owned();
                     let input: StrategyExecutionInput =
                         serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
                     debug!("Parsed input: {:?}", input);
 
-                    // Determine execution mode from input.run_mode (default to STREAMING)
-                    let mode = if input.run_mode.is_empty() {
-                        "STREAMING"
-                    } else {
-                        input.run_mode.as_str()
-                    };
+                    let result: Result<String, Error> = {
+                        match executor0
+                            .as_ref()
+                            .expect("Streaming executor is not initialized.")
+                            .process(&input)
+                        {
+                            Ok((execution_result, trade_signal)) => {
+                                if execution_result.success {
+                                    // Statistics to strategy execution total metrics.
+                                    sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
+                                        .with_label_values(&[strategy_id0.as_str(), "success"])
+                                        .inc();
 
-                    let result: Result<String, Error> = match mode {
-                        "BATCH" => {
-                            // Batch mode: process all market data entries
-                            unimplemented!("Unsupported the strategy batch runtime.")
-                        }
-                        // Streaming mode
-                        _ => {
-                            // Pass the entire StrategyExecutionInput object directly
-                            let executor = streaming_executor
-                                .as_ref()
-                                .expect("Streaming executor is not initialized.");
-                            let result = executor.process(&input);
-                            match result {
-                                Ok((execution_result, trade_signal)) => {
-                                    if execution_result.success {
-                                        // If there's a trading signal, execute the trade
-                                        if let Some(signal) = trade_signal {
-                                            info!("Received trading signal: {:?}", signal);
-                                            // Get exchange client (assuming BINANCE for now, can be made configurable)
-                                            match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string())
-                                                .await
-                                            {
-                                                Ok(exchange_client) => {
-                                                    match exchange_client.entry_position(signal).await {
-                                                        Ok(trade_result) => {
-                                                            info!(
-                                                                "Trade executed successfully: order_id={}, success={}",
-                                                                trade_result.order_id, trade_result.success
-                                                            );
-                                                            Ok(format!(
-                                                                "Trade executed: order_id={}",
-                                                                trade_result.order_id
-                                                            ))
-                                                        }
-                                                        Err(e) => {
-                                                            warn!("Failed to execute trade: {}", e);
-                                                            Err(anyhow::anyhow!("Failed to execute trade: {}", e))
-                                                        }
-                                                    }
+                                    // If there's a trading signal, execute the trade
+                                    if let Some(signal) = trade_signal {
+                                        info!("Received trading signal: {:?}", signal);
+                                        // Get exchange client (assuming BINANCE for now, can be made configurable)
+                                        match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string())
+                                            .await
+                                        {
+                                            Ok(exchange_client) => match exchange_client.entry_position(signal).await {
+                                                Ok(trade_result) => {
+                                                    info!(
+                                                        "Trade executed successfully: order_id={}, success={}",
+                                                        trade_result.order_id, trade_result.success
+                                                    );
+                                                    Ok(format!("Trade executed: order_id={}", trade_result.order_id))
                                                 }
                                                 Err(e) => {
-                                                    warn!("Failed to get exchange client: {}", e);
-                                                    Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
+                                                    warn!("Failed to execute trade: {}", e);
+                                                    Err(anyhow::anyhow!("Failed to execute trade: {}", e))
                                                 }
+                                            },
+                                            Err(e) => {
+                                                warn!("Failed to get exchange client: {}", e);
+                                                Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
                                             }
-                                        } else {
-                                            debug!("No trading signal generated");
-                                            Ok("No signal".to_string())
                                         }
                                     } else {
-                                        let error_msg = execution_result
-                                            .error
-                                            .clone()
-                                            .unwrap_or_else(|| "Unknown error".to_string());
-                                        warn!("Strategy execution failed: {}", error_msg);
-                                        Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
+                                        debug!("No trading signal generated");
+                                        Ok("No signal".to_string())
                                     }
+                                } else {
+                                    // Statistics to strategy execution total metrics.
+                                    sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
+                                        .with_label_values(&[strategy_id0.as_str(), "error"])
+                                        .inc();
+
+                                    let error_msg = execution_result
+                                        .error
+                                        .clone()
+                                        .unwrap_or_else(|| "Unknown error".to_string());
+                                    warn!("Strategy execution failed: {}", error_msg);
+                                    Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
                                 }
-                                Err(e) => {
-                                    warn!("Failed to execute strategy: {}", e);
-                                    Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
-                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to execute strategy: {}", e);
+                                Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
                             }
                         }
                     };

@@ -22,7 +22,8 @@ use crate::apm;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use common_telemetry::info;
-use sigbot_core::{config::config::get_config, mgmt};
+use prometheus::{Encoder, TextEncoder};
+use sigbot_core::config::config::get_config;
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_handler;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -33,12 +34,40 @@ impl SigbotManagementServer {
     pub async fn start(verbose: bool, signal_s: oneshot::Sender<()>) -> JoinHandle<()> {
         let config = get_config();
 
-        let (prometheus_layer, _) = PrometheusMetricLayer::pair();
+        let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
+
+        // Handler that collects metrics from both systems:
+        // 1. prometheus::gather() - collects custom metrics from prometheus crate's default registry
+        // 2. metric_handle.render() - collects HTTP request metrics from axum-prometheus
+        let metric_handle_clone = metric_handle.clone();
+        let handler = move || {
+            let handle = metric_handle_clone.clone();
+            async move {
+                // Collect custom metrics from prometheus crate
+                let mut buffer = Vec::new();
+                let encoder = TextEncoder::new();
+                let prometheus_metrics = match encoder.encode(&prometheus::gather(), &mut buffer) {
+                    Ok(_) => String::from_utf8(buffer).unwrap_or_default(),
+                    Err(_) => String::new(),
+                };
+
+                // Collect HTTP metrics from axum-prometheus
+                let axum_metrics = handle.render();
+
+                // Merge both metrics outputs
+                if prometheus_metrics.trim().is_empty() {
+                    axum_metrics
+                } else if axum_metrics.trim().is_empty() {
+                    prometheus_metrics
+                } else {
+                    // Combine both, prometheus metrics first, then axum metrics
+                    format!("{}\n{}", prometheus_metrics.trim(), axum_metrics.trim())
+                }
+            }
+        };
 
         let app: Router = Router::new()
-            // TODO: There are merge??
-            .route("/metrics1", get(mgmt::apm::metrics::handle_metrics))
-            .route("/metrics2", get(apm::handle_metrics))
+            .route("/metrics", get(handler))
             .layer(prometheus_layer)
             .merge(apm::debug_router());
 
