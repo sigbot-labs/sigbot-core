@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::context::state::SigbotState;
+use crate::{context::state::SigbotState, llm::handler::llm_factory::SigbotLLMFactory};
 use axum::{
     extract::{Multipart, State},
     response::IntoResponse,
@@ -128,7 +128,7 @@ async fn handle_knowledge_upload(State(state): State<SigbotState>, mut multipart
     };
 
     // Store documents to Vector DB.
-    match &state.llm_handler.embedding(knowledge_info, file).await {
+    match &SigbotLLMFactory::get_default().embedding(knowledge_info, file).await {
         Ok(info) => {
             let response = serde_json::json!({
                 "id": &info.id,

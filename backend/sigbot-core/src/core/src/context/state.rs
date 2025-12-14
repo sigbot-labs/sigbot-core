@@ -21,7 +21,6 @@
 use crate::{
     cache::{CacheContainer, ICache},
     config::config::{AppConfig, AppDBType},
-    llm::handler::llm_factory::{ILLMOperation, SigbotLLMFactory},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
         datafeed::store::{
@@ -82,7 +81,6 @@ pub struct SigbotState {
     pub user_repo: Arc<Mutex<RepositoryContainer<User>>>,
     pub tenant_repo: Arc<Mutex<RepositoryContainer<Tenant>>>,
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
-    pub llm_handler: Arc<dyn ILLMOperation + Send + Sync>,
     // The Service module repositories.
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
     pub messaging_repo: Arc<Mutex<RepositoryContainer<MessagingInfo>>>,
@@ -272,7 +270,6 @@ impl SigbotState {
             user_repo: Arc::new(Mutex::new(user_repo)),
             tenant_repo: Arc::new(Mutex::new(tenant_repo)),
             lock_repo: Arc::new(Mutex::new(lock_repo)),
-            llm_handler: SigbotLLMFactory::get_default(),
             // The Application repositories.
             datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
             messaging_repo: Arc::new(Mutex::new(messaging_repo)),
