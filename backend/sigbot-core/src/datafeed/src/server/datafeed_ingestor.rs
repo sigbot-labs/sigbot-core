@@ -25,11 +25,7 @@ use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
 use sigbot_types::modules::messaging::TOPIC_MARKET_DATA;
 use std::{future::Future, pin::Pin, sync::Arc};
 
-pub struct SigbotDatafeedIngestor {
-    // TODO: binance client.
-    // TODO: twitter client.
-    // TODO: trush social client.
-}
+pub struct SigbotDatafeedIngestor {}
 
 impl SigbotDatafeedIngestor {
     pub async fn new() -> Arc<Self> {
@@ -37,17 +33,17 @@ impl SigbotDatafeedIngestor {
     }
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
-        info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, verbose)
-            .await
-            .expect("Failed to initialize Messaging client.");
-        info!("Initialized Messaging client. {:?}", messaging.name());
-
         info!("Initializing Datafeed clients.");
-        let datafeeds = SigbotDatafeedClientFactory::init(matches, verbose)
+        let (datafeeds, argument) = SigbotDatafeedClientFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Datafeed clients.");
         info!("Initialized Datafeed clients. {:?}", datafeeds.len());
+
+        info!("Initializing Messaging client.");
+        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
+            .await
+            .expect("Failed to initialize Messaging client.");
+        info!("Initialized Messaging client. {:?}", messaging.name());
 
         // TODO: Publish the datafeed data to messaging topics.
         let handler: Arc<

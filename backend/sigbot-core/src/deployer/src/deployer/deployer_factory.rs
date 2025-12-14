@@ -18,6 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::deployer::{
+    kubernetes::deployer_kubernetes::SigbotKubernetesDeployer, standalone::deployer_hosted::SigbotHostedDeployer,
+};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -31,10 +34,6 @@ use std::{
     collections::HashMap,
     future::Future,
     sync::{Arc, RwLock},
-};
-
-use crate::deployer::{
-    kubernetes::deployer_kubernetes::SigbotKubernetesDeployer, standalone::deployer_hosted::SigbotHostedDeployer,
 };
 
 #[async_trait]

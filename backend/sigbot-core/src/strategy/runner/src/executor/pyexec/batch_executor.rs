@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 use anyhow::{Error, Result};
+use common_telemetry::info;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use sigbot_types::modules::strategy::SigbotStrategyArgument;
@@ -85,6 +86,19 @@ impl BatchStrategyExecutor {
             // .context("Failed to initialize Python interpreter and register sigbotlib")?;
             *initialized = true;
         }
+        Ok(())
+    }
+
+    pub fn shutdown(&self) -> Result<(), Error> {
+        info!("Shutting down Batch Strategy Executor. Done.");
+
+        let mut module = self.initialized_pymodule.lock().unwrap();
+        *module = None;
+        let mut initialized = self.initialized_flag.lock().unwrap();
+        *initialized = false;
+
+        self.environment.lock().unwrap().clear();
+        info!("Shutdown Batch Strategy Executor. Done.");
         Ok(())
     }
 }

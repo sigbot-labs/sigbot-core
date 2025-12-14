@@ -133,9 +133,9 @@ pub struct SigbotMqttClient {
 impl SigbotMqttClient {
     pub const NAME: &'static str = "MQTT";
 
-    pub async fn new(config: Option<Arc<SigbotMqttClientConfig>>) -> Arc<Self> {
+    pub async fn new(config: Arc<SigbotMqttClientConfig>) -> Arc<Self> {
         Arc::new(Self {
-            config: config.expect("Config is required"), // TODO: required input param
+            config,
             client: Arc::new(Mutex::new(None)),
             eventloop: Arc::new(Mutex::new(None)),
             subscription_registrations: Arc::new(Mutex::new(HashMap::new())),

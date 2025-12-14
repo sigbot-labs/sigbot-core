@@ -19,12 +19,13 @@
 // This includes modifications and derived works.
 
 use anyhow::{Context, Error, Result};
+use common_telemetry::info;
 use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
 use pyo3::types::{PyDict, PyModule};
 use sigbot_strategy_sdk::sdk::core::models::trade_signal::TradingSignal;
 use sigbot_types::modules::exchange::models::trade_position::EntryTradePosition;
-use sigbot_types::modules::strategy::models::strategy_embed::{StrategyExecutionInput, StrategyExecutionResult};
+use sigbot_types::modules::strategy::models::strategy_sdk::{StrategyExecutionInput, StrategyExecutionResult};
 use sigbot_types::modules::strategy::SigbotStrategyArgument;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -310,7 +311,7 @@ has_on_process = callable(globals().get('on_process', None))
     fn build_context_dict<'py>(
         &self,
         py: Python<'py>,
-        context: &sigbot_types::modules::strategy::models::strategy_embed::StrategyContext,
+        context: &sigbot_types::modules::strategy::models::strategy_sdk::StrategyContext,
     ) -> Result<Bound<'py, PyDict>> {
         // Import json module for parsing JSON strings
         let json_module = py.import_bound("json")?;
@@ -364,5 +365,18 @@ has_on_process = callable(globals().get('on_process', None))
         }
 
         Ok(context_dict)
+    }
+
+    pub fn shutdown(&self) -> Result<(), Error> {
+        info!("Shutting down Streaming Strategy Executor. Done.");
+
+        let mut module = self.initialized_pymodule.lock().unwrap();
+        *module = None;
+        let mut initialized = self.initialized_flag.lock().unwrap();
+        *initialized = false;
+
+        self.environment.lock().unwrap().clear();
+        info!("Shutdown Streaming Strategy Executor. Done.");
+        Ok(())
     }
 }

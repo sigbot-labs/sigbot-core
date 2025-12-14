@@ -37,13 +37,13 @@ impl SigbotNotificationForwarder {
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         info!("Initializing Notification clients.");
-        let notifications = SigbotNotificationClientFactory::init(matches, verbose)
+        let (notifications, argument) = SigbotNotificationClientFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Notification clients.");
         info!("Initialized Notification clients.");
 
         info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, verbose)
+        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
             .await
             .expect("Failed to initialize Messaging client.");
 

@@ -67,10 +67,11 @@ impl SigbotBacktestRunnerFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotTradesBacktestRunner::NAME.to_owned())
             })
-            .expect("Failed to parse the backtest runner provider from the command line arguments.");
+            .expect("Failed to parse the backtest runner provider from the command line arguments.")
+            .to_uppercase();
 
         info!("Registering backtest runner with provider: {}", &provider);
-        match provider.to_uppercase().as_str() {
+        match provider.as_str() {
             SigbotTradesBacktestRunner::NAME => {
                 Self::get()
                     .write()

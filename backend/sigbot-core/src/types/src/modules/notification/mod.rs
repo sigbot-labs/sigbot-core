@@ -18,6 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use std::sync::Arc;
+
 use crate::modules::{messaging::messaging::MessagingInfo, notification::notification::NotificationInfo};
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
@@ -26,8 +28,8 @@ pub mod notification;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotNotificationArgument {
-    notification_config: NotificationInfo,
-    messaging_config: MessagingInfo,
+    pub notification_config: Arc<NotificationInfo>,
+    pub messaging_config: Arc<MessagingInfo>,
 }
 
 impl SigbotNotificationArgument {

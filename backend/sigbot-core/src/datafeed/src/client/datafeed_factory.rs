@@ -18,6 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::client::{
+    market::datafeed_binance::SigbotBinanceDatafeedClient,
+    news::{datafeed_trushsocial::SigbotTrushSocialDatafeedClient, datafeed_twitter::SigbotTwitterDatafeedClient},
+};
 use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -28,11 +32,6 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{Arc, RwLock},
-};
-
-use crate::client::{
-    market::datafeed_binance::SigbotBinanceDatafeedClient,
-    news::{datafeed_trushsocial::SigbotTrushSocialDatafeedClient, datafeed_twitter::SigbotTwitterDatafeedClient},
 };
 
 #[async_trait]
@@ -69,7 +68,13 @@ impl SigbotDatafeedClientFactory {
     pub async fn init(
         matches: &clap::ArgMatches,
         verbose: bool,
-    ) -> Result<Arc<Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>>>, Error> {
+    ) -> Result<
+        (
+            Arc<Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>>>,
+            Arc<SigbotDatefeedArgument>,
+        ),
+        Error,
+    > {
         // e.g '--datafeed=binance'
         let datafeed_provider = matches
             .try_get_one::<String>("datafeed")
@@ -89,8 +94,8 @@ impl SigbotDatafeedClientFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotBinanceDatafeedClient::NAME.to_owned())
             })
-            .expect("Failed to parse the configuration from the command line arguments.")
-            .to_uppercase();
+            .expect("Failed to parse the configuration from the command line arguments.");
+
         let argument = Arc::new(
             SigbotDatefeedArgument::from_json(&configuration)
                 .context("Failed to parse the configuration from the command line arguments.")?,
@@ -142,7 +147,7 @@ impl SigbotDatafeedClientFactory {
             info!("Initialized the datafeed with name: {}.", &provider);
         }
 
-        Ok(Arc::new(datafeeds))
+        Ok((Arc::new(datafeeds), argument))
     }
 
     fn register0(

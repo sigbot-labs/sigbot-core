@@ -18,10 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::modules::exchange::models::trade_market::KlineModel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-use crate::modules::exchange::models::trade_market::KlineModel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyExecutionInput {

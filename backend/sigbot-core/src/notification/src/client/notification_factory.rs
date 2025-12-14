@@ -18,16 +18,16 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::client::{notification_email::SigbotEmailClient, notification_telegram::SigbotTelegramClient};
 use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use sigbot_types::modules::notification::SigbotNotificationArgument;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
-
-use crate::client::{notification_email::SigbotEmailClient, notification_telegram::SigbotTelegramClient};
 
 #[async_trait]
 pub trait ISigbotNotificationClient: Send + Sync {
@@ -61,7 +61,13 @@ impl SigbotNotificationClientFactory {
     pub async fn init(
         matches: &clap::ArgMatches,
         verbose: bool,
-    ) -> Result<Arc<Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>>>, Error> {
+    ) -> Result<
+        (
+            Arc<Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>>>,
+            Arc<SigbotNotificationArgument>,
+        ),
+        Error,
+    > {
         // e.g '--provider=email'
         let notification_provider = matches
             .try_get_one::<String>("notification")
@@ -73,6 +79,20 @@ impl SigbotNotificationClientFactory {
             .to_uppercase();
 
         info!("Registering Sigbot Notification: {}", &notification_provider);
+
+        // e.g '--configuration=base64_encoded_json_string'
+        let configuration = matches
+            .try_get_one::<String>("configuration")
+            .map(|s| {
+                s.map(|s| s.to_owned())
+                    .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())
+            })
+            .expect("Failed to parse the configuration from the command line arguments.");
+
+        let argument = Arc::new(
+            SigbotNotificationArgument::from_json(&configuration)
+                .context("Failed to parse the configuration from the command line arguments.")?,
+        );
 
         let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();
         for provider in notification_provider.split(',').collect::<Vec<&str>>() {
@@ -111,7 +131,7 @@ impl SigbotNotificationClientFactory {
             notifications.push(registered.clone());
         }
 
-        Ok(Arc::new(notifications))
+        Ok((Arc::new(notifications), argument))
     }
 
     fn register0(

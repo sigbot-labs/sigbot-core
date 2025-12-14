@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::client::cex::exchange_binance::SigbotBinanceClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -29,8 +30,6 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
-
-use crate::client::cex::exchange_binance::SigbotBinanceClient;
 
 #[async_trait]
 pub trait ISigbotExchangeClient: Send + Sync {

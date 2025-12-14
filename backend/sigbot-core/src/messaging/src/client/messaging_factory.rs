@@ -18,11 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::messaging_mqtt::SigbotMqttClient;
+use crate::client::messaging_mqtt::{SigbotMqttClient, SigbotMqttClientConfig};
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use sigbot_types::modules::messaging::messaging::MessagingInfo;
 use std::{
     collections::HashMap,
     future::Future,
@@ -65,7 +66,7 @@ impl SigbotMessagingClientFactory {
     #[allow(unused_variables)]
     pub async fn init(
         matches: &clap::ArgMatches,
-        verbose: bool,
+        config: Arc<MessagingInfo>,
     ) -> Result<Arc<dyn ISigbotMessagingClient + Send + Sync>, Error> {
         // e.g '--provider=mqtt'
         let provider = matches
@@ -74,19 +75,19 @@ impl SigbotMessagingClientFactory {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotMqttClient::NAME.to_owned())
             })
-            .context("Failed to parse the messaging provider from the command line arguments.")?
-            .to_uppercase();
+            .map(|s| s.to_uppercase())
+            .expect("Failed to parse the messaging provider from the command line arguments.");
 
         info!("Registering Sigbot Messaging: {}", &provider);
 
-        match provider.as_str() {
+        match provider.to_uppercase().as_str() {
             SigbotMqttClient::NAME => {
                 Self::get()
                     .write()
                     .unwrap()
                     .register0(
                         &SigbotMqttClient::NAME.to_owned(),
-                        SigbotMqttClient::new(None).await, // TODO: set up run configuration?
+                        SigbotMqttClient::new(Arc::new(SigbotMqttClientConfig::from_messaging(config))).await,
                     )
                     .context("Failed to register the MQTT messaging.")?;
             }

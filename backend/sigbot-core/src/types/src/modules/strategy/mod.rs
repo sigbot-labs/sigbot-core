@@ -21,19 +21,21 @@
 use crate::modules::{messaging::messaging::MessagingInfo, strategy::strategy::StrategyInfo};
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 pub mod models;
 pub mod strategy;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-
 pub struct SigbotStrategyArgument {
-    pub strategy_config: StrategyInfo,
-    pub messaging_config: MessagingInfo,
+    pub strategy_config: Arc<StrategyInfo>,
+    pub messaging_config: Arc<MessagingInfo>,
     /// System-level environment variables set during strategy runner pod startup
     /// These are injected as global variables in Python environment using globals.set_item
     pub sys_environment: Option<HashMap<String, String>>,
+    /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
+    /// This is a system-level runtime parameter set during strategy runner initialization
+    pub run_mode: String,
 }
 
 impl SigbotStrategyArgument {

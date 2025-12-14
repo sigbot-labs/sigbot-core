@@ -32,7 +32,7 @@ use sigbot_core::{
 };
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
-use sigbot_strategy_runner::server::strategy_factory::SigbotStrategyRunnerFactory;
+use sigbot_strategy_runner::server::strategy_runner::SigbotStrategyRunner;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -70,7 +70,7 @@ impl SigbotStandaloneStarter {
         SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotControllerServer::startup(matches, verbose).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;
-        SigbotStrategyRunnerFactory::startup(matches, verbose).await;
+        SigbotStrategyRunner::startup(matches, verbose).await;
         SigbotNotificationForwarder::startup(matches, verbose).await;
         SigbotBacktestRunnerFactory::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;

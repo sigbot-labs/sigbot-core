@@ -23,8 +23,8 @@ use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_strategy_runner::server::strategy_default::SigbotDefaultStrategyRunner;
-use sigbot_strategy_runner::server::strategy_factory::SigbotStrategyRunnerFactory;
+use sigbot_strategy_runner::executor::strategy_python::SigbotPythonStrategyExecutor;
+use sigbot_strategy_runner::server::strategy_runner::SigbotStrategyRunner;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -45,9 +45,9 @@ impl SigbotStrategyRunnerStarter {
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
                         "The strategy runner provider to use. (supported are: {})",
-                        SigbotDefaultStrategyRunner::NAME,
+                        SigbotPythonStrategyExecutor::NAME,
                     ))
-                    .default_value(SigbotDefaultStrategyRunner::NAME),
+                    .default_value(SigbotPythonStrategyExecutor::NAME),
             )
             .arg(
                 Arg::new("configuration")
@@ -78,7 +78,7 @@ impl SigbotStrategyRunnerStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotStrategyRunnerFactory::startup(matches, verbose).await;
+        SigbotStrategyRunner::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {
