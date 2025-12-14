@@ -70,7 +70,7 @@ impl SigbotNotificationClientFactory {
     > {
         // e.g '--provider=email'
         let notification_provider = matches
-            .try_get_one::<String>("notification")
+            .try_get_one::<String>("provider")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())

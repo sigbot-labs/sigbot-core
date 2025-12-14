@@ -75,7 +75,7 @@ impl SigbotNotificationForwarderStarter {
 
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
-        PanicHelper::set_hook_default();
+        PanicHelper::set_hook_default(get_config().logging.is_human_mode());
 
         Self::print_banner(verbose);
 

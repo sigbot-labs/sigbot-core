@@ -50,7 +50,7 @@ pub type LogStderrType = tracing_subscriber::filter::Filtered<
     SubscriberForSecondLayer,
 >;
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum LogMode {
     #[default]

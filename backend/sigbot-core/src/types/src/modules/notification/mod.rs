@@ -34,7 +34,7 @@ pub struct SigbotNotificationArgument {
 
 impl SigbotNotificationArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse notification info from JSON.")
+        serde_json::from_str(json).context(format!("Failed to parse notification info from JSON. - {}", json))
     }
 }
 

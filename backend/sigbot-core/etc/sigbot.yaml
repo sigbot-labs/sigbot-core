@@ -49,7 +49,7 @@ mgmt:
     timeout: 10000
 
 logging:
-  mode: HUMAN # Options: HUMAN|JSON
+  mode: JSON # Options: HUMAN|JSON
   level: DEBUG
 
 swagger:

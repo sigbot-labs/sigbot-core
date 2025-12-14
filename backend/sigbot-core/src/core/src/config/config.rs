@@ -659,9 +659,15 @@ impl Default for OtelProperties {
 impl Default for LoggingProperties {
     fn default() -> Self {
         LoggingProperties {
-            mode: LogMode::JSON,
+            mode: LogMode::HUMAN,
             level: "info".to_string(),
         }
+    }
+}
+
+impl LoggingProperties {
+    pub fn is_human_mode(&self) -> bool {
+        self.mode == LogMode::HUMAN
     }
 }
 
@@ -1135,6 +1141,9 @@ fn init() -> Arc<AppConfig> {
     dotenv().ok(); // Notice: Must be called before parse from environment file (.env).
 
     let yaml_config = env::var("SIGBOT_CFG_PATH")
+        .ok()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
         .map(|path| {
             Config::builder()
                 .add_source(config::File::with_name(path.as_str()))
@@ -1156,7 +1165,7 @@ fn init() -> Arc<AppConfig> {
 
     let config = AppConfig::new(&yaml_config);
 
-    if env::var("LINKPORTAL_CFG_VERBOSE")
+    if env::var("SIGBOT_CFG_VERBOSE")
         .unwrap_or_else(|_| env::var("VERBOSE").unwrap_or_else(|_| "false".to_owned()))
         .eq_ignore_ascii_case("true")
     {
