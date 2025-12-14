@@ -16,38 +16,36 @@ from sigbotlib import TradingSignal, PyTradeSide, PyOrderType, PyEntryPosition, 
 
 # Explicitly define global variables.
 btcusdc_cfg_dict = {}
-ethusdc_cfg_dict = {}
 btcusdc_3m_kline_series = {}
-ethusdc_1m_klins_series = {}
 truthsocial_trump_dict = {}
-twitter_elon_dict = {}
 
 
 def init():
     """
     Strategy initialization function
     Executed once on first call, used to initialize strategy state and global variables.
-    
+
     Note: Global variables can be set here, and these variables will maintain their state in all subsequent on_process calls.
     """
-    global btcusdc_cfg_dict, ethusdc_cfg_dict, btcusdc_3m_kline_series, ethusdc_1m_klins_series, truthsocial_trump_dict
-    
+    global btcusdc_cfg_dict, btcusdc_3m_kline_series, truthsocial_trump_dict
+
     # Initialize configuration for example:
     btcusdc_cfg_dict["series_limit"] = 3000
-    ethusdc_cfg_dict["series_limit"] = 1000
-    
+
+    btcusdc_3m_kline_series["BTCUSDC::3m"] = []
+
     print("Strategy initialized")
 
 
 def on_process(context):
     f"""
     Message processing function, Called every time new market data is received
-    
+
     Args:
         context: Strategy context object, containing:
             - context.kline_data e.g: {"BTCUSDC::3m": [{"open": 100000, "high": 105000, "low": 99000, "close": 102000, "volume": 100000}]}
             - context.market_data: e.g: {"truthsocial::posts::trump": {"2025-09-29T13:04:21.071Z": "In order to make North Carolina, which has completely lost its furniture business to China, and other Countries, GREAT again, I will be imposing substantial Tariffs on any Country that does not make its furniture in the United States. Details to follow!!! President DJT"}}
-    
+
     Returns:
         TradingSignal object or None if no signal.
         Example:
@@ -61,48 +59,34 @@ def on_process(context):
             description="RSI crossover signal"  # Optional
         )
     """
-    global btcusdc_cfg_dict, ethusdc_cfg_dict, btcusdc_3m_kline_series, ethusdc_1m_klins_series, truthsocial_trump_dict
-    
-    # Update to latest multi K-lines to global dict.
+    global btcusdc_cfg_dict, btcusdc_3m_kline_series, truthsocial_trump_dict
+
+    # Extract the latest event-driven K-lines.
     latest_btcusdc_3m_klines = context.kline_data.get("BTCUSDC::3m")
-    #latest_ethusdc_1m_klines = context.kline_data.get("ETHUSDC::1m")
-    # Save to cache dictionary (if needed to maintain history data)
+
+    # Update to global cache.
     if latest_btcusdc_3m_klines:
-        if "BTCUSDC::3m" not in btcusdc_3m_kline_series:
-            btcusdc_3m_kline_series["BTCUSDC::3m"] = []
         btcusdc_3m_kline_series["BTCUSDC::3m"].append(latest_btcusdc_3m_klines)
         # Rolling to histories overflow.
         if len(btcusdc_3m_kline_series["BTCUSDC::3m"]) > btcusdc_cfg_dict["series_limit"]:
             btcusdc_3m_kline_series["BTCUSDC::3m"].pop(0)
-    #if latest_ethusdc_1m_klines:
-    #    if "ETHUSDC::1m" not in ethusdc_1m_klins_series:
-    #        ethusdc_1m_klins_series["ETHUSDC::1m"] = []
-    #    ethusdc_1m_klins_series["ETHUSDC::1m"].append(latest_ethusdc_1m_klines)
-    #    # Rolling to histories overflow.
-    #    if len(ethusdc_1m_klins_series["ETHUSDC::1m"]) > ethusdc_cfg_dict["series_limit"]:
-    #        ethusdc_1m_klins_series["ETHUSDC::1m"].pop(0)
-    
-    # Update to latest multi market data to global dict.
+
+    # Update to global cache.
     if context.market_data:
         for key, value in context.market_data.get("truthsocial::posts::trump").items():
             truthsocial_trump_dict[key] = value
-        for key, value in context.market_data.get("twitter::posts::elon").items():
-            twitter_elon_dict[key] = value
 
     # Check if data is enough
-    if len(btcusdc_3m_kline_series["BTCUSDC::3m"]) < 30 or len(ethusdc_1m_klins_series["ETHUSDC::1m"]) < 30:
+    if len(btcusdc_3m_kline_series["BTCUSDC::3m"]) < 30:
         return None
-    
+
     # Calculate technical indicators.
     btc_sma3m20r1p = indicators.sma(latest_btcusdc_3m_klines, 20, 1)
     btc_rsi3m1p = indicators.rsi(latest_btcusdc_3m_klines, 1)
-    #eth_sma3m20r3p = indicators.sma(ethusdc_1m_series, 20, 1)
-    #eth_rsi3m1p = indicators.rsi(ethusdc_1m_series, 1)
 
     # Get latest values
     btc_latest_val = latest_btcusdc_3m_klines[:-1]
-    #eth_latest_val = ethusdc_1m_series[:-1]
-    
+
     # Generate trading signals
     if btc_latest_val > btc_sma3m20r1p and btc_rsi3m1p < 70:
         # 金叉且 RSI 未超买，做多

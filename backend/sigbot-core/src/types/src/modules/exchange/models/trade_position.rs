@@ -112,7 +112,7 @@ impl ExitTradePosition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TradeSide {
     LONG,
     SHORT,
@@ -142,7 +142,7 @@ impl TradeSide {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OrderType {
     MARKET,
     LIMITED,

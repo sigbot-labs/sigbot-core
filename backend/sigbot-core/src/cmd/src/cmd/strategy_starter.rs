@@ -95,7 +95,7 @@ impl SigbotStrategyRunnerStarter {
                                                /\____/   /\___/
                                                \_/__/    \/__/ 
 
-                                        (Sigbot Strategy Executor)
+                                        (Sigbot Strategy Runner)
  "#;
         eprintln!("");
         eprintln!("{}", ascii_name);

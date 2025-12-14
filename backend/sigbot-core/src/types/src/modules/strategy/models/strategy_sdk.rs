@@ -37,7 +37,7 @@ pub struct StrategyExecutionInput {
 pub struct StrategyContext {
     /// Strategy input kline data map.
     /// e.g: {"btcusdc_5m": {"close": 100000, "high": 100000, "low": 99000, "open": 100000, "volume": 10000}}
-    pub kline_data: Option<HashMap<String, KlineModel>>,
+    pub kline_data: Option<HashMap<String, Vec<KlineModel>>>,
     /// Strategy input market data map.  
     /// e.g: {"truthsocial::trump_post": {"2025-10-25T12:54:52.605Z": "..."}, "twitter::elon_post": {"2025-12-14T12:54:52.605Z": "..."}}
     pub market_data: Option<HashMap<String, HashMap<String, String>>>,
