@@ -19,7 +19,6 @@ tsconfig.tsbuildinfo
 .env.prod
 
 # IDE and editor files
-.vscode/
 .idea/
 *.swp
 *.swo

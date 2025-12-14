@@ -46,12 +46,12 @@ pub async fn init() {
     let subscriber = subscriber.with(otel_layer);
 
     // Setup profiling for tokio-console layers.
-    if config.mgmt.enabled && config.mgmt.tokio_console.enabled {
-        // Notice: Use optional dependencies to avoid slow auto compilation during debugg, because if rely
-        // on console-subscriber, need to enable RUSTFLAGS="--cfg tokio_unstable" which
-        // will invalidate the compile-time cache.
-        // TODO: removed this feature in the future instead of using a common-telemetry/logging.rs
-        #[cfg(feature = "profiling-tokio-console")]
+    // Notice: Use optional dependencies to avoid slow auto compilation during debugg, because if rely
+    // on console-subscriber, need to enable RUSTFLAGS="--cfg tokio_unstable" which
+    // will invalidate the compile-time cache.
+    // TODO: removed this feature in the future instead of using a common-telemetry/logging.rs
+    #[cfg(feature = "profiling-tokio-console")]
+    let console_layer: Option<_> = if config.mgmt.enabled && config.mgmt.tokio_console.enabled {
         let server_addr = config
             .mgmt
             .tokio_console
@@ -59,21 +59,21 @@ pub async fn init() {
             .as_str()
             .parse::<std::net::SocketAddr>()
             .expect("Failed to parse server address");
-        // TODO: removed this feature in the future instead of using a common-telemetry/logging.rs
-        #[cfg(feature = "profiling-tokio-console")]
-        let subscriber = subscriber.with(
+        Some(
             console_subscriber::ConsoleLayer::builder()
                 .with_default_env()
                 .server_addr(server_addr)
                 .retention(std::time::Duration::from_secs(config.mgmt.tokio_console.retention))
                 .spawn(),
-        );
-        // set the subscriber as the default for the application
-        tracing::subscriber::set_global_default(subscriber).unwrap();
+        )
     } else {
-        // set the subscriber as the default for the application
-        tracing::subscriber::set_global_default(subscriber).unwrap();
-    }
+        None
+    };
+    #[cfg(feature = "profiling-tokio-console")]
+    let subscriber = subscriber.with(console_layer);
+
+    // set the subscriber as the default for the application
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 
     // Setup custom metrics.
     metrics::init_metrics(config).await;

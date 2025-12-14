@@ -24,7 +24,6 @@ use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_core::mgmt::apm::logging::LogMode;
 use sigbot_deployer::deployer::deployer_factory::SigbotDeployerFactory;
 use sigbot_deployer::deployer::kubernetes::deployer_kubernetes::SigbotKubernetesDeployer;
 use sigbot_deployer::deployer::standalone::deployer_hosted::SigbotHostedDeployer;

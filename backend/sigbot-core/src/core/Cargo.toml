@@ -89,6 +89,7 @@ tracing-attributes.workspace = true
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"] }
+console-subscriber = { version = "0.1", optional = true }
 zip = "=2.3.0"
 
 [build-dependencies]
@@ -102,7 +103,7 @@ zip = "=2.3.0"
 [features]
 default = []
 testing = []
-profiling-tokio-console = ["common-telemetry/profiling-tokio-console"]
+profiling-tokio-console = ["common-telemetry/profiling-tokio-console", "dep:console-subscriber"]
 
 [[bench]]
 name = "bench_main"

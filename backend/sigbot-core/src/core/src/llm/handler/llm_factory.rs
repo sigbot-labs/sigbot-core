@@ -20,7 +20,7 @@
 
 use crate::{config::config, llm::handler::llm_langchain::LangchainOperation};
 use anyhow::Error;
-use common_telemetry::info;
+use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
 use std::{
@@ -59,7 +59,7 @@ impl SigbotLLMFactory {
     pub async fn init() {
         let config = &config::get_config().llm;
 
-        info!("Initializing implementation langChain LLM ...");
+        info!("Initializing LangChain LLM operation ...");
         match Self::get()
             .write() // If acquire fails, then it block until acquired.
             .unwrap() // If acquire fails, then it should panic.
@@ -68,10 +68,10 @@ impl SigbotLLMFactory {
                 LangchainOperation::new(config).await,
             ) {
             Ok(registered) => {
-                info!("Initializing langChain LLM ...");
+                info!("Initializing LangChain LLM operation successfully.");
                 let _ = registered.init().await;
             }
-            Err(e) => panic!("Failed to register langChain LLM: {}", e),
+            Err(e) => panic!("Failed to initialize LangChain LLM operation: {}", e),
         }
     }
 
@@ -82,7 +82,7 @@ impl SigbotLLMFactory {
     ) -> Result<Arc<T>, Error> {
         // Check if the name already exists
         if self.implementations.contains_key(&name) {
-            tracing::debug!("Already register the LLM handler '{}'", name);
+            debug!("Already register the LLM operation with name: '{}'.", name);
             return Ok(handler);
         }
         self.implementations.insert(name, handler.to_owned());
@@ -95,7 +95,7 @@ impl SigbotLLMFactory {
         if let Some(implementation) = this.implementations.get(&name) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered LLM handler '{}'.", name);
+            let errmsg = format!("Could not get LLM operation with name: '{}'.", name);
             return Err(Error::msg(errmsg));
         }
     }

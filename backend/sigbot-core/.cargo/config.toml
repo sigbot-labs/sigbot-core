@@ -8,28 +8,30 @@ rustflags = ["--cfg", "tokio_unstable"]
 # RUSTFLAGS = "--cfg tokio_unstable"
 #
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
+rustflags = ["--cfg", "tokio_unstable", "-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
 
 [target.x86_64-unknown-linux-musl]
-rustflags = ["-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
+rustflags = ["--cfg", "tokio_unstable", "-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
-rustflags = ["-C", "target-feature=+aes,+neon"]
+rustflags = ["--cfg", "tokio_unstable", "-C", "target-feature=+aes,+neon"]
 
 [target.aarch64-unknown-linux-musl]
 linker = "aarch64-linux-gnu-gcc"
-rustflags = ["-C", "target-feature=+aes,+neon"]
+rustflags = ["--cfg", "tokio_unstable", "-C", "target-feature=+aes,+neon"]
 
 [target.aarch64-apple-darwin]
 rustflags = [
+    "--cfg", "tokio_unstable",
     "-C", "target-feature=+aes,+neon",
 ]
 
 [target.x86_64-apple-darwin]
 rustflags = [
+    "--cfg", "tokio_unstable",
     "-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2",
 ]
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
+rustflags = ["--cfg", "tokio_unstable", "-C", "target-feature=+aes,+sse2,+ssse3,+sse4.1,+sse4.2"]
