@@ -81,7 +81,6 @@ impl SQLitePoolManager {
 
     async fn init_migration(pool: Pool<Sqlite>) -> Pool<Sqlite> {
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        info!("SQLite DB migration result: {:?}", results);
         match results {
             Ok(_) => info!("SQLite DB migration successfully."),
             Err(error) => {
