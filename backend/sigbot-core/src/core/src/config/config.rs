@@ -28,6 +28,7 @@ use jsonwebtoken::Algorithm;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_json;
 use sigbot_utils::secrets::SecretHelper;
 use std::{env, ops::Deref, str::FromStr, sync::Arc, time::Duration};
 use validator::Validate;
@@ -441,8 +442,8 @@ pub struct ServicesProperties {
     pub exchanges: ExchangeProperties,
     #[serde(rename = "controllers")]
     pub controllers: ControllerProperties,
-    #[serde(rename = "backtests")]
-    pub backtests: Vec<BacktestProperties>,
+    #[serde(rename = "backtest")]
+    pub backtest: BacktestProperties,
 }
 
 // Exchange Properties.
@@ -553,16 +554,8 @@ pub struct StrategyControllerProperties {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BacktestProperties {
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "kind")]
-    pub kind: String,
-    #[serde(rename = "enabled")]
-    pub enabled: bool,
-    #[serde(rename = "cron")]
-    pub cron: String,
-    #[serde(rename = "channel-size")]
-    pub channel_size: usize,
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
 }
 
 // App Properties impls.
@@ -885,7 +878,7 @@ impl Default for ServicesProperties {
         ServicesProperties {
             exchanges: ExchangeProperties::default(),
             controllers: ControllerProperties::default(),
-            backtests: Vec::new(),
+            backtest: BacktestProperties::default(),
         }
     }
 }
@@ -990,11 +983,7 @@ impl Default for StrategyControllerProperties {
 impl Default for BacktestProperties {
     fn default() -> Self {
         BacktestProperties {
-            name: String::from("default"),
-            kind: String::from("SIMPLE_EXECUTE"),
-            enabled: true,
-            cron: String::from("0/30 * * * * * *"), // Every half minute
-            channel_size: 200,
+            inner: ScheduledPropertiesBase::default(),
         }
     }
 }
@@ -1140,28 +1129,42 @@ impl AppConfig {
 fn init() -> Arc<AppConfig> {
     dotenv().ok(); // Notice: Must be called before parse from environment file (.env).
 
-    let yaml_config = env::var("SIGBOT_CFG_PATH")
-        .ok()
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty())
-        .map(|path| {
-            Config::builder()
-                .add_source(config::File::with_name(path.as_str()))
-                .add_source(
-                    // Extrat candidate from env refer to: https://github.com/rust-cli/config-rs/blob/v0.15.9/src/env.rs#L290
-                    // Set up into hierarchy struct attibutes refer to:https://github.com/rust-cli/config-rs/blob/v0.15.9/src/source.rs#L24
-                    config::Environment::with_prefix("SIGBOT")
-                        // Notice: Use double "_" to distinguish between different hierarchy struct or attribute alies at the same level.
-                        .separator("__")
-                        .convert_case(config::Case::Cobol)
-                        .keep_prefix(false), // Remove the prefix when matching.
-                )
-                .build()
-                .unwrap_or_else(|err| panic!("Error parsing config: {}", err))
-                .try_deserialize::<AppConfigProperties>()
-                .unwrap_or_else(|err| panic!("Error deserialize config: {}", err))
-        })
-        .unwrap_or(AppConfigProperties::default());
+    // Priority order (HIGHEST to LOWEST): environment -> file config -> defaults
+    let mut builder = Config::builder();
+
+    // Step 1: Set defaults as base (LOWEST priority)
+    // Serialize default config to JSON Value and use it as a source
+    let default_config = AppConfigProperties::default();
+    let default_json = serde_json::to_value(&default_config).expect("Failed to serialize default config");
+    let default_source: Config = Config::try_from(&default_json).expect("Failed to create default config source");
+    builder = builder.add_source(default_source);
+
+    // Step 2: Add file config source if SIGBOT_CFG_PATH is set (MEDIUM priority)
+    if let Ok(path) = env::var("SIGBOT_CFG_PATH") {
+        let path = path.trim();
+        if !path.is_empty() {
+            builder = builder.add_source(config::File::with_name(path));
+        }
+    }
+
+    // Step 3: Always add environment variables source (HIGHEST priority, like Spring Boot env override)
+    // Use double underscore for hierarchy separation to distinguish nested structs
+    builder = builder.add_source(
+        config::Environment::with_prefix("SIGBOT")
+            // Use double "__" as separator to distinguish between different hierarchy levels
+            // SIGBOT__APPDB__TYPE -> appdb.type (after kebab-case conversion)
+            .separator("__")
+            .convert_case(config::Case::Kebab)
+            .keep_prefix(false), // Remove the prefix when matching.
+    );
+
+    // Build and deserialize
+    // config-rs will merge sources by priority: later sources override earlier ones
+    let yaml_config = builder
+        .build()
+        .unwrap_or_else(|err| panic!("Error parsing config: {}", err))
+        .try_deserialize::<AppConfigProperties>()
+        .unwrap_or_else(|err| panic!("Error deserialize config: {}", err));
 
     let config = AppConfig::new(&yaml_config);
 
@@ -1171,7 +1174,7 @@ fn init() -> Arc<AppConfig> {
     {
         println!("If you don't want to print the loaded configuration details, you can disable it by set up SIGBOT_CFG_VERBOSE=false.");
         println!(
-            "Loaded the config details: {}",
+            "Loaded configuration: {}",
             serde_json::to_string(&config.to_owned().inner).unwrap()
         );
     }
