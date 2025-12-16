@@ -24,11 +24,7 @@ use pyo3::types::PyDict;
 /// Parse tick data from JSON string
 #[pyfunction]
 pub fn parse_ticks(json_data: &str) -> PyResult<Vec<PyObject>> {
-    Python::with_gil(|py| {
-        // For now, return empty vector
-        // In the future, implement proper tick parsing
-        Ok(Vec::new())
-    })
+    Python::with_gil(|py| unimplemented!("parse_ticks is not implemented yet"))
 }
 
 /// Convert tick data to K-lines

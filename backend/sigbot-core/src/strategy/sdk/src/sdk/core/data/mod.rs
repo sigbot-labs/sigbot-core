@@ -23,7 +23,6 @@ pub mod resample;
 pub mod tick;
 
 use pyo3::prelude::*;
-use pyo3::wrap_pymodule;
 
 pub use kline::{filter_klines, parse_klines, validate_kline};
 pub use resample::{resample_klines, resample_ohlcv};

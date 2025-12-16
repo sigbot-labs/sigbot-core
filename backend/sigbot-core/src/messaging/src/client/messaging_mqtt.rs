@@ -225,22 +225,22 @@ impl ISigbotMessagingClient for SigbotMqttClient {
             drop(client_guard); // It's optional due to the lock will be automatically released at the end of the scope.
 
             // check if the eventloop is already running, if not then start it
-            let handler0 = handler.clone();
+            let handler0 = handler.to_owned();
             let mut guard = self.eventloop.lock().await;
             if let Some(eventloop) = guard.take() {
                 let mut eventloop0 = eventloop;
-                let handler1 = handler0.clone();
+                let handler1 = handler0.to_owned();
                 task::spawn(async move {
-                    while let Ok(notification) = eventloop0.poll().await {
-                        debug!("Received = {:?}", notification);
-                        match notification {
+                    while let Ok(event) = eventloop0.poll().await {
+                        debug!("Received MQTT event : {:?}", event);
+                        match event {
                             Event::Incoming(incoming) => {
                                 debug!("Incoming = {:?}", incoming);
                                 match incoming {
                                     Packet::Publish(publish) => {
                                         debug!("Publish = {:?}", publish);
                                         let data = publish.payload.to_vec();
-                                        let handler2 = handler1.clone();
+                                        let handler2 = handler1.to_owned();
                                         tokio::spawn(async move {
                                             if let Err(e) = handler2(data).await {
                                                 warn!("Error handling MQTT message: {:?}", e);

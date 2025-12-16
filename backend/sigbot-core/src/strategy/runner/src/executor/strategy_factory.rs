@@ -83,10 +83,7 @@ impl SigbotStrategyExecutorFactory {
         // e.g '--configuration=<base64_encoded_json_string>'
         let configuration = matches
             .try_get_one::<String>("configuration")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotPythonStrategyExecutor::NAME.to_owned())
-            })
+            .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(

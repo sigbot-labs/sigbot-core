@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::modules::{messaging::messaging::MessagingInfo, strategy::strategy::StrategyInfo};
+use crate::modules::messaging::messaging::MessagingInfo;
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -28,14 +28,12 @@ pub mod strategy;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotStrategyArgument {
-    pub strategy_config: Arc<StrategyInfo>,
-    pub messaging_config: Arc<MessagingInfo>,
     /// System-level environment variables set during strategy runner pod startup
-    /// These are injected as global variables in Python environment using globals.set_item
     pub sys_environment: Option<HashMap<String, String>>,
     /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
-    /// This is a system-level runtime parameter set during strategy runner initialization
     pub run_mode: String,
+    /// Messaging configuration for communication with the strategy runner
+    pub messaging_config: Arc<MessagingInfo>,
 }
 
 impl SigbotStrategyArgument {
@@ -52,20 +50,15 @@ mod tests {
     #[test]
     fn test_from_json() {
         let json = r#"{
-            "strategy_config": {"name": "tenant101_strategy", "provider": "MJEMA", "parameters": {"period": "20", "signal_threshold": "0.01"}}, 
+            "sys_environment": {"SIGBOT_VERSION": "V1.0.0"}}, 
             "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
             "#;
         let argument = SigbotStrategyArgument::from_json(json).unwrap();
-        assert_eq!(argument.strategy_config.name, Some("tenant101_strategy".to_string()));
-        assert_eq!(argument.messaging_config.name, Some("MQTT".to_string()));
         assert_eq!(
-            argument.strategy_config.parameters,
-            Some(HashMap::from([
-                ("period".to_string(), "20".to_string()),
-                ("signal_threshold".to_string(), "0.01".to_string())
-            ]))
+            argument.sys_environment,
+            Some(HashMap::from([("SIGBOT_VERSION".to_string(), "V1.0.0".to_string())]))
         );
-
+        assert_eq!(argument.messaging_config.name, Some("tenant101_messaging".to_string()));
         assert_eq!(
             argument.messaging_config.configuration,
             Some(HashMap::from([(

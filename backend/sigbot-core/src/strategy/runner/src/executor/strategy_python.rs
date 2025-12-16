@@ -28,10 +28,11 @@ use common_telemetry::{debug, info, warn};
 use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use sigbot_messaging::client::messaging_factory::ISigbotMessagingClient;
 use sigbot_types::modules::{
-    messaging::TOPIC_MARKET_DATA,
-    strategy::{models::strategy_sdk::StrategyExecutionInput, SigbotStrategyArgument},
+    messaging::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_DATA},
+    strategy::{models::strategy_sdk::StrategyExecutionInput, strategy::StrategyInfo, SigbotStrategyArgument},
 };
 use std::{
+    collections::HashMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -40,8 +41,8 @@ use std::{
 pub struct SigbotPythonStrategyExecutor {
     argument: Arc<SigbotStrategyArgument>,
     #[allow(unused)]
-    batch_executor: Mutex<Option<Arc<BatchStrategyExecutor>>>,
-    streaming_executor: Mutex<Option<Arc<StreamingStrategyExecutor>>>,
+    running_batch_executors: Arc<Mutex<HashMap<String, Arc<BatchStrategyExecutor>>>>,
+    running_streaming_executors: Arc<Mutex<HashMap<String, Arc<StreamingStrategyExecutor>>>>,
 }
 
 impl SigbotPythonStrategyExecutor {
@@ -50,132 +51,117 @@ impl SigbotPythonStrategyExecutor {
     pub async fn new(argument: Arc<SigbotStrategyArgument>) -> Arc<Self> {
         Arc::new(Self {
             argument,
-            batch_executor: Mutex::new(None),
-            streaming_executor: Mutex::new(None),
+            running_batch_executors: Arc::new(Mutex::new(HashMap::new())),
+            running_streaming_executors: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
     #[allow(unused_variables)]
     pub async fn execute_batch(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
-        // Clone executor Arc before moving into closure to avoid holding MutexGuard across await
-        let batch_executor = self
-            .batch_executor
-            .lock()
-            .expect("Failed to lock batch executor.")
-            .to_owned();
-
         unimplemented!()
     }
 
     #[allow(unused_variables)]
-    pub async fn execute_streaming(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
-        let streaming_executor = self
-            .streaming_executor
-            .lock()
-            .expect("Failed to lock streaming executor.")
-            .to_owned();
+    pub async fn execute_streaming(
+        &self,
+        messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>,
+        executor: Arc<StreamingStrategyExecutor>,
+    ) {
+        let strategy = executor.to_owned().configuration.to_owned();
 
-        let strategy_id = self
-            .argument
-            .strategy_config
+        let strategy_id = strategy
+            .to_owned()
             .base
             .id
-            .as_ref()
-            .map(|id| id.to_string())
-            .unwrap_or_default();
+            .expect("Failed to get the strategy id.")
+            .to_string();
 
-        let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
-            Arc::new(move |data: Vec<u8>| {
-                let executor0 = streaming_executor.clone();
-                let strategy_id0 = strategy_id.to_owned();
-                debug!("Received message: {:?}", data);
+        let market_data_handler: Arc<
+            dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync,
+        > = Arc::new(move |data: Vec<u8>| {
+            let executor0 = executor.to_owned();
+            let strategy_id0 = strategy_id.to_owned();
+            debug!("Received message: {:?}", data);
 
-                Box::pin(async move {
-                    let data0 = data.to_owned();
-                    let input: StrategyExecutionInput =
-                        serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
-                    debug!("Parsed input: {:?}", input);
+            Box::pin(async move {
+                let data0 = data.to_owned();
+                let input: StrategyExecutionInput =
+                    serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
+                debug!("Parsed input: {:?}", input);
 
-                    let result: Result<String, Error> = {
-                        match executor0
-                            .as_ref()
-                            .expect("Streaming executor is not initialized.")
-                            .process(&input)
-                        {
-                            Ok((execution_result, trade_signal)) => {
-                                if execution_result.success {
-                                    // Statistics to strategy execution total metrics.
-                                    sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
-                                        .with_label_values(&[strategy_id0.as_str(), "success"])
-                                        .inc();
+                let result: Result<String, Error> = {
+                    match executor0.process(&input) {
+                        Ok((execution_result, trade_signal)) => {
+                            if execution_result.success {
+                                // Statistics to strategy execution total metrics.
+                                sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
+                                    .with_label_values(&[strategy_id0.as_str(), "success"])
+                                    .inc();
 
-                                    // If there's a trading signal, execute the trade
-                                    if let Some(signal) = trade_signal {
-                                        info!("Received trading signal: {:?}", signal);
-                                        // Get exchange client (assuming BINANCE for now, can be made configurable)
-                                        match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string())
-                                            .await
-                                        {
-                                            Ok(exchange_client) => match exchange_client.entry_position(signal).await {
-                                                Ok(trade_result) => {
-                                                    info!(
-                                                        "Trade executed successfully: order_id={}, success={}",
-                                                        trade_result.order_id, trade_result.success
-                                                    );
-                                                    Ok(format!("Trade executed: order_id={}", trade_result.order_id))
-                                                }
-                                                Err(e) => {
-                                                    warn!("Failed to execute trade: {}", e);
-                                                    Err(anyhow::anyhow!("Failed to execute trade: {}", e))
-                                                }
-                                            },
-                                            Err(e) => {
-                                                warn!("Failed to get exchange client: {}", e);
-                                                Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
+                                // If there's a trading signal, execute the trade
+                                if let Some(signal) = trade_signal {
+                                    info!("Received trading signal: {:?}", signal);
+                                    // Get exchange client (assuming BINANCE for now, can be made configurable)
+                                    match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string()).await {
+                                        Ok(exchange_client) => match exchange_client.entry_position(signal).await {
+                                            Ok(trade_result) => {
+                                                info!(
+                                                    "Trade executed successfully: order_id={}, success={}",
+                                                    trade_result.order_id, trade_result.success
+                                                );
+                                                Ok(format!("Trade executed: order_id={}", trade_result.order_id))
                                             }
+                                            Err(e) => {
+                                                warn!("Failed to execute trade: {}", e);
+                                                Err(anyhow::anyhow!("Failed to execute trade: {}", e))
+                                            }
+                                        },
+                                        Err(e) => {
+                                            warn!("Failed to get exchange client: {}", e);
+                                            Err(anyhow::anyhow!("Failed to get exchange client: {}", e))
                                         }
-                                    } else {
-                                        debug!("No trading signal generated");
-                                        Ok("No signal".to_string())
                                     }
                                 } else {
-                                    // Statistics to strategy execution total metrics.
-                                    sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
-                                        .with_label_values(&[strategy_id0.as_str(), "error"])
-                                        .inc();
-
-                                    let error_msg = execution_result
-                                        .error
-                                        .clone()
-                                        .unwrap_or_else(|| "Unknown error".to_string());
-                                    warn!("Strategy execution failed: {}", error_msg);
-                                    Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
+                                    debug!("No trading signal generated");
+                                    Ok("No signal".to_string())
                                 }
-                            }
-                            Err(e) => {
-                                warn!("Failed to execute strategy: {}", e);
-                                Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
+                            } else {
+                                // Statistics to executions total metrics.
+                                sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
+                                    .with_label_values(&[strategy_id0.as_str(), "error"])
+                                    .inc();
+
+                                let error_msg = execution_result
+                                    .error
+                                    .clone()
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                warn!("Strategy execution failed: {}", error_msg);
+                                Err(anyhow::anyhow!("Strategy execution failed: {}", error_msg))
                             }
                         }
-                    };
-
-                    if let Err(ref e) = result {
-                        warn!("Failed to execute strategy: {}", e);
-                        // TODO: statistics the error metrics.
-                    } else {
-                        debug!("Executed strategy successfully. Result: {:?}", result);
-                        // TODO: statistics the success metrics.
+                        Err(e) => {
+                            warn!("Failed to execute strategy: {}", e);
+                            Err(anyhow::anyhow!("Failed to execute strategy: {}", e))
+                        }
                     }
-                    result
-                })
-            });
+                };
+
+                if let Err(ref e) = result {
+                    warn!("Failed to execute strategy: {}", e);
+                    // TODO: statistics the error metrics.
+                } else {
+                    debug!("Executed strategy successfully. Result: {:?}", result);
+                    // TODO: statistics the success metrics.
+                }
+                result
+            })
+        });
 
         let _ = messaging
-            .subscribe(TOPIC_MARKET_DATA, handler) // TODO: configuable
+            .subscribe(TOPIC_MARKET_DATA, market_data_handler) // TODO: configuable
             .await
-            .expect("Failed to subscribe to the messaging topic.");
-
-        info!("Subscribed to the messaging topic: {:?}.", TOPIC_MARKET_DATA);
+            .expect("Failed to subscribe to market data topic.");
+        info!("Subscribed to market data topic: {:?}.", TOPIC_MARKET_DATA);
     }
 }
 
@@ -187,29 +173,98 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
 
     async fn startup(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
         if self.argument.run_mode == "BATCH" {
-            let batch_executor = Arc::new(BatchStrategyExecutor::new(self.argument.clone()));
-            *self.batch_executor.lock().unwrap() = Some(batch_executor.clone());
-
-            info!("Initializing Python Strategy Batch Executor.");
-            batch_executor.init().expect("Failed to initializing batch executor.");
-            info!("Initialized Python Strategy Batch Executor.");
-
-            info!("Starting Python Batch Strategy Runner.");
-            self.execute_batch(messaging.to_owned()).await;
-            info!("Started Python Batch Strategy Runner.");
+            unimplemented!()
         } else if self.argument.run_mode == "STREAMING" {
-            let streaming_executor = Arc::new(StreamingStrategyExecutor::new(self.argument.clone()));
-            *self.streaming_executor.lock().unwrap() = Some(streaming_executor.clone());
+            // let executor = Arc::new(StreamingStrategyExecutor::new(self.argument.clone()));
+            // *self.streaming_executor.lock().unwrap() = Some(executor.clone());
 
-            info!("Initializing Python Strategy Streaming Executor.");
-            streaming_executor
-                .init()
-                .expect("Failed to initializing streaming executor.");
-            info!("Initialized Python Strategy Streaming Executor.");
+            let messaging0 = messaging.to_owned();
+            let executors0 = self.running_streaming_executors.to_owned();
+            // SAFETY: We know that `self` is actually an Arc<Self> because `startup` is called
+            // through `Arc<dyn ISigbotStrategyExecutor>` (see strategy_runner.rs:47). We create
+            // a new Arc from the raw pointer and immediately clone it, then forget the original
+            // to avoid double-dropping. This is safe because:
+            // 1. The original Arc is managed by the caller and will outlive this method
+            // 2. We're only creating a new Arc handle, not taking ownership
+            // 3. The cloned Arc will be used in the closure which requires 'static lifetime
+            let self_arc = unsafe {
+                let ptr = self as *const Self;
+                Arc::from_raw(ptr)
+            };
+            let self_arc0 = self_arc.to_owned();
+            std::mem::forget(self_arc); // Don't drop the original, it's managed elsewhere
 
-            info!("Starting Python Streaming Strategy Runner.");
-            self.execute_streaming(messaging.to_owned()).await;
-            info!("Started Python Streaming Strategy Runner.");
+            let config_strategy_handler: Arc<
+                dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync,
+            > = Arc::new(move |data: Vec<u8>| {
+                debug!("Received configuration message: {:?}", data);
+
+                let messaging1 = messaging0.to_owned();
+                let executors1 = executors0.to_owned();
+                let self_arc1 = self_arc0.to_owned();
+
+                Box::pin(async move {
+                    let data0 = data.to_owned();
+
+                    // parse to strategy info from subscribe config message.
+                    let strategy: Arc<StrategyInfo> = Arc::new(
+                        serde_json::from_slice(&data0)
+                            .context("Failed to parse the strategy info from the config message.")?,
+                    );
+
+                    let strategy_id = strategy
+                        .to_owned()
+                        .base
+                        .id
+                        .expect("Failed to get the strategy id.")
+                        .to_string();
+
+                    // Check if executor exists and handle shutdown if needed
+                    let should_create_new = {
+                        let mut executors = executors1.lock().unwrap();
+                        if let Some(executor) = executors.get(&strategy_id) {
+                            executor
+                                .to_owned()
+                                .shutdown()
+                                .expect("Failed to shutdown streaming executor.");
+                            executors.remove(&strategy_id);
+                            false // Found existing, don't create new
+                        } else {
+                            true // Not found, create new
+                        }
+                    };
+
+                    if should_create_new {
+                        info!("Initializing Python Strategy Streaming Executor.");
+                        let executor = Arc::new(StreamingStrategyExecutor::new(
+                            self_arc1.argument.to_owned(),
+                            strategy.to_owned(),
+                        ));
+                        executor.init().expect("Failed to initializing streaming executor.");
+                        info!("Initialized Python Strategy Streaming Executor.");
+
+                        {
+                            let mut executors = executors1.lock().unwrap();
+                            executors.insert(strategy_id.to_owned(), executor.to_owned());
+                        }
+
+                        info!("Starting Python Streaming Strategy Runner.");
+                        self_arc1
+                            .execute_streaming(messaging1.to_owned(), executor.to_owned())
+                            .await;
+                        info!("Started Python Streaming Strategy Runner.");
+                    }
+
+                    Ok(format!("Configured the strategy: {}", strategy_id))
+                })
+            });
+
+            let _ = messaging
+                .to_owned()
+                .subscribe(TOPIC_CONFIG_STRATEGY, config_strategy_handler.to_owned())
+                .await
+                .expect("Failed to subscribe to strategy config topic.");
+            info!("Subscribed to strategy config topic: {:?}.", TOPIC_CONFIG_STRATEGY);
         } else {
             panic!("Unsupported run mode: {}", self.argument.run_mode);
         }
@@ -217,11 +272,14 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
 
     async fn shutdown(&self) {
         info!("Shutdown Embed Strategy Runner.");
-        if let Some(executor) = self.batch_executor.lock().unwrap().as_ref() {
+        for (_, executor) in self.running_batch_executors.lock().unwrap().iter() {
             executor.shutdown().expect("Failed to shutdown batch executor.");
         }
-        if let Some(executor) = self.streaming_executor.lock().unwrap().as_ref() {
-            executor.shutdown().expect("Failed to shutdown streaming executor.");
+        for (_, executor) in self.running_streaming_executors.lock().unwrap().iter() {
+            executor
+                .to_owned()
+                .shutdown()
+                .expect("Failed to shutdown streaming executor.");
         }
         info!("Shutdown Embed Strategy Runner.");
     }

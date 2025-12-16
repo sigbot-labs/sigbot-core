@@ -51,42 +51,18 @@ impl BatchStrategyExecutor {
     }
 
     pub fn init(&self) -> Result<(), Error> {
-        self.ensure_initialized(self.strategy_argument.to_owned().sys_environment.as_ref())
+        self.setup_environment(self.strategy_argument.to_owned().sys_environment.as_ref());
+        Ok(())
     }
 
-    /// Initialize the Python interpreter (thread-safe)
-    fn ensure_initialized(&self, sys_environment: Option<&HashMap<String, String>>) -> Result<(), Error> {
-        let mut initialized = self.initialized_flag.lock().unwrap();
-        if !*initialized {
-            // Merge the All environment variables.
-            if let Some(env_vars) = sys_environment {
-                let mut env = self.environment.lock().unwrap();
-                for (key, value) in env_vars {
-                    env.insert(key.to_string(), value.to_string());
-                }
+    fn setup_environment(&self, sys_environment: Option<&HashMap<String, String>>) {
+        // Merge the All environment variables.
+        if let Some(env_vars) = sys_environment {
+            let mut env = self.environment.lock().unwrap();
+            for (key, value) in env_vars {
+                env.insert(key.to_string(), value.to_string());
             }
-
-            // // Initialize the Python interpreter
-            // Python::with_gil(|py| {
-            //     // The Python interpreter will be automatically initialized when it is first called (because the auto-initialize feature is used)
-            //     info!("Python interpreter initialized");
-            //     // Register sigbotlib module dynamically
-            //     // We create the module and register it in built-in core modules
-            //     let sigbotlib_module = PyModule::new_bound(py, "sigbotlib")?;
-            //     sigbot_strategy_sdk::sdk::core::lib::sigbotlib(&sigbotlib_module)?;
-            //     py.import_bound("sigbotlib")?
-            //         // .getattr("core")?
-            //         .set_item("sigbotlib", sigbotlib_module)?;
-            //     // Verify required packages
-            //     if let Err(e) = verify_required_packages(py) {
-            //         error!("Failed to verify required packages: {}", e);
-            //     }
-            //     Ok::<(), anyhow::Error>(())
-            // })
-            // .context("Failed to initialize Python interpreter and register sigbotlib")?;
-            *initialized = true;
         }
-        Ok(())
     }
 
     pub fn shutdown(&self) -> Result<(), Error> {

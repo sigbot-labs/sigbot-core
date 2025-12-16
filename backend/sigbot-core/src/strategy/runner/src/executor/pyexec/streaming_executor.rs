@@ -26,6 +26,7 @@ use pyo3::types::{PyDict, PyModule};
 use sigbot_strategy_sdk::sdk::core::models::trade_signal::TradingSignal;
 use sigbot_types::modules::exchange::models::trade_position::EntryTradePosition;
 use sigbot_types::modules::strategy::models::strategy_sdk::{StrategyExecutionInput, StrategyExecutionResult};
+use sigbot_types::modules::strategy::strategy::StrategyInfo;
 use sigbot_types::modules::strategy::SigbotStrategyArgument;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -36,29 +37,32 @@ use std::time::Instant;
 /// All symbol+timeframe combinations share the same Python module, allowing
 /// global variables to be accessed across all on_process() calls
 pub struct StreamingStrategyExecutor {
-    /// Strategy runtime argument (including system environment variables)
-    strategy_argument: Arc<SigbotStrategyArgument>,
     /// Strategy runtime environment variables
-    environment: Arc<Mutex<HashMap<String, String>>>,
+    pub environment: Arc<Mutex<HashMap<String, String>>>,
+    /// Strategy runtime argument (including system environment variables)
+    pub argument: Arc<SigbotStrategyArgument>,
+    /// Strategy configuration
+    pub configuration: Arc<StrategyInfo>,
     /// Whether init() has been called
-    initialized_flag: Arc<Mutex<bool>>,
+    init_flag: Arc<Mutex<bool>>,
     /// Compiled Python module (shared across all symbol+timeframe combinations)
     /// This allows global variables set in init() to be accessible in all on_process() calls
-    initialized_pymodule: Arc<Mutex<Option<Py<PyModule>>>>,
+    pymodule: Arc<Mutex<Option<Py<PyModule>>>>,
 }
 
 impl StreamingStrategyExecutor {
-    pub fn new(strategy_argument: Arc<SigbotStrategyArgument>) -> Self {
+    pub fn new(argument: Arc<SigbotStrategyArgument>, configuration: Arc<StrategyInfo>) -> Self {
         Self {
-            strategy_argument,
             environment: Arc::new(Mutex::new(HashMap::new())),
-            initialized_flag: Arc::new(Mutex::new(false)),
-            initialized_pymodule: Arc::new(Mutex::new(None)),
+            argument,
+            configuration,
+            init_flag: Arc::new(Mutex::new(false)),
+            pymodule: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn init(&self) -> Result<(), Error> {
-        self.setup_environment(self.strategy_argument.to_owned().sys_environment.as_ref());
+        self.setup_environment(self.argument.to_owned().sys_environment.as_ref());
         Ok(())
     }
 
@@ -84,7 +88,7 @@ impl StreamingStrategyExecutor {
 
         // Check if we need to initialize (only once, shared across all symbol+timeframe)
         let need_init = {
-            let mut initialized = self.initialized_flag.lock().expect("Failed to lock initialized");
+            let mut initialized = self.init_flag.lock().expect("Failed to lock initialized");
             if !*initialized {
                 *initialized = true;
                 true
@@ -151,7 +155,7 @@ impl StreamingStrategyExecutor {
     fn call_init<'py>(&self, py: Python<'py>, input: &StrategyExecutionInput) -> Result<()> {
         // Check if module already exists (shouldn't happen due to needs_init check, but be safe)
         {
-            let module = self.initialized_pymodule.lock().unwrap();
+            let module = self.pymodule.lock().unwrap();
             if module.is_some() {
                 // Module already exists, skip initialization
                 return Ok(());
@@ -229,7 +233,7 @@ has_on_process = callable(globals().get('on_process', None))
         // Therefore, global variables set in init() will be accessible in all on_process() calls
         // across all symbol+timeframe combinations.
         let module_py = strategy_module.unbind();
-        let mut module = self.initialized_pymodule.lock().unwrap();
+        let mut module = self.pymodule.lock().unwrap();
         *module = Some(module_py);
 
         Ok(())
@@ -250,7 +254,7 @@ has_on_process = callable(globals().get('on_process', None))
     /// Python::with_gil() doesn't create a new interpreter - it only acquires the GIL.
     fn call_on_process(&self, py: Python<'_>, input: &StrategyExecutionInput) -> Result<Option<EntryTradePosition>> {
         // Get compiled module reference
-        let module_guard = self.initialized_pymodule.lock().unwrap();
+        let module_guard = self.pymodule.lock().unwrap();
         let module_py = module_guard.as_ref().ok_or_else(|| {
             anyhow::anyhow!("Initialized the strategy pymodule not found. Make sure init() was called first.")
         })?;
@@ -377,9 +381,9 @@ has_on_process = callable(globals().get('on_process', None))
     pub fn shutdown(&self) -> Result<(), Error> {
         info!("Shutting down Streaming Strategy Executor. Done.");
 
-        let mut module = self.initialized_pymodule.lock().unwrap();
+        let mut module = self.pymodule.lock().unwrap();
         *module = None;
-        let mut initialized = self.initialized_flag.lock().unwrap();
+        let mut initialized = self.init_flag.lock().unwrap();
         *initialized = false;
 
         self.environment.lock().unwrap().clear();
@@ -479,12 +483,14 @@ def on_process(context):
 
     #[test]
     fn test_streaming_executor() {
-        let executor = StreamingStrategyExecutor::new(Arc::new(SigbotStrategyArgument {
-            strategy_config: Arc::new(StrategyInfo::default()),
-            messaging_config: Arc::new(MessagingInfo::default()),
-            sys_environment: Some(HashMap::new()),
-            run_mode: "STREAMING".to_string(),
-        }));
+        let executor = StreamingStrategyExecutor::new(
+            Arc::new(SigbotStrategyArgument {
+                sys_environment: Some(HashMap::new()),
+                run_mode: "STREAMING".to_string(),
+                messaging_config: Arc::new(MessagingInfo::default()),
+            }),
+            Arc::new(StrategyInfo::default()),
+        );
 
         let result = executor
             .process(&StrategyExecutionInput {
@@ -527,12 +533,14 @@ def on_process(context):
 
     #[test]
     fn test_streaming_executor_multi_thread_and_mock_cost() {
-        let executor = Arc::new(StreamingStrategyExecutor::new(Arc::new(SigbotStrategyArgument {
-            strategy_config: Arc::new(StrategyInfo::default()),
-            messaging_config: Arc::new(MessagingInfo::default()),
-            sys_environment: Some(HashMap::new()),
-            run_mode: "STREAMING".to_string(),
-        })));
+        let executor = Arc::new(StreamingStrategyExecutor::new(
+            Arc::new(SigbotStrategyArgument {
+                sys_environment: Some(HashMap::new()),
+                run_mode: "STREAMING".to_string(),
+                messaging_config: Arc::new(MessagingInfo::default()),
+            }),
+            Arc::new(StrategyInfo::default()),
+        ));
 
         let threads = (0..10).map(|i| {
             let executor0 = executor.to_owned();
