@@ -53,7 +53,7 @@ impl AsyncRepository<DatafeedInfo> for DatafeedInfoMongoRepository {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<DatafeedInfo>), Error> {
         //let result = &self.inner.select(datafeed, page).await;
-        match dynamic_mongo_query!(datafeed, self.collection, "updated_time", page, DatafeedInfo) {
+        match dynamic_mongo_query!(datafeed, self.collection, "updated_at", page, DatafeedInfo) {
             Ok(result) => {
                 info!("query datafeeds: {:?}", result);
                 Ok((result.0, result.1))

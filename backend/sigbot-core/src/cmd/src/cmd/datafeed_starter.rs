@@ -30,6 +30,7 @@ use sigbot_datafeed::client::market::datafeed_binance::SigbotBinanceDatafeedClie
 use sigbot_datafeed::client::news::datafeed_trushsocial::SigbotTrushSocialDatafeedClient;
 use sigbot_datafeed::client::news::datafeed_twitter::SigbotTwitterDatafeedClient;
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
+use sigbot_messaging::client::messaging_local::SigbotLocalQueueClient;
 use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
@@ -62,10 +63,11 @@ impl SigbotDatafeedIngestorStarter {
                     .long("messaging")
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
-                        "The providers of messaging. (supported are: {})",
+                        "The providers of messaging. (supported are: {}, {})",
+                        SigbotLocalQueueClient::NAME,
                         SigbotMqttClient::NAME,
                     ))
-                    .default_value(SigbotMqttClient::NAME),
+                    .default_value(SigbotLocalQueueClient::NAME),
             )
             .arg(
                 Arg::new("configuration")

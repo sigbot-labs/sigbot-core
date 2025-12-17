@@ -22,3 +22,4 @@ chrono.workspace = true
 hyper.workspace = true
 anyhow.workspace = true
 sqlx.workspace = true
+rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision"] }

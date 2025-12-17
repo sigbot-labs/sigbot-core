@@ -49,7 +49,7 @@ impl UserMongoRepository {
 impl AsyncRepository<User> for UserMongoRepository {
     async fn select(&self, user: User, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error> {
         //let result = &self.inner.select(user, page).await;
-        match dynamic_mongo_query!(user, self.collection, "updated_time", page, User) {
+        match dynamic_mongo_query!(user, self.collection, "updated_at", page, User) {
             Ok(result) => {
                 info!("query users: {:?}", result);
                 Ok((result.0, result.1))

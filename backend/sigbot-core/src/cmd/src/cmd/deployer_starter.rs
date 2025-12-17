@@ -24,9 +24,9 @@ use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_deployer::deployer::deployer_factory::SigbotDeployerFactory;
-use sigbot_deployer::deployer::kubernetes::deployer_kubernetes::SigbotKubernetesDeployer;
-use sigbot_deployer::deployer::standalone::deployer_hosted::SigbotHostedDeployer;
+use sigbot_deployer::deployer_factory::SigbotDeployerFactory;
+use sigbot_deployer::kubernetes::deployer_kubernetes::SigbotKubernetesDeployer;
+use sigbot_deployer::standalone::deployer_hosted::SigbotHostedDeployer;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -38,7 +38,7 @@ impl SigbotDeployerManagerStarter {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot platformization Deployer Manager (Lifecycle management for All components).")
+            .about("Run Sigbot platformization Deployer Manager (Lifecycle Management for Components).")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("provider")

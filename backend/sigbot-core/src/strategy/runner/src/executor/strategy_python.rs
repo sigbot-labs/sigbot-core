@@ -28,7 +28,7 @@ use common_telemetry::{debug, info, warn};
 use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use sigbot_messaging::client::messaging_factory::ISigbotMessagingClient;
 use sigbot_types::modules::{
-    messaging::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_DATA},
+    messaging::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_STREAMS},
     strategy::{models::strategy_sdk::StrategyExecutionInput, strategy::StrategyInfo, SigbotStrategyArgument},
 };
 use std::{
@@ -158,10 +158,10 @@ impl SigbotPythonStrategyExecutor {
         });
 
         let _ = messaging
-            .subscribe(TOPIC_MARKET_DATA, market_data_handler) // TODO: configuable
+            .subscribe(TOPIC_MARKET_STREAMS, market_data_handler) // TODO: configuable
             .await
             .expect("Failed to subscribe to market data topic.");
-        info!("Subscribed to market data topic: {:?}.", TOPIC_MARKET_DATA);
+        info!("Subscribed to market data topic: {:?}.", TOPIC_MARKET_STREAMS);
     }
 }
 

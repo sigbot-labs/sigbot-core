@@ -58,7 +58,7 @@ impl DLockSQLiteRepository {
                 // 1. Assuming the first acquire lock, then it should be insert a new locked record.
                 // SQLite supports ON CONFLICT, but INSERT OR IGNORE is more commonly used and compatible
                 let insert_sql = r#"
-                    INSERT OR IGNORE INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
+                    INSERT OR IGNORE INTO sys_dlock (name, status, timeout, holder, created_at, updated_at)
                     VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 "#;
                 let mut tx = self
@@ -97,14 +97,14 @@ impl DLockSQLiteRepository {
         //    meaning the current attempt to acquired the distributed lock.
         // 2. If another holder crashes after acquiring the lock, a timeout period must be elapsed before allowing another
         //    holder to acquire the lock.
-        // Note: SQLite datetime function syntax: datetime(updated_time, '+' || '123.456' || ' seconds')
+        // Note: SQLite datetime function syntax: datetime(updated_at, '+' || '123.456' || ' seconds')
         // We need to embed the timeout value directly in the SQL string since parameter binding doesn't work for datetime modifiers
         let acquire_sql = format!(
             r#"
-            UPDATE sys_dlock SET status = 1, updated_time = CURRENT_TIMESTAMP, holder = ?
+            UPDATE sys_dlock SET status = 1, updated_at = CURRENT_TIMESTAMP, holder = ?
             WHERE del_flag = 0 AND (
                 ((id = ? OR name = ?) AND status = 0)
-                OR (datetime(updated_time, '+' || '{}' || ' seconds') < datetime('now'))
+                OR (datetime(updated_at, '+' || '{}' || ' seconds') < datetime('now'))
             )
             "#,
             timeout_seconds_str
@@ -131,7 +131,7 @@ impl DLockSQLiteRepository {
 
         // Release to unlock for current holder only.
         let unlock_sql = r#"
-            UPDATE sys_dlock SET status = 0, updated_time = CURRENT_TIMESTAMP
+            UPDATE sys_dlock SET status = 0, updated_at = CURRENT_TIMESTAMP
             WHERE del_flag = 0 AND holder = ? AND (
                 ((id = ? OR name = ?) AND status = 1)
             )

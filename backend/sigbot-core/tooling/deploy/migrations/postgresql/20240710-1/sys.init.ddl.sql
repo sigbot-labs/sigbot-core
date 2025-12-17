@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
     lang VARCHAR(64) NULL,
     status INTEGER NULL default 0,
     created_by VARCHAR(64) NULL,
-    created_time TIMESTAMPTZ default current_timestamp,
+    created_at TIMESTAMPTZ default current_timestamp,
     updated_by VARCHAR(64) NULL,
-    updated_time TIMESTAMPTZ default current_timestamp,
+    updated_at TIMESTAMPTZ default current_timestamp,
     del_flag INTEGER NOT NULL default 0,
 );

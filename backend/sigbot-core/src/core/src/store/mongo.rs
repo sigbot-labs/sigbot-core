@@ -62,7 +62,7 @@ impl<T: Any + Send + Sync> MongoRepository<T> {
 impl<T: Any + Send + Sync> AsyncRepository<T> for MongoRepository<T> {
     async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error> {
         //use crate::dynamic_mongo_query;
-        //match dynamic_mongo_query!(param, self.database.collection("users"), "updated_time", page, User) {
+        //match dynamic_mongo_query!(param, self.database.collection("users"), "updated_at", page, User) {
         //    Ok(result) => {
         //        // tracing::info!("query users: {:?}", result);
         //        Ok((result.0, result.1))

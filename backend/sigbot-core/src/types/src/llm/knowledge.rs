@@ -57,7 +57,7 @@ pub struct KnowledgeUploadInfo {
     pub lines: usize,
     pub status: KnowledgeStatus,
     pub description: Option<String>,
-    pub create_at: u64,
+    pub created_at: u64,
     pub created_by: Option<String>,
 }
 
@@ -78,7 +78,7 @@ impl KnowledgeUploadInfo {
             lines: 0,
             status: KnowledgeStatus::RECEIVED,
             description: None,
-            create_at: Utc::now().timestamp_millis() as u64,
+            created_at: Utc::now().timestamp_millis() as u64,
             created_by,
         })
     }

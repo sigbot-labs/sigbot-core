@@ -39,8 +39,8 @@ create table if not exists sys_user (
     lang varchar(64) null,
     status integer null default 0,
     created_by varchar(64) null,
-    created_time integer default current_timestamp,
+    created_at integer default current_timestamp,
     updated_by varchar(64) null,
-    updated_time integer default current_timestamp,
+    updated_at integer default current_timestamp,
     del_flag integer not null default 0
 );

@@ -10,16 +10,17 @@ members = [
     "src/types",
     "src/utils",
     "src/core",
+    "src/cmd",
+    "src/messaging",
     "src/exchange",
     "src/deployer",
-    "src/controller",
     "src/datafeed",
     "src/strategy/runner",
     "src/strategy/sdk",
+    "src/order",
+    "src/wallet",
     "src/notification",
     "src/backtest",
-    "src/messaging",
-    "src/cmd",
 ]
 resolver = "2"
 
@@ -49,19 +50,20 @@ common-makestruct = { path = "src/common/makestruct" }
 common-mem-prof = { path = "src/common/mem-prof" }
 common-pprof = { path = "src/common/pprof" }
 common-telemetry = { path = "src/common/telemetry" }
-sigbot-cmd = { path = "src/cmd" }
-sigbot-core = { path = "src/core" }
 sigbot-types = { path = "src/types" }
 sigbot-utils = { path = "src/utils" }
+sigbot-core = { path = "src/core" }
+sigbot-cmd = { path = "src/cmd" }
+sigbot-messaging = { path = "src/messaging" }
 sigbot-exchange = { path = "src/exchange" }
 sigbot-deployer = { path = "src/deployer" }
-sigbot-controller = { path = "src/controller" }
 sigbot-datafeed = { path = "src/datafeed" }
 sigbot-strategy-runner = { path = "src/strategy/runner" }
 sigbot-strategy-sdk = { path = "src/strategy/sdk" }
+sigbot-order = { path = "src/order" }
+sigbot-wallet = { path = "src/wallet" }
 sigbot-notification = { path = "src/notification" }
 sigbot-backtest = { path = "src/backtest" }
-sigbot-messaging = { path = "src/messaging" }
 
 # Lang libs
 regex = "1.11.1"
@@ -143,6 +145,7 @@ reqwest = "0.12.12"
 mongodb = "3.0.1"
 sqlx = { version = "0.8.3", features = ["sqlite", "postgres"] }
 pgvector = { version = "0.4", features = ["postgres"] }
+rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision"] }
 
 # Swagger/OpenAPI libs
 utoipa = "5.3.1"

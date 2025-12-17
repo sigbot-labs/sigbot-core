@@ -22,7 +22,7 @@ use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
 use anyhow::{Context, Error};
 use common_telemetry::info;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::messaging::TOPIC_MARKET_DATA;
+use sigbot_types::modules::messaging::TOPIC_MARKET_STREAMS;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotDatafeedIngestor {}
@@ -56,7 +56,7 @@ impl SigbotDatafeedIngestor {
                     .unwrap_or_default();
                 info!("Received data: {:?}", data0);
                 messaging0
-                    .publish(TOPIC_MARKET_DATA, &data0)
+                    .publish(TOPIC_MARKET_STREAMS, &data0)
                     .await
                     .context("Failed to publish data to messaging topic.")?;
                 Ok(data)

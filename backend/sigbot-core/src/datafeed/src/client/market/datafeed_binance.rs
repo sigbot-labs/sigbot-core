@@ -22,7 +22,6 @@ use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use sigbot_types::modules::{datafeed::SigbotDatefeedArgument, exchange::exchange::ExchangeInfo};
 use std::{future::Future, pin::Pin, sync::Arc};
 

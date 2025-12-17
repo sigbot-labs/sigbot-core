@@ -54,7 +54,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
             exchange,
             "t_exchange",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             ExchangeInfo
         )?;
@@ -91,7 +91,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
         //  let result = sqlx
         //   ::query(
         //     r#"
-        //     INSERT INTO t_exchange (id, name, email, password, created_by, created_time, updated_by, updated_time, del_flag)
+        //     INSERT INTO t_exchange (id, name, email, password, created_by, created_at, updated_by, updated_at, del_flag)
         //      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         //     "#
         //   )
@@ -101,9 +101,9 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
         //   .bind(exchange.phone)
         //   .bind(exchange.password) // TODO persistent encrypt password
         //   .bind(exchange.base.created_by)
-        //   .bind(exchange.base.created_time)
+        //   .bind(exchange.base.created_at)
         //   .bind(exchange.base.updated_by)
-        //   .bind(exchange.base.updated_time)
+        //   .bind(exchange.base.updated_at)
         //   .bind(exchange.base.del_flag)
         //   .execute(self.inner.get_pool()).await
         //   ?;

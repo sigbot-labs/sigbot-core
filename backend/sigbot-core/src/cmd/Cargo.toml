@@ -21,9 +21,10 @@ sigbot-utils.workspace = true
 sigbot-core.workspace = true
 sigbot-deployer.workspace = true
 sigbot-messaging.workspace = true
-sigbot-controller.workspace = true
 sigbot-datafeed.workspace = true
 sigbot-strategy-runner.workspace = true
+sigbot-order.workspace = true
+sigbot-wallet.workspace = true
 sigbot-backtest.workspace = true
 sigbot-notification.workspace = true
 

@@ -20,13 +20,14 @@
 
 pub mod api_starter;
 pub mod backtest_starter;
-pub mod controller_starter;
 pub mod datafeed_starter;
 pub mod deployer_starter;
 pub mod internal;
 pub mod notification_starter;
+pub mod order_starter;
 pub mod standalone_starter;
 pub mod strategy_starter;
+pub mod wallet_starter;
 
 use api_starter::SigbotAPIServer;
 use backtest_starter::SigbotBacktestRunnerStarter;
@@ -38,8 +39,9 @@ use std::sync::OnceLock;
 use strategy_starter::SigbotStrategyRunnerStarter;
 
 use crate::cmd::{
-    controller_starter::SigbotControllerManagerStarter, datafeed_starter::SigbotDatafeedIngestorStarter,
-    deployer_starter::SigbotDeployerManagerStarter, notification_starter::SigbotNotificationForwarderStarter,
+    datafeed_starter::SigbotDatafeedIngestorStarter, deployer_starter::SigbotDeployerManagerStarter,
+    notification_starter::SigbotNotificationForwarderStarter, order_starter::SigbotOrderManagerStarter,
+    wallet_starter::SigbotWalletManagerStarter,
 };
 
 type SubcommandBuildFn = fn() -> Command;
@@ -50,6 +52,14 @@ static SUBCOMMAND_MAP: OnceLock<Vec<(&'static str, (SubcommandBuildFn, Subcomman
 pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandBuildFn, SubcommandHandleFn))> {
     SUBCOMMAND_MAP.get_or_init(|| {
         let mut vec = Vec::new();
+        vec.push((
+            SigbotStandaloneStarter::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotStandaloneStarter::build as SubcommandBuildFn,
+                SigbotStandaloneStarter::run as SubcommandHandleFn,
+            ),
+        ));
         vec.push((
             SigbotAPIServer::COMMAND_NAME,
             (
@@ -64,14 +74,6 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
                 // Type inference error, forced conversion need.
                 SigbotDeployerManagerStarter::build as SubcommandBuildFn,
                 SigbotDeployerManagerStarter::run as SubcommandHandleFn,
-            ),
-        ));
-        vec.push((
-            SigbotControllerManagerStarter::COMMAND_NAME,
-            (
-                // Type inference error, forced conversion need.
-                SigbotControllerManagerStarter::build as SubcommandBuildFn,
-                SigbotControllerManagerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
@@ -91,6 +93,22 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
             ),
         ));
         vec.push((
+            SigbotOrderManagerStarter::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotOrderManagerStarter::build as SubcommandBuildFn,
+                SigbotOrderManagerStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotWalletManagerStarter::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotWalletManagerStarter::build as SubcommandBuildFn,
+                SigbotWalletManagerStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
             SigbotBacktestRunnerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
@@ -104,14 +122,6 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
                 // Type inference error, forced conversion need.
                 SigbotNotificationForwarderStarter::build as SubcommandBuildFn,
                 SigbotNotificationForwarderStarter::run as SubcommandHandleFn,
-            ),
-        ));
-        vec.push((
-            SigbotStandaloneStarter::COMMAND_NAME,
-            (
-                // Type inference error, forced conversion need.
-                SigbotStandaloneStarter::build as SubcommandBuildFn,
-                SigbotStandaloneStarter::run as SubcommandHandleFn,
             ),
         ));
         vec

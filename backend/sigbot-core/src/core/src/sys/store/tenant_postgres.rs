@@ -46,14 +46,7 @@ impl TenantPostgresRepository {
 #[async_trait]
 impl AsyncRepository<Tenant> for TenantPostgresRepository {
     async fn select(&self, tenant: Tenant, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
-        let result = dynamic_postgres_query!(
-            tenant,
-            "sys_tenant",
-            self.inner.get_pool(),
-            "updated_time",
-            page,
-            Tenant
-        )?;
+        let result = dynamic_postgres_query!(tenant, "sys_tenant", self.inner.get_pool(), "updated_at", page, Tenant)?;
         info!("query tenants: {:?}", result);
         Ok((result.0, result.1))
     }

@@ -53,7 +53,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
         // let table = "t_exchange";
-        // let order_by = "updated_time";
+        // let order_by = "updated_at";
         // // Notice:
         // // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
         // // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
@@ -72,9 +72,9 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         //         if !v.is_empty() {
         //             index += 1;
         //             // Notice: Must use $x expression? otherwise, the sqlx will not work.
-        //             // e.g: "SELECT COUNT(1) as count FROM my_table WHERE created_time = $1 AND updated_time = $2"
+        //             // e.g: "SELECT COUNT(1) as count FROM my_table WHERE created_at = $1 AND updated_at = $2"
         //             fields.push(format!("{} = ${}", key, index));
-        //             if key == "created_time" || key == "updated_time" {
+        //             if key == "created_at" || key == "updated_at" {
         //                 let dt = DateTime::parse_from_rfc3339(v)?;
         //                 params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
         //             } else {
@@ -145,7 +145,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
             exchange,
             "t_exchange",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             ExchangeInfo
         )?;
@@ -195,7 +195,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         //             if !v.is_empty() {
         //                 fields.push(key.as_str());
         //                 values.push("?");
-        //                 if key == "created_time" || key == "updated_time" {
+        //                 if key == "created_at" || key == "updated_at" {
         //                     let dt = DateTime::parse_from_rfc3339(v)?;
         //                     params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
         //                 } else {
@@ -206,7 +206,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         //     }
         // }
         // let query = format!("INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {} RETURNING id",
-        //         $table, fields.join(","), values.join(","), "updated_time = CURRENT_TIMESTAMP(13)");
+        //         $table, fields.join(","), values.join(","), "updated_at = CURRENT_TIMESTAMP(13)");
         // let mut operator = sqlx::query(&query);
         // for param in params.iter() {
         //     if let GenericValue::Bool(v) = param {

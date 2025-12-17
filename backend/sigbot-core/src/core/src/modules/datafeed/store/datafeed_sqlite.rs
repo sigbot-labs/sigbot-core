@@ -54,7 +54,7 @@ impl AsyncRepository<DatafeedInfo> for DatafeedInfoSQLiteRepository {
             datafeed,
             "t_datafeed",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             DatafeedInfo
         )?;

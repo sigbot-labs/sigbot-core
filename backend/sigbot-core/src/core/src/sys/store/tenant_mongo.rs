@@ -49,7 +49,7 @@ impl TenantMongoRepository {
 impl AsyncRepository<Tenant> for TenantMongoRepository {
     async fn select(&self, tenant: Tenant, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
         //let result = &self.inner.select(tenant, page).await;
-        match dynamic_mongo_query!(tenant, self.collection, "updated_time", page, Tenant) {
+        match dynamic_mongo_query!(tenant, self.collection, "updated_at", page, Tenant) {
             Ok(result) => {
                 info!("query tenants: {:?}", result);
                 Ok((result.0, result.1))

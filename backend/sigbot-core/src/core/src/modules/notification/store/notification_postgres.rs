@@ -54,7 +54,7 @@ impl AsyncRepository<NotificationInfo> for NotificationInfoPostgresRepository {
             notification,
             "t_notification",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             NotificationInfo
         )?;

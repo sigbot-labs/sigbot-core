@@ -21,10 +21,21 @@
 pub mod messaging;
 
 /// This topic for strategy runner to receive strategies configuration push.
-pub const TOPIC_CONFIG_STRATEGY: &str = "sigbot/v1/config/strategy";
+/// data-flow: from api-server to strategy-runner.
+pub const TOPIC_CONFIG_STRATEGY: &str = "sigbot/internal/v1/{tenant_id}/config/strategy";
 
-/// This topic for strategy runner to receive market kline/tick data.
-pub const TOPIC_MARKET_DATA: &str = "sigbot/v1/market/data";
+/// This topic for strategy runner to receive market kline/tick data streams.
+/// data-flow: from datafeed-ingestor or backtest to strategy-runner.
+pub const TOPIC_MARKET_STREAMS: &str = "sigbot/internal/v1/{tenant_id}/market/streams";
+
+/// This topic for order-manager to receive trading signals.
+/// data-flow: from strategy-runner to order-manager.
+pub const TOPIC_TRADING_SIGNALS: &str = "sigbot/internal/v1/{tenant_id}/trading/signals";
+
+/// This topic for wallet-manager to receive trade results.
+/// data-flow: from order-manager to wallet-manager.
+pub const TOPIC_TRADING_RESULTS: &str = "sigbot/internal/v1/{tenant_id}/trading/results";
 
 /// This topic for notification forwarder to receive notification messages.
-pub const TOPIC_NOTIFICATION: &str = "sigbot/v1/notification";
+/// data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to notification-forwarder.
+pub const TOPIC_NOTIFICATION_MESSAGES: &str = "sigbot/internal/v1/{tenant_id}/notifications";

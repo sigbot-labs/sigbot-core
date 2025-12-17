@@ -58,7 +58,7 @@ impl DLockPostgresRepository {
                 // 1. Assuming the first acquire lock, then it should be insert a new locked record.
                 // compute_if_absent already has lock protection, so we can use pool directly
                 let insert_sql = r#"
-                    INSERT INTO sys_dlock (name, status, timeout, holder, created_time, updated_time)
+                    INSERT INTO sys_dlock (name, status, timeout, holder, created_at, updated_at)
                     VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP(13), CURRENT_TIMESTAMP(13))
                     ON CONFLICT (id, name) DO NOTHING
                 "#;
@@ -90,10 +90,10 @@ impl DLockPostgresRepository {
         // 3. If another holder crashes after acquiring the lock, a timeout period must be elapsed before allowing another
         //    holder to acquire the lock.
         let acquire_sql = r#"
-        UPDATE sys_dlock SET status = 1, updated_time = CURRENT_TIMESTAMP(13), holder = ?
+        UPDATE sys_dlock SET status = 1, updated_at = CURRENT_TIMESTAMP(13), holder = ?
         WHERE del_flag = 0 AND (
             ((id = ? OR name = ?) AND status = 0)
-            OR (updated_time < ? - INTERVAL '? milliseconds')
+            OR (updated_at < ? - INTERVAL '? milliseconds')
             )
             "#;
         let mut tx = self.inner.get_pool().begin().await?;
@@ -120,7 +120,7 @@ impl DLockPostgresRepository {
 
         // Release to unlock for current holder only.
         let unlock_sql = r#"
-            UPDATE sys_dlock SET status = 0, updated_time = CURRENT_TIMESTAMP(13)
+            UPDATE sys_dlock SET status = 0, updated_at = CURRENT_TIMESTAMP(13)
             WHERE del_flag = 0 AND holder = ? AND (
                 ((id = ? OR name = ?) AND status = 1)
             )

@@ -163,9 +163,9 @@ macro_rules! dynamic_postgres_query {
                     if !v.is_empty() {
                         index += 1;
                         // Notice: Must use $x expression? otherwise, the sqlx will not work.
-                        // e.g: "SELECT COUNT(1) as count FROM my_table WHERE created_time = $1 AND updated_time = $2"
+                        // e.g: "SELECT COUNT(1) as count FROM my_table WHERE created_at = $1 AND updated_at = $2"
                         fields.push(format!("{} = ${}", key, index));
-                        if key == "created_time" || key == "updated_time" {
+                        if key == "created_at" || key == "updated_at" {
                             let dt = DateTime::parse_from_rfc3339(v)?;
                             params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
                         } else {
@@ -282,7 +282,7 @@ macro_rules! dynamic_postgres_insert {
                         if !v.is_empty() {
                             fields.push(key.as_str());
                             values.push("?");
-                            if key == "created_time" || key == "updated_time" {
+                            if key == "created_at" || key == "updated_at" {
                                 let dt = DateTime::parse_from_rfc3339(v)?;
                                 params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
                             } else {
@@ -296,9 +296,9 @@ macro_rules! dynamic_postgres_insert {
                 return Ok(-1);
             }
 
-            // e.g: 'INSERT INTO sys_user ( id, name ) VALUES ( 2, "John Doe" ) ON CONFLICT ( id ) DO UPDATE SET updated_time = CURRENT_TIMESTAMP(13) RETURNING id;'
+            // e.g: 'INSERT INTO sys_user ( id, name ) VALUES ( 2, "John Doe" ) ON CONFLICT ( id ) DO UPDATE SET updated_at = CURRENT_TIMESTAMP(13) RETURNING id;'
             let query = format!("INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {} RETURNING id",
-                $table, fields.join(","), values.join(","), "updated_time = CURRENT_TIMESTAMP(13)");
+                $table, fields.join(","), values.join(","), "updated_at = CURRENT_TIMESTAMP(13)");
 
             let mut operator = sqlx::query(&query);
             for param in params.iter() {

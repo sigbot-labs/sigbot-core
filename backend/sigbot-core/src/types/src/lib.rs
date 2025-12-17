@@ -47,11 +47,11 @@ pub struct EntityBase {
     //#[serde(rename = "createBy")]
     pub created_by: Option<String>,
     #[schema(read_only = true)]
-    pub created_time: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
     #[schema(read_only = true)]
     pub updated_by: Option<String>,
     #[schema(read_only = true)]
-    pub updated_time: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub del_flag: Option<i8>,
 }
@@ -62,9 +62,9 @@ impl EntityBase {
             id: None,
             status: None,
             created_by: None,
-            created_time: None,
+            created_at: None,
             updated_by: None,
-            updated_time: None,
+            updated_at: None,
             del_flag: None,
         }
     }
@@ -75,9 +75,9 @@ impl EntityBase {
             id,
             status: Some(0),
             created_by: None,
-            created_time: Some(now),
+            created_at: Some(now),
             updated_by: None,
-            updated_time: Some(now),
+            updated_at: Some(now),
             del_flag: Some(0),
         }
     }
@@ -88,9 +88,9 @@ impl EntityBase {
             id,
             status: Some(0),
             created_by: created_by,
-            created_time: Some(now),
+            created_at: Some(now),
             updated_by: updated_by,
-            updated_time: Some(now),
+            updated_at: Some(now),
             del_flag: Some(0),
         }
     }
@@ -98,14 +98,14 @@ impl EntityBase {
     pub async fn pre_insert(&mut self, created_by: Option<String>) -> i64 {
         self.id = Some(SnowflakeIdGenerator::default_next_jssafe());
         self.created_by = created_by;
-        self.created_time = Some(Utc::now());
+        self.created_at = Some(Utc::now());
         self.del_flag = Some(0);
-        self.id.unwrap()
+        self.id.expect("id is required")
     }
 
     pub async fn pre_update(&mut self, updated_by: Option<String>) {
         self.updated_by = updated_by;
-        self.updated_time = Some(Utc::now());
+        self.updated_at = Some(Utc::now());
         self.del_flag = Some(0);
     }
 }

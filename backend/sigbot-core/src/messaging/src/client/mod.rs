@@ -19,4 +19,5 @@
 // This includes modifications and derived works.
 
 pub mod messaging_factory;
+pub mod messaging_local;
 pub mod messaging_mqtt;

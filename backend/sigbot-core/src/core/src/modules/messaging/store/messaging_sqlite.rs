@@ -54,7 +54,7 @@ impl AsyncRepository<MessagingInfo> for MessagingInfoSQLiteRepository {
             messaging,
             "t_messaging",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             MessagingInfo
         )?;

@@ -44,6 +44,14 @@ use crate::{
             strategy_mongo::StrategyInfoMongoRepository, strategy_postgres::StrategyInfoPostgresRepository,
             strategy_sqlite::StrategyInfoSQLiteRepository,
         },
+        wallet::store::{
+            balance_mongo::BalanceInfoMongoRepository, balance_postgres::BalanceInfoPostgresRepository,
+            balance_sqlite::BalanceInfoSQLiteRepository, ledger_mongo::LedgerInfoMongoRepository,
+            ledger_postgres::LedgerInfoPostgresRepository, ledger_sqlite::LedgerInfoSQLiteRepository,
+            position_mongo::PositionInfoMongoRepository, position_postgres::PositionInfoPostgresRepository,
+            position_sqlite::PositionInfoSQLiteRepository, wallet_mongo::WalletInfoMongoRepository,
+            wallet_postgres::WalletInfoPostgresRepository, wallet_sqlite::WalletInfoSQLiteRepository,
+        },
     },
     store::RepositoryContainer,
     sys::store::{
@@ -57,7 +65,8 @@ use oauth2::basic::BasicClient;
 use sigbot_types::{
     modules::{
         datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo,
-        notification::notification::NotificationInfo, strategy::strategy::StrategyInfo,
+        notification::notification::NotificationInfo, strategy::strategy::StrategyInfo, wallet::balance::BalanceInfo,
+        wallet::ledger::LedgerInfo, wallet::position::PositionInfo, wallet::wallet::WalletInfo,
     },
     sys::{dlock::DLock, tenant::Tenant, user::User},
 };
@@ -87,6 +96,11 @@ pub struct SigbotState {
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
     pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
+    // The Wallet module repositories.
+    pub wallet_repo: Arc<Mutex<RepositoryContainer<WalletInfo>>>,
+    pub trade_repo: Arc<Mutex<RepositoryContainer<LedgerInfo>>>,
+    pub balance_repo: Arc<Mutex<RepositoryContainer<BalanceInfo>>>,
+    pub position_repo: Arc<Mutex<RepositoryContainer<PositionInfo>>>,
 }
 
 impl SigbotState {
@@ -254,6 +268,86 @@ impl SigbotState {
                 _ => None,
             },
         );
+        let wallet_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    WalletInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    WalletInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    WalletInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
+        let trade_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    LedgerInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    LedgerInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    LedgerInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
+        let balance_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    BalanceInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    BalanceInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    BalanceInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
+        let position_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    PositionInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    PositionInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    PositionInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
         let app_state = SigbotState {
             // Notice: Arc object clone only increments the reference counter, and does not copy the actual data block.
             config: config.clone(),
@@ -276,6 +370,11 @@ impl SigbotState {
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
             notification_repo: Arc::new(Mutex::new(notification_repo)),
+            // The Wallet repositories.
+            wallet_repo: Arc::new(Mutex::new(wallet_repo)),
+            trade_repo: Arc::new(Mutex::new(trade_repo)),
+            balance_repo: Arc::new(Mutex::new(balance_repo)),
+            position_repo: Arc::new(Mutex::new(position_repo)),
         };
 
         // Build DI container.

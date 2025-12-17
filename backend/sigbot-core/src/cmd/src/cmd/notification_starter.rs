@@ -24,6 +24,7 @@ use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
+use sigbot_messaging::client::messaging_local::SigbotLocalQueueClient;
 use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
 use sigbot_notification::client::notification_email::SigbotEmailClient;
 use sigbot_notification::client::notification_telegram::SigbotTelegramClient;
@@ -54,22 +55,23 @@ impl SigbotNotificationForwarderStarter {
                     .default_value(SigbotEmailClient::NAME),
             )
             .arg(
-                Arg::new("messaging")
-                    .short('m')
-                    .long("messaging")
-                    .value_parser(clap::value_parser!(String))
-                    .help(format!(
-                        "The providers of messaging. (supported are: {})",
-                        SigbotMqttClient::NAME,
-                    ))
-                    .default_value(SigbotMqttClient::NAME),
-            )
-            .arg(
                 Arg::new("configuration")
                     .short('c')
                     .long("configuration")
                     .value_parser(clap::value_parser!(String))
                     .help("The configuration of notification. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("messaging")
+                    .short('m')
+                    .long("messaging")
+                    .value_parser(clap::value_parser!(String))
+                    .help(format!(
+                        "The providers of messaging. (supported are: {}, {})",
+                        SigbotLocalQueueClient::NAME,
+                        SigbotMqttClient::NAME,
+                    ))
+                    .default_value(SigbotLocalQueueClient::NAME),
             )
     }
 

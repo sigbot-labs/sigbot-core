@@ -69,7 +69,7 @@ impl DLockMongoRepository {
                 {
                     "$expr": {
                         "$lt": [
-                            "$updated_time",
+                            "$updated_at",
                             {
                                 "$subtract": [
                                     "$$NOW",
@@ -88,7 +88,7 @@ impl DLockMongoRepository {
                 "holder": &holder
             },
             "$currentDate": {
-                "updated_time": true
+                "updated_at": true
             }
         };
 
@@ -106,9 +106,9 @@ impl DLockMongoRepository {
                     id: Some(id),
                     status: Some(1),
                     created_by: None,
-                    created_time: None, // Will be set by MongoDB $currentDate
+                    created_at: None, // Will be set by MongoDB $currentDate
                     updated_by: None,
-                    updated_time: None, // Will be set by MongoDB $currentDate
+                    updated_at: None, // Will be set by MongoDB $currentDate
                     del_flag: Some(0),
                 },
                 name: Some(name.clone()),
@@ -128,8 +128,8 @@ impl DLockMongoRepository {
                     };
                     let time_update = doc! {
                         "$currentDate": {
-                            "created_time": true,
-                            "updated_time": true
+                            "created_at": true,
+                            "updated_at": true
                         }
                     };
                     // This update should always succeed since we just inserted
@@ -170,7 +170,7 @@ impl DLockMongoRepository {
                 "status": 0
             },
             "$currentDate": {
-                "updated_time": true
+                "updated_at": true
             }
         };
 

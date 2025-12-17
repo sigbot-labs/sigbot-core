@@ -18,11 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::sync::Arc;
-
 use crate::modules::{messaging::messaging::MessagingInfo, notification::notification::NotificationInfo};
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub mod notification;
 

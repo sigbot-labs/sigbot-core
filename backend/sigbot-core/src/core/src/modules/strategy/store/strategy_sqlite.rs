@@ -54,7 +54,7 @@ impl AsyncRepository<StrategyInfo> for StrategyInfoSQLiteRepository {
             strategy,
             "t_strategy",
             self.inner.get_pool(),
-            "updated_time",
+            "updated_at",
             page,
             StrategyInfo
         )?;

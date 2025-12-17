@@ -23,7 +23,6 @@ use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::Command;
 use common_telemetry::info;
 use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
-use sigbot_controller::controller::controller_factory::SigbotControllerServer;
 use sigbot_core::config::config::get_config;
 use sigbot_core::llm::handler::llm_factory::SigbotLLMFactory;
 use sigbot_core::{
@@ -32,8 +31,10 @@ use sigbot_core::{
 };
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
+use sigbot_order::server::order_server::SigbotOrderServer;
 use sigbot_strategy_runner::server::strategy_runner::SigbotStrategyRunner;
 use sigbot_utils::panics::PanicHelper;
+use sigbot_wallet::server::wallet_server::SigbotWalletServer;
 use std::env;
 use tokio::sync::oneshot;
 
@@ -68,9 +69,10 @@ impl SigbotStandaloneStarter {
     #[allow(unused_variables)]
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
         SigbotAPIServer::startup(matches, verbose, None, None).await;
-        SigbotControllerServer::startup(matches, verbose).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;
         SigbotStrategyRunner::startup(matches, verbose).await;
+        SigbotOrderServer::startup(matches, verbose).await;
+        SigbotWalletServer::startup(matches, verbose).await;
         SigbotNotificationForwarder::startup(matches, verbose).await;
         SigbotBacktestRunnerFactory::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;

@@ -46,7 +46,7 @@ impl UserSQLiteRepository {
 #[async_trait]
 impl AsyncRepository<User> for UserSQLiteRepository {
     async fn select(&self, user: User, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error> {
-        let result = dynamic_sqlite_query!(user, "sys_user", self.inner.get_pool(), "updated_time", page, User)?;
+        let result = dynamic_sqlite_query!(user, "sys_user", self.inner.get_pool(), "updated_at", page, User)?;
 
         info!("query users: {:?}", result);
         Ok((result.0, result.1))
@@ -80,7 +80,7 @@ impl AsyncRepository<User> for UserSQLiteRepository {
         //  let result = sqlx
         //   ::query(
         //     r#"
-        //     INSERT INTO sys_user (id, name, email, password, created_by, created_time, updated_by, updated_time, del_flag)
+        //     INSERT INTO sys_user (id, name, email, password, created_by, created_at, updated_by, updated_at, del_flag)
         //      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         //     "#
         //   )
@@ -90,9 +90,9 @@ impl AsyncRepository<User> for UserSQLiteRepository {
         //   .bind(user.phone)
         //   .bind(user.password) // TODO persistent encrypt password
         //   .bind(user.base.created_by)
-        //   .bind(user.base.created_time)
+        //   .bind(user.base.created_at)
         //   .bind(user.base.updated_by)
-        //   .bind(user.base.updated_time)
+        //   .bind(user.base.updated_at)
         //   .bind(user.base.del_flag)
         //   .execute(self.inner.get_pool()).await
         //   ?;

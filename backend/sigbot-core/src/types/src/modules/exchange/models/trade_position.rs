@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-#[derive(Clone, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntryTradePosition {
     pub open_pos: EntryPosition,
     pub stop_loss: Option<ExitTradePosition>,
@@ -39,7 +41,7 @@ impl EntryTradePosition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntryPosition {
     pub time: u64, // Trading signal referenced k-line price time.
     pub symbol: String,
@@ -76,7 +78,7 @@ impl EntryPosition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExitTradePosition {
     pub time: u64, // Trading signal referenced k-line price time.
     pub symbol: String,
@@ -112,7 +114,7 @@ impl ExitTradePosition {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TradeSide {
     LONG,
     SHORT,
@@ -142,7 +144,7 @@ impl TradeSide {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderType {
     MARKET,
     LIMITED,

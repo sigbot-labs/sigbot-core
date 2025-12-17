@@ -53,7 +53,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoMongoRepository {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<ExchangeInfo>), Error> {
         //let result = &self.inner.select(exchange, page).await;
-        match dynamic_mongo_query!(exchange, self.collection, "updated_time", page, ExchangeInfo) {
+        match dynamic_mongo_query!(exchange, self.collection, "updated_at", page, ExchangeInfo) {
             Ok(result) => {
                 info!("query exchanges: {:?}", result);
                 Ok((result.0, result.1))

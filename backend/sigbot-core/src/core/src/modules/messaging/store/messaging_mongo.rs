@@ -53,7 +53,7 @@ impl AsyncRepository<MessagingInfo> for MessagingInfoMongoRepository {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<MessagingInfo>), Error> {
         //let result = &self.inner.select(messaging, page).await;
-        match dynamic_mongo_query!(messaging, self.collection, "updated_time", page, MessagingInfo) {
+        match dynamic_mongo_query!(messaging, self.collection, "updated_at", page, MessagingInfo) {
             Ok(result) => {
                 info!("query messagings: {:?}", result);
                 Ok((result.0, result.1))

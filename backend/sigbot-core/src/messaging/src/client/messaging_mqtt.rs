@@ -118,7 +118,6 @@ pub struct SigbotMqttClient {
     config: Arc<SigbotMqttClientConfig>,
     client: Arc<Mutex<Option<AsyncClient>>>,
     eventloop: Arc<Mutex<Option<EventLoop>>>,
-    // This is concurrent map to store the subscription topics and their handlers.
     subscription_registrations: Arc<
         Mutex<
             HashMap<
@@ -127,7 +126,6 @@ pub struct SigbotMqttClient {
             >,
         >,
     >,
-    // TODO: Add the memory message queue for subscription messages.
 }
 
 impl SigbotMqttClient {

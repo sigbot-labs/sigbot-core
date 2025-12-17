@@ -22,7 +22,7 @@ use crate::client::notification_factory::SigbotNotificationClientFactory;
 use anyhow::{Context, Error};
 use common_telemetry::info;
 use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::messaging::TOPIC_NOTIFICATION;
+use sigbot_types::modules::messaging::TOPIC_NOTIFICATION_MESSAGES;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotNotificationForwarder {
@@ -65,7 +65,7 @@ impl SigbotNotificationForwarder {
                 })
             });
         let _ = messaging
-            .subscribe(TOPIC_NOTIFICATION, handler) // TODO: configuable
+            .subscribe(TOPIC_NOTIFICATION_MESSAGES, handler) // TODO: configuable
             .await
             .context("Failed to subscribe to the messaging topic.");
         info!("Initialized Messaging client with provider: {:?}.", messaging.name());

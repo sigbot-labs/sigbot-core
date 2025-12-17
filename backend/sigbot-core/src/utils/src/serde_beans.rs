@@ -79,9 +79,9 @@ mod tests {
         pub id: Option<i64>,
         pub status: Option<i8>,
         pub created_by: Option<String>,
-        pub created_time: Option<i64>,
+        pub created_at: Option<i64>,
         pub updated_by: Option<String>,
-        pub updated_time: Option<i64>,
+        pub updated_at: Option<i64>,
         #[serde(skip)]
         pub del_flag: Option<i32>,
     }
@@ -189,9 +189,9 @@ mod tests {
                 id: Some(1001),
                 status: Some(1),
                 created_by: Some(String::from("admin")),
-                created_time: Some(now),
+                created_at: Some(now),
                 updated_by: Some(String::from("admin")),
-                updated_time: Some(now),
+                updated_at: Some(now),
                 del_flag: Some(0),
             },
             name: "Sally".to_string(),

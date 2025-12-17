@@ -53,7 +53,7 @@ impl AsyncRepository<StrategyInfo> for StrategyInfoMongoRepository {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<StrategyInfo>), Error> {
         //let result = &self.inner.select(strategy, page).await;
-        match dynamic_mongo_query!(strategy, self.collection, "updated_time", page, StrategyInfo) {
+        match dynamic_mongo_query!(strategy, self.collection, "updated_at", page, StrategyInfo) {
             Ok(result) => {
                 info!("query strategys: {:?}", result);
                 Ok((result.0, result.1))

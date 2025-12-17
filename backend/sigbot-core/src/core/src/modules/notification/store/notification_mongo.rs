@@ -53,7 +53,7 @@ impl AsyncRepository<NotificationInfo> for NotificationInfoMongoRepository {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<NotificationInfo>), Error> {
         //let result = &self.inner.select(notification, page).await;
-        match dynamic_mongo_query!(notification, self.collection, "updated_time", page, NotificationInfo) {
+        match dynamic_mongo_query!(notification, self.collection, "updated_at", page, NotificationInfo) {
             Ok(result) => {
                 info!("query notifications: {:?}", result);
                 Ok((result.0, result.1))

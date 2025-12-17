@@ -111,14 +111,16 @@ impl<'r> FromRow<'r, PgRow> for MessagingInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum MessagingProvider {
-    MQTT,
+    LOCAL, // Local queue based (in-memory), for testing standalone mode.
+    MQTT,  // MQTT based, for production.
 }
 
 impl MessagingProvider {
     pub fn of(provider: &str) -> Result<MessagingProvider, anyhow::Error> {
         match provider.to_uppercase().as_str() {
+            "LOCAL" => Ok(MessagingProvider::LOCAL),
             "MQTT" => Ok(MessagingProvider::MQTT),
-            _ => Err(anyhow::anyhow!("Unsupported the messaging provider: {}", provider)),
+            _ => Err(anyhow::anyhow!("Unsupported the Messaging provider: {}", provider)),
         }
     }
 }
