@@ -19,7 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use common_telemetry::{error, info};
+use common_telemetry::{debug, error, info};
 use lazy_static::lazy_static;
 use prometheus::{CounterVec, Gauge, GaugeVec, HistogramVec};
 use std::sync::{Arc, Mutex};
@@ -181,7 +181,7 @@ static REGISTRARS: once_cell::sync::Lazy<Mutex<Vec<Box<dyn MetricRegistrar + Sen
 
 pub async fn init_metrics(config: &Arc<AppConfig>) {
     if config.mgmt.enabled {
-        info!("Registering metrics to Prometheus registry ...");
+        debug!("Registering metrics to prometheus registry ...");
 
         if let Err(e) = register_default_metrics() {
             error!(e; "Failed to register default metrics");

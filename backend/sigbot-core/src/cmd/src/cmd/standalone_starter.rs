@@ -67,7 +67,6 @@ impl SigbotStandaloneStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;
         SigbotStrategyRunner::startup(matches, verbose).await;
         SigbotOrderServer::startup(matches, verbose).await;
@@ -75,6 +74,7 @@ impl SigbotStandaloneStarter {
         SigbotNotificationForwarder::startup(matches, verbose).await;
         SigbotBacktestRunnerFactory::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;
+        SigbotAPIServer::startup(matches, verbose, None, None).await;
     }
 
     fn print_banner(verbose: bool) {

@@ -71,10 +71,10 @@ impl SigbotMessagerClientFactory {
         matches: &clap::ArgMatches,
         config: Arc<MessagerConfiguration>,
     ) -> Result<Arc<dyn ISigbotMessagerClient + Send + Sync>, Error> {
-        // e.g '--provider=mqtt'
+        // e.g '--messager-provider=mqtt'
         let provider = MessagerProvider::of(
             &matches
-                .get_one::<String>("provider")
+                .get_one::<String>("messager-provider")
                 .unwrap_or(&MessagerProvider::MQTT.as_str().to_owned()),
         )?;
 

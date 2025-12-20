@@ -77,18 +77,18 @@ impl SigbotOrderManagerFactory {
         ),
         Error,
     > {
-        // e.g '--provider=default'
+        // e.g '--order-manager-provider=default'
         let provider = OrderMgrProvider::of(
             &matches
-                .get_one::<String>("provider")
+                .get_one::<String>("order-manager-provider")
                 .unwrap_or(&OrderMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Order manager: {}", &provider.as_str());
 
-        // e.g '--configuration=<base64_encoded_json_string>'
+        // e.g '--order-manager-config=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("configuration")
+            .try_get_one::<String>("order-manager-config")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| OrderMgrProvider::DEFAULT.as_str().to_owned())

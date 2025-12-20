@@ -84,18 +84,13 @@ impl SigbotBacktestRunnerFactory {
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         info!("Starting backtest runners ...");
 
-        // e.g '--provider=TRADES'
-        let provider_str = matches
-            .try_get_one::<String>("provider")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| BacktestProvider::TRADES.as_str().to_owned())
-            })
-            .expect("Failed to parse the backtest runner provider from the command line arguments.")
-            .to_uppercase();
-
-        let provider =
-            BacktestProvider::of(&provider_str).expect(&format!("Failed to parse backtest provider: {}", provider_str));
+        // e.g '--backtest-provider=TRADES'
+        let provider = BacktestProvider::of(
+            &matches
+                .get_one::<String>("backtest-provider")
+                .unwrap_or(&BacktestProvider::TRADES.as_str().to_owned()),
+        )
+        .expect("Failed to parse the backtest runner provider from the command line arguments.");
 
         info!("Registering backtest runner with provider: {}", &provider.as_str());
         match provider {

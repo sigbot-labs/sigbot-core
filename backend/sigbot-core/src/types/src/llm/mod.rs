@@ -18,4 +18,26 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use serde::{Deserialize, Serialize};
+
 pub mod knowledge;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum LLMProvider {
+    LANGCHAIN,
+}
+
+impl LLMProvider {
+    pub fn of(provider: &str) -> Result<LLMProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "LANGCHAIN" => Ok(LLMProvider::LANGCHAIN),
+            _ => Err(anyhow::anyhow!("Unsupported the LLM provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            LLMProvider::LANGCHAIN => "LANGCHAIN",
+        }
+    }
+}

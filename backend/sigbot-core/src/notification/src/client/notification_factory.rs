@@ -68,9 +68,9 @@ impl SigbotNotificationClientFactory {
         ),
         Error,
     > {
-        // e.g '--provider=email'
+        // e.g '--notification-provider=email'
         let providers = matches
-            .try_get_one::<String>("providers")
+            .try_get_one::<String>("notification-provider")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())
@@ -80,9 +80,9 @@ impl SigbotNotificationClientFactory {
 
         info!("Registering Sigbot Notification: {}", &providers);
 
-        // e.g '--configuration=base64_encoded_json_string'
+        // e.g '--notification-config=base64_encoded_json_string'
         let configuration = matches
-            .try_get_one::<String>("configuration")
+            .try_get_one::<String>("notification-config")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())

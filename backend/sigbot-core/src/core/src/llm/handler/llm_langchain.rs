@@ -19,7 +19,7 @@
 // This includes modifications and derived works.
 
 use super::llm_factory::ILLMOperation;
-use crate::config::config::{self, LlmProperties};
+use crate::config::config;
 use anyhow::{Ok, Result};
 use langchain_rust::{
     chain::{Chain, ConversationalRetrieverChainBuilder},
@@ -35,7 +35,10 @@ use langchain_rust::{
     template_jinja2,
     vectorstore::{pgvector::StoreBuilder, Retriever, VecStoreOptions, VectorStore},
 };
-use sigbot_types::llm::knowledge::{KnowledgeCategory, KnowledgeStatus, KnowledgeUploadInfo};
+use sigbot_types::llm::{
+    knowledge::{KnowledgeCategory, KnowledgeStatus, KnowledgeUploadInfo},
+    LLMProvider,
+};
 use std::{
     collections::HashMap,
     fs::File,
@@ -50,11 +53,7 @@ pub struct LangchainOperation {
 }
 
 impl LangchainOperation {
-    pub const NAME: &'static str = "LANGCHAIN";
-
-    #[allow(unused)]
-    pub async fn new(config: &LlmProperties) -> Arc<Self> {
-        // Create the embedding openai config.
+    pub async fn new() -> Arc<Self> {
         let llm_config = &config::get_config().llm;
         let mut embedding_openai_config =
             OpenAIConfig::new().with_api_base(&config::get_config().llm.embedding.api_uri);
@@ -118,7 +117,6 @@ impl LangchainOperation {
             .with_model(config::get_config().llm.generate.model.to_owned())
             .with_options(call_opts);
 
-        // Create the this executor handler instance.
         Arc::new(Self {
             pgvec_store: Arc::new(Box::new(pgvec_store)),
             openai_llm,
@@ -128,6 +126,10 @@ impl LangchainOperation {
 
 #[async_trait::async_trait]
 impl ILLMOperation for LangchainOperation {
+    fn provider(&self) -> LLMProvider {
+        LLMProvider::LANGCHAIN
+    }
+
     async fn init(&self) {}
 
     async fn close(&self) {}

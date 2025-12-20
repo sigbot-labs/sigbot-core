@@ -81,18 +81,18 @@ impl SigbotWalletManagerFactory {
         ),
         Error,
     > {
-        // e.g '--provider=default'
+        // e.g '--wallet-manager-provider=default'
         let provider = WalletMgrProvider::of(
             &matches
-                .get_one::<String>("provider")
+                .get_one::<String>("wallet-manager-provider")
                 .unwrap_or(&WalletMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Wallet manager: {}", &provider.as_str());
 
-        // e.g '--configuration=<base64_encoded_json_string>'
+        // e.g '--wallet-manager-config=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("configuration")
+            .try_get_one::<String>("wallet-manager-config")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| WalletMgrProvider::DEFAULT.as_str().to_owned())

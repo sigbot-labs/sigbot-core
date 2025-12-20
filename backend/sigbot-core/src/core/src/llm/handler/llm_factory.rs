@@ -22,7 +22,7 @@ use crate::{config::config, llm::handler::llm_langchain::LangchainOperation};
 use anyhow::Error;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
+use sigbot_types::llm::{knowledge::KnowledgeUploadInfo, LLMProvider};
 use std::{
     collections::HashMap,
     fs::File,
@@ -31,6 +31,7 @@ use std::{
 
 #[async_trait::async_trait]
 pub trait ILLMOperation {
+    fn provider(&self) -> LLMProvider;
     async fn init(&self);
     async fn close(&self);
     async fn embedding(&self, mut info: KnowledgeUploadInfo, file: File) -> Result<KnowledgeUploadInfo, anyhow::Error>;
@@ -57,51 +58,47 @@ impl SigbotLLMFactory {
     }
 
     pub async fn init() {
-        let config = &config::get_config().llm;
-
         info!("Initializing LangChain LLM operation ...");
         match Self::get()
             .write() // If acquire fails, then it block until acquired.
             .unwrap() // If acquire fails, then it should panic.
-            .register(
-                LangchainOperation::NAME.to_owned(),
-                LangchainOperation::new(config).await,
-            ) {
+            .register0(LLMProvider::LANGCHAIN.as_str(), LangchainOperation::new().await)
+        {
             Ok(registered) => {
-                info!("Initializing LangChain LLM operation successfully.");
+                info!("Initialized LangChain LLM operation successfully.");
                 let _ = registered.init().await;
             }
-            Err(e) => panic!("Failed to initialize LangChain LLM operation: {}", e),
+            Err(e) => panic!("Failed to initialize LangChain LLM operation. - {}", e),
         }
     }
 
-    fn register<T: ILLMOperation + Send + Sync + 'static>(
+    fn register0<T: ILLMOperation + Send + Sync + 'static>(
         &mut self,
-        name: String,
+        provider: &str,
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
         // Check if the name already exists
-        if self.implementations.contains_key(&name) {
-            debug!("Already register the LLM operation with name: '{}'.", name);
+        if self.implementations.contains_key(provider) {
+            debug!("Already register the LLM operation with provider: '{}'.", provider);
             return Ok(handler);
         }
-        self.implementations.insert(name, handler.to_owned());
+        self.implementations.insert(provider.to_owned(), handler.to_owned());
         Ok(handler)
     }
 
-    pub fn get_implementation(name: String) -> Result<Arc<dyn ILLMOperation + Send + Sync>, Error> {
+    pub fn get_implementation(provider: &str) -> Result<Arc<dyn ILLMOperation + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotLLMFactory::get().read().unwrap();
-        if let Some(implementation) = this.implementations.get(&name) {
+        if let Some(implementation) = this.implementations.get(provider) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not get LLM operation with name: '{}'.", name);
+            let errmsg = format!("Could not get LLM operation with provider: '{}'.", provider);
             return Err(Error::msg(errmsg));
         }
     }
 
     pub fn get_default() -> Arc<dyn ILLMOperation + Send + Sync> {
-        Self::get_implementation(LangchainOperation::NAME.to_owned()).expect("Failed to get default LLM handler")
+        Self::get_implementation(LLMProvider::LANGCHAIN.as_str()).expect("Failed to get default LLM handler")
     }
 
     pub async fn close() {

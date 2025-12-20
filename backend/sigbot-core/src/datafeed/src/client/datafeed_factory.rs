@@ -75,9 +75,9 @@ impl SigbotDatafeedClientFactory {
         ),
         Error,
     > {
-        // e.g '--provider=binance'
+        // e.g '--datafeed-provider=binance'
         let providers = matches
-            .try_get_one::<String>("provider")
+            .try_get_one::<String>("datafeed-provider")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| DatafeedProvider::BINANCE.as_str().to_owned())
@@ -87,7 +87,7 @@ impl SigbotDatafeedClientFactory {
 
         info!("Registering Sigbot Datafeed: {}", &providers);
 
-        // e.g '--configuration=<base64_encoded_json_string>'
+        // e.g '--datafeed-config=<base64_encoded_json_string>'
         let configuration = matches
             .try_get_one::<String>("configuration")
             .map(|s| {
