@@ -23,7 +23,7 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::order::{OrderProvider, SigbotOrderManagerArgument};
+use sigbot_types::modules::order::{OrderMgrProvider, SigbotOrderManagerArgument};
 use std::{
     collections::HashMap,
     future::Future,
@@ -33,7 +33,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotOrderManager: Send + Sync {
-    fn provider(&self) -> OrderProvider;
+    fn provider(&self) -> OrderMgrProvider;
     async fn init(&self, argument: Arc<SigbotOrderManagerArgument>);
     async fn close(&self);
     async fn subscribe(
@@ -78,10 +78,10 @@ impl SigbotOrderManagerFactory {
         Error,
     > {
         // e.g '--provider=default'
-        let provider = OrderProvider::of(
+        let provider = OrderMgrProvider::of(
             &matches
                 .get_one::<String>("provider")
-                .unwrap_or(&OrderProvider::DEFAULT.as_str().to_owned()),
+                .unwrap_or(&OrderMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Order manager: {}", &provider.as_str());
@@ -91,7 +91,7 @@ impl SigbotOrderManagerFactory {
             .try_get_one::<String>("configuration")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| OrderProvider::DEFAULT.as_str().to_owned())
+                    .unwrap_or_else(|| OrderMgrProvider::DEFAULT.as_str().to_owned())
             })
             .expect("Failed to parse the configuration from the command line arguments.");
 
@@ -101,7 +101,7 @@ impl SigbotOrderManagerFactory {
         );
 
         match provider {
-            OrderProvider::DEFAULT => {
+            OrderMgrProvider::DEFAULT => {
                 Self::get()
                     .write()
                     .unwrap()

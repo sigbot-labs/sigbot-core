@@ -25,7 +25,7 @@ use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
 use sigbot_types::modules::messager::messager::MessagerProvider;
-use sigbot_types::modules::wallet::wallet::WalletProvider;
+use sigbot_types::modules::wallet::WalletMgrProvider;
 use sigbot_utils::panics::PanicHelper;
 use sigbot_wallet::server::wallet_server::SigbotWalletServer;
 use std::env;
@@ -47,9 +47,9 @@ impl SigbotWalletManagerStarter {
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
                         "The providers of Wallet Manager. (supported are: {})",
-                        WalletProvider::DEFAULT.as_str()
+                        WalletMgrProvider::DEFAULT.as_str()
                     ))
-                    .default_value(WalletProvider::DEFAULT.as_str()),
+                    .default_value(WalletMgrProvider::DEFAULT.as_str()),
             )
             .arg(
                 Arg::new("configuration")

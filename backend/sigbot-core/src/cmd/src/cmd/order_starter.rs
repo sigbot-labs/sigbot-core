@@ -26,7 +26,7 @@ use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
 use sigbot_order::server::order_server::SigbotOrderServer;
 use sigbot_types::modules::messager::messager::MessagerProvider;
-use sigbot_types::modules::order::OrderProvider;
+use sigbot_types::modules::order::OrderMgrProvider;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -45,11 +45,12 @@ impl SigbotOrderManagerStarter {
                     .short('p')
                     .long("provider")
                     .value_parser(clap::value_parser!(String))
+                    // .value_parser(OrderMgrProvider::of)
                     .help(format!(
                         "The providers of Order Manager. (supported are: {})",
-                        OrderProvider::DEFAULT.as_str(),
+                        OrderMgrProvider::DEFAULT.as_str(),
                     ))
-                    .default_value(OrderProvider::DEFAULT.as_str()),
+                    .default_value(OrderMgrProvider::DEFAULT.as_str()),
             )
             .arg(
                 Arg::new("configuration")

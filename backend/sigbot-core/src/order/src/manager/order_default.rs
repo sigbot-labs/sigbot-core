@@ -26,7 +26,7 @@ use sigbot_exchange::client::exchange_factory::ISigbotExchangeClient;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::messager::TOPIC_TRADING_RESULTS;
 use sigbot_types::modules::order::events::{SigbotTradeEvent, SigbotTradeSignal};
-use sigbot_types::modules::order::{OrderProvider, SigbotOrderManagerArgument};
+use sigbot_types::modules::order::{OrderMgrProvider, SigbotOrderManagerArgument};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -188,8 +188,8 @@ impl SigbotDefaultOrderManager {
 
 #[async_trait]
 impl ISigbotOrderManager for SigbotDefaultOrderManager {
-    fn provider(&self) -> OrderProvider {
-        OrderProvider::DEFAULT
+    fn provider(&self) -> OrderMgrProvider {
+        OrderMgrProvider::DEFAULT
     }
 
     async fn init(&self, _argument: Arc<SigbotOrderManagerArgument>) {

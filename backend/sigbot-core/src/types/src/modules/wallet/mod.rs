@@ -41,5 +41,25 @@ impl SigbotWalletManagerArgument {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum WalletMgrProvider {
+    DEFAULT,
+}
+
+impl WalletMgrProvider {
+    pub fn of(provider: &str) -> Result<WalletMgrProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "DEFAULT" => Ok(WalletMgrProvider::DEFAULT),
+            _ => Err(anyhow::anyhow!("Unsupported the wallet manager provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            WalletMgrProvider::DEFAULT => "DEFAULT",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {}

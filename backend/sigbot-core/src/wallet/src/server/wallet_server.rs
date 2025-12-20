@@ -22,9 +22,7 @@ use crate::manager::wallet_factory::SigbotWalletManagerFactory;
 use anyhow::Error;
 use common_telemetry::{error, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::{
-    messager::TOPIC_TRADING_RESULTS, order::events::SigbotTradeEvent, wallet::wallet::WalletProvider,
-};
+use sigbot_types::modules::{messager::TOPIC_TRADING_RESULTS, order::events::SigbotTradeEvent};
 use std::sync::Arc;
 
 pub struct SigbotWalletServer {}

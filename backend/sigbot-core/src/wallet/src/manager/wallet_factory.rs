@@ -27,7 +27,7 @@ use sigbot_core::{
     config::config::PostgresAppDBProperties,
     modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater},
 };
-use sigbot_types::modules::wallet::{wallet::WalletProvider, SigbotWalletManagerArgument};
+use sigbot_types::modules::wallet::{SigbotWalletManagerArgument, WalletMgrProvider};
 use std::{
     collections::HashMap,
     future::Future,
@@ -37,7 +37,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotWalletManager: Send + Sync {
-    fn provider(&self) -> WalletProvider;
+    fn provider(&self) -> WalletMgrProvider;
     async fn init(&self, argument: Arc<SigbotWalletManagerArgument>);
     async fn close(&self);
     async fn subscribe(
@@ -82,10 +82,10 @@ impl SigbotWalletManagerFactory {
         Error,
     > {
         // e.g '--provider=default'
-        let provider = WalletProvider::of(
+        let provider = WalletMgrProvider::of(
             &matches
                 .get_one::<String>("provider")
-                .unwrap_or(&WalletProvider::DEFAULT.as_str().to_owned()),
+                .unwrap_or(&WalletMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Wallet manager: {}", &provider.as_str());
@@ -95,7 +95,7 @@ impl SigbotWalletManagerFactory {
             .try_get_one::<String>("configuration")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| WalletProvider::DEFAULT.as_str().to_owned())
+                    .unwrap_or_else(|| WalletMgrProvider::DEFAULT.as_str().to_owned())
             })
             .expect("Failed to parse the configuration from the command line arguments.");
 
@@ -105,7 +105,7 @@ impl SigbotWalletManagerFactory {
         );
 
         match provider {
-            WalletProvider::DEFAULT => {
+            WalletMgrProvider::DEFAULT => {
                 // Create trade handler from config
                 // Note: Idempotency is now handled at database level via ON CONFLICT
                 let db_config = PostgresAppDBProperties::default();
@@ -119,7 +119,7 @@ impl SigbotWalletManagerFactory {
                     .write()
                     .unwrap()
                     .register0(
-                        WalletProvider::DEFAULT.as_str(),
+                        WalletMgrProvider::DEFAULT.as_str(),
                         SigbotDefaultWalletManager::new(trade_handler).await,
                     )
                     .expect("Failed to register the Default Wallet manager.");
