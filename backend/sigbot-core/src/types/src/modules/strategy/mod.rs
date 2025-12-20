@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::modules::messaging::messaging::MessagingInfo;
+use crate::modules::messager::messager::MessagerConfiguration;
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -32,8 +32,8 @@ pub struct SigbotStrategyArgument {
     pub sys_environment: Option<HashMap<String, String>>,
     /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
     pub run_mode: String,
-    /// Messaging configuration for communication with the strategy runner
-    pub messaging_config: Arc<MessagingInfo>,
+    /// Messager configuration for communication with the strategy runner
+    pub messager_config: Arc<MessagerConfiguration>,
 }
 
 impl SigbotStrategyArgument {
@@ -51,16 +51,16 @@ mod tests {
     fn test_from_json() {
         let json = r#"{
             "sys_environment": {"SIGBOT_VERSION": "V1.0.0"}}, 
-            "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
             "#;
         let argument = SigbotStrategyArgument::from_json(json).unwrap();
         assert_eq!(
             argument.sys_environment,
             Some(HashMap::from([("SIGBOT_VERSION".to_string(), "V1.0.0".to_string())]))
         );
-        assert_eq!(argument.messaging_config.name, Some("tenant101_messaging".to_string()));
+        assert_eq!(argument.messager_config.name, Some("tenant101_messager".to_string()));
         assert_eq!(
-            argument.messaging_config.configuration,
+            argument.messager_config.configuration,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://localhost:1883".to_string()

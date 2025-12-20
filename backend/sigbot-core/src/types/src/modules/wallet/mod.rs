@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::modules::messaging::messaging::MessagingInfo;
+use crate::modules::messager::messager::MessagerConfiguration;
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -30,29 +30,14 @@ pub mod wallet;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotWalletManagerArgument {
-    pub provider: Option<WalletMgrProvider>,
     pub configuration: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
-    pub messaging_config: Arc<MessagingInfo>,
+    pub messager_config: Arc<MessagerConfiguration>,
 }
 
 impl SigbotWalletManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
         serde_json::from_str(json).context(format!("Failed to parse wallet manager info from JSON. - {}", json))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub enum WalletMgrProvider {
-    DEFAULT,
-}
-
-impl WalletMgrProvider {
-    pub fn of(provider: &str) -> Result<WalletMgrProvider, anyhow::Error> {
-        match provider.to_uppercase().as_str() {
-            "DEFAULT" => Ok(WalletMgrProvider::DEFAULT),
-            _ => Err(anyhow::anyhow!("Unsupported the Wallet Manager provider: {}", provider)),
-        }
     }
 }
 

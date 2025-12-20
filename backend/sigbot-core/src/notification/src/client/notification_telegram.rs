@@ -22,7 +22,7 @@ use crate::client::notification_factory::ISigbotNotificationClient;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::notification::notification::NotificationInfo;
+use sigbot_types::modules::notification::notification::{NotificationInfo, NotificationProvider};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -68,8 +68,6 @@ pub struct SigbotTelegramClient {
 }
 
 impl SigbotTelegramClient {
-    pub const NAME: &'static str = "TELEGRAM"; // NotificationKind::TELEGRAM
-
     pub async fn new(config: Option<Arc<SigbotTelegramConfig>>) -> Arc<Self> {
         Arc::new(Self {
             config: config.expect("Config is required"),
@@ -80,8 +78,8 @@ impl SigbotTelegramClient {
 
 #[async_trait]
 impl ISigbotNotificationClient for SigbotTelegramClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> NotificationProvider {
+        NotificationProvider::TELEGRAM
     }
 
     async fn init(&self) {

@@ -18,4 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod messaging_handler;
+pub mod messager_factory;
+pub mod messager_local;
+pub mod messager_mqtt;

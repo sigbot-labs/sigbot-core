@@ -23,10 +23,10 @@ use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{info, warn};
 use sigbot_exchange::client::exchange_factory::ISigbotExchangeClient;
-use sigbot_messaging::client::messaging_factory::ISigbotMessagingClient;
-use sigbot_types::modules::messaging::TOPIC_TRADING_RESULTS;
+use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
+use sigbot_types::modules::messager::TOPIC_TRADING_RESULTS;
 use sigbot_types::modules::order::events::{SigbotTradeEvent, SigbotTradeSignal};
-use sigbot_types::modules::order::SigbotOrderManagerArgument;
+use sigbot_types::modules::order::{OrderProvider, SigbotOrderManagerArgument};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -87,17 +87,15 @@ impl RiskManager {
 
 #[derive(Clone)]
 pub struct SigbotDefaultOrderManager {
-    messaging_client: Arc<Mutex<Option<Arc<dyn ISigbotMessagingClient>>>>,
+    messager_client: Arc<Mutex<Option<Arc<dyn ISigbotMessagerClient>>>>,
     exchange_clients: Arc<Mutex<HashMap<String, Arc<dyn ISigbotExchangeClient>>>>,
     risk_manager: Arc<RiskManager>,
 }
 
 impl SigbotDefaultOrderManager {
-    pub const NAME: &'static str = "DEFAULT";
-
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {
-            messaging_client: Arc::new(Mutex::new(None)),
+            messager_client: Arc::new(Mutex::new(None)),
             exchange_clients: Arc::new(Mutex::new(HashMap::new())),
             risk_manager: Arc::new(RiskManager::new(RiskConfig::default())),
         })
@@ -166,15 +164,15 @@ impl SigbotDefaultOrderManager {
         };
 
         // 发布 SigbotTradeEvent
-        let messaging_guard = self.messaging_client.lock().await;
-        let messaging = messaging_guard
+        let messager_guard = self.messager_client.lock().await;
+        let messager = messager_guard
             .as_ref()
-            .ok_or_else(|| Error::msg("Messaging client not initialized"))?;
+            .ok_or_else(|| Error::msg("Messager client not initialized"))?;
 
         let topic = TOPIC_TRADING_RESULTS.replace("{tenant_id}", &signal.tenant_id);
         let message = serde_json::to_string(&trade_event).context("Failed to serialize SigbotTradeEvent")?;
 
-        messaging
+        messager
             .publish(&topic, &message)
             .await
             .context("Failed to publish SigbotTradeEvent")?;
@@ -190,8 +188,8 @@ impl SigbotDefaultOrderManager {
 
 #[async_trait]
 impl ISigbotOrderManager for SigbotDefaultOrderManager {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> OrderProvider {
+        OrderProvider::DEFAULT
     }
 
     async fn init(&self, _argument: Arc<SigbotOrderManagerArgument>) {

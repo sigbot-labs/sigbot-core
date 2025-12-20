@@ -11,7 +11,7 @@ members = [
     "src/utils",
     "src/core",
     "src/cmd",
-    "src/messaging",
+    "src/messager",
     "src/exchange",
     "src/deployer",
     "src/datafeed",
@@ -54,7 +54,7 @@ sigbot-types = { path = "src/types" }
 sigbot-utils = { path = "src/utils" }
 sigbot-core = { path = "src/core" }
 sigbot-cmd = { path = "src/cmd" }
-sigbot-messaging = { path = "src/messaging" }
+sigbot-messager = { path = "src/messager" }
 sigbot-exchange = { path = "src/exchange" }
 sigbot-deployer = { path = "src/deployer" }
 sigbot-datafeed = { path = "src/datafeed" }

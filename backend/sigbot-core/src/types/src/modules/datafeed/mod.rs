@@ -18,18 +18,17 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use std::sync::Arc;
-
-use crate::modules::{datafeed::datafeed::DatafeedInfo, messaging::messaging::MessagingInfo};
+use crate::modules::{datafeed::datafeed::DatafeedInfo, messager::messager::MessagerConfiguration};
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub mod datafeed;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotDatefeedArgument {
     pub datafeed_config: Arc<DatafeedInfo>,
-    pub messaging_config: Arc<MessagingInfo>,
+    pub messager_config: Arc<MessagerConfiguration>,
 }
 
 impl SigbotDatefeedArgument {
@@ -47,11 +46,11 @@ mod tests {
     fn test_from_json() {
         let json = r#"{
             "datafeed_config": {"name": "tenant101_datafeed", "provider": "BINANCE", "configuration": {"endpoint": "https://api.binance.com"}, "secrets": {"api_secret": "1234567890"}}, 
-            "messaging_config": {"name": "tenant101_messaging", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
             "#;
         let argument = SigbotDatefeedArgument::from_json(json).unwrap();
         assert_eq!(argument.datafeed_config.name, Some("BINANCE".to_string()));
-        assert_eq!(argument.messaging_config.name, Some("MQTT".to_string()));
+        assert_eq!(argument.messager_config.name, Some("MQTT".to_string()));
         assert_eq!(
             argument.datafeed_config.configuration,
             Some(HashMap::from([(
@@ -60,7 +59,7 @@ mod tests {
             )]))
         );
         assert_eq!(
-            argument.messaging_config.configuration,
+            argument.messager_config.configuration,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://localhost:1883".to_string()

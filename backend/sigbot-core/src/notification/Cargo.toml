@@ -14,7 +14,7 @@ common-makestruct.workspace = true
 sigbot-utils.workspace = true
 sigbot-types.workspace = true
 sigbot-core.workspace = true
-sigbot-messaging.workspace = true
+sigbot-messager.workspace = true
 
 # Thirdparty dependencies.
 clap.workspace = true

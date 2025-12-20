@@ -1,5 +1,5 @@
 [package]
-name = "sigbot-messaging"
+name = "sigbot-messager"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

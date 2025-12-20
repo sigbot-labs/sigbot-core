@@ -23,8 +23,8 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
 use lazy_static::lazy_static;
-use sigbot_messaging::client::messaging_factory::ISigbotMessagingClient;
-use sigbot_types::modules::strategy::SigbotStrategyArgument;
+use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
+use sigbot_types::modules::strategy::{strategy::StrategyProvider, SigbotStrategyArgument};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -32,8 +32,8 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotStrategyExecutor: Send + Sync {
-    fn name(&self) -> &'static str;
-    async fn startup(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>);
+    fn provider(&self) -> StrategyProvider;
+    async fn startup(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>);
     async fn shutdown(&self);
 }
 
@@ -71,14 +71,13 @@ impl SigbotStrategyExecutorFactory {
         info!("Starting Strategy Executor ...");
 
         // e.g '--provider=python'
-        let provider = matches
-            .try_get_one::<String>("provider")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotPythonStrategyExecutor::NAME.to_owned())
-            })
-            .expect("Failed to parse the Strategy Executor provider from the command line arguments.")
-            .to_uppercase();
+        let provider = StrategyProvider::of(
+            &matches
+                .get_one::<String>("provider")
+                .unwrap_or(&StrategyProvider::PYTHON.as_str().to_owned()),
+        )?;
+
+        info!("Registering Strategy Executor with provider: {}", &provider.as_str());
 
         // e.g '--configuration=<base64_encoded_json_string>'
         let configuration = matches
@@ -91,34 +90,38 @@ impl SigbotStrategyExecutorFactory {
                 .expect("Failed to parse the configuration from the command line arguments."),
         );
 
-        info!("Registering Strategy Executor with provider: {}", &provider);
-        match provider.as_str() {
-            SigbotPythonStrategyExecutor::NAME => {
+        match provider {
+            StrategyProvider::PYTHON => {
                 Self::get()
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotPythonStrategyExecutor::NAME.to_owned(),
+                        provider.as_str(),
                         SigbotPythonStrategyExecutor::new(argument.to_owned()).await, // TODO: set up run configuration?
                     )
                     .expect(
-                        &format!("Failed to register the Strategy Executor with provider: {}.", &provider).as_str(),
+                        &format!(
+                            "Failed to register the Strategy Executor with provider: {}.",
+                            &provider.as_str()
+                        )
+                        .as_str(),
                     );
             }
-            _ => panic!("Unsupported Strategy Executor provider : '{}'.", provider),
         };
 
-        let registered = Self::get_implementation(provider.to_owned()).await.expect(&format!(
-            "Failed to get the registered Strategy Executor with provider: {}.",
-            &provider
-        ));
+        let registered = Self::get_implementation(provider.as_str().to_owned())
+            .await
+            .expect(&format!(
+                "Failed to get the registered Strategy Executor with provider: {}.",
+                &provider.as_str()
+            ));
 
         Ok((registered, argument))
     }
 
     fn register0<T: ISigbotStrategyExecutor + Send + Sync + 'static>(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
         if self.implementations.contains_key(name) {

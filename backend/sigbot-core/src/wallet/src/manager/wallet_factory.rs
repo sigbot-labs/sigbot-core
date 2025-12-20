@@ -27,7 +27,7 @@ use sigbot_core::{
     config::config::PostgresAppDBProperties,
     modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater},
 };
-use sigbot_types::modules::wallet::SigbotWalletManagerArgument;
+use sigbot_types::modules::wallet::{wallet::WalletProvider, SigbotWalletManagerArgument};
 use std::{
     collections::HashMap,
     future::Future,
@@ -37,7 +37,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotWalletManager: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn provider(&self) -> WalletProvider;
     async fn init(&self, argument: Arc<SigbotWalletManagerArgument>);
     async fn close(&self);
     async fn subscribe(
@@ -82,23 +82,20 @@ impl SigbotWalletManagerFactory {
         Error,
     > {
         // e.g '--provider=default'
-        let provider = matches
-            .try_get_one::<String>("provider")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotDefaultWalletManager::NAME.to_owned())
-            })
-            .expect("Failed to parse the Wallet manager provider from the command line arguments.")
-            .to_uppercase();
+        let provider = WalletProvider::of(
+            &matches
+                .get_one::<String>("provider")
+                .unwrap_or(&WalletProvider::DEFAULT.as_str().to_owned()),
+        )?;
 
-        info!("Registering Sigbot Wallet manager: {}", &provider);
+        info!("Registering Sigbot Wallet manager: {}", &provider.as_str());
 
         // e.g '--configuration=<base64_encoded_json_string>'
         let configuration = matches
             .try_get_one::<String>("configuration")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotDefaultWalletManager::NAME.to_owned())
+                    .unwrap_or_else(|| WalletProvider::DEFAULT.as_str().to_owned())
             })
             .expect("Failed to parse the configuration from the command line arguments.");
 
@@ -107,8 +104,8 @@ impl SigbotWalletManagerFactory {
                 .context("Failed to parse the configuration from the command line arguments.")?,
         );
 
-        match provider.to_owned().as_str() {
-            SigbotDefaultWalletManager::NAME => {
+        match provider {
+            WalletProvider::DEFAULT => {
                 // Create trade handler from config
                 // Note: Idempotency is now handled at database level via ON CONFLICT
                 let db_config = PostgresAppDBProperties::default();
@@ -122,42 +119,41 @@ impl SigbotWalletManagerFactory {
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotDefaultWalletManager::NAME.to_owned(),
+                        WalletProvider::DEFAULT.as_str(),
                         SigbotDefaultWalletManager::new(trade_handler).await,
                     )
                     .expect("Failed to register the Default Wallet manager.");
             }
-            _ => panic!("Unsupported Wallet manager provider : '{}'.", provider),
         };
 
-        let registered = Self::get_implementation(provider.to_owned())
+        let registered = Self::get_implementation(provider.as_str())
             .await
             .expect("Failed to get the registered Wallet manager.");
 
-        info!("Initializing the Wallet manager with name: {}", &provider);
+        info!("Initializing the Wallet manager with provider: {}", &provider.as_str());
         registered.init(argument.to_owned()).await;
-        info!("Initialized the Wallet manager with name: {}.", &provider);
+        info!("Initialized the Wallet manager with provider: {}.", &provider.as_str());
 
         Ok((registered, argument))
     }
 
     fn register0(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<dyn ISigbotWalletManager + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotWalletManager + Send + Sync>, Error> {
         if self.implementations.contains_key(name) {
             debug!("Already register the Wallet manager '{}'", name);
             return Ok(handler);
         }
-        self.implementations.insert(name.to_owned(), handler.clone());
+        self.implementations.insert(name.to_string(), handler.clone());
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotWalletManager + Send + Sync>, Error> {
+    pub async fn get_implementation(name: &str) -> Result<Arc<dyn ISigbotWalletManager + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotWalletManagerFactory::get().read().unwrap();
-        if let Some(implementation) = this.implementations.get(&name) {
+        if let Some(implementation) = this.implementations.get(name) {
             Ok(implementation.to_owned())
         } else {
             let errmsg = format!("Could not obtain registered Sigbot Wallet manager '{}'.", name);

@@ -31,10 +31,6 @@ use crate::{
             exchange_mongo::ExchangeInfoMongoRepository, exchange_postgres::ExchangeInfoPostgresRepository,
             exchange_sqlite::ExchangeInfoSQLiteRepository,
         },
-        messaging::store::{
-            messaging_mongo::MessagingInfoMongoRepository, messaging_postgres::MessagingInfoPostgresRepository,
-            messaging_sqlite::MessagingInfoSQLiteRepository,
-        },
         notification::store::{
             notification_mongo::NotificationInfoMongoRepository,
             notification_postgres::NotificationInfoPostgresRepository,
@@ -60,11 +56,10 @@ use crate::{
         user_mongo::UserMongoRepository, user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
     },
 };
-
 use oauth2::basic::BasicClient;
 use sigbot_types::{
     modules::{
-        datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo,
+        datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo,
         notification::notification::NotificationInfo, strategy::strategy::StrategyInfo, wallet::balance::BalanceInfo,
         wallet::ledger::LedgerInfo, wallet::position::PositionInfo, wallet::wallet::WalletInfo,
     },
@@ -92,7 +87,6 @@ pub struct SigbotState {
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
     // The Service module repositories.
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
-    pub messaging_repo: Arc<Mutex<RepositoryContainer<MessagingInfo>>>,
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
     pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
@@ -182,26 +176,6 @@ impl SigbotState {
             match db_config.db_type {
                 AppDBType::MONGODB => Some(Box::new(
                     DatafeedInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
-                )),
-                _ => None,
-            },
-        );
-        let messaging_repo = RepositoryContainer::new(
-            match db_config.db_type {
-                AppDBType::SQLITE => Some(Box::new(
-                    MessagingInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
-                )),
-                _ => None,
-            },
-            match db_config.db_type {
-                AppDBType::POSTGRESQL => Some(Box::new(
-                    MessagingInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
-                )),
-                _ => None,
-            },
-            match db_config.db_type {
-                AppDBType::MONGODB => Some(Box::new(
-                    MessagingInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
                 )),
                 _ => None,
             },
@@ -366,7 +340,6 @@ impl SigbotState {
             lock_repo: Arc::new(Mutex::new(lock_repo)),
             // The Application repositories.
             datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
-            messaging_repo: Arc::new(Mutex::new(messaging_repo)),
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
             notification_repo: Arc::new(Mutex::new(notification_repo)),

@@ -21,7 +21,7 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::{Arg, Command};
 use common_telemetry::info;
-use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
+use sigbot_backtest::server::backtest_factory::{BacktestProvider, SigbotBacktestRunnerFactory};
 use sigbot_backtest::server::kline::backtest_kline::SigbotKlineBacktestRunner;
 use sigbot_backtest::server::trades::backtest_trades::SigbotTradesBacktestRunner;
 use sigbot_core::config::config::get_config;
@@ -29,7 +29,8 @@ use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
-use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
+use sigbot_messager::client::messager_mqtt::SigbotMqttMessagerClient;
+use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -50,21 +51,21 @@ impl SigbotBacktestRunnerStarter {
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
                         "The backtest runner provider to use. (supported are: {}, {})",
-                        SigbotKlineBacktestRunner::NAME,
-                        SigbotTradesBacktestRunner::NAME,
+                        BacktestProvider::KLINE.as_str(),
+                        BacktestProvider::TRADES.as_str(),
                     ))
-                    .default_value(SigbotKlineBacktestRunner::NAME),
+                    .default_value(BacktestProvider::KLINE.as_str()),
             )
             .arg(
-                Arg::new("messaging")
+                Arg::new("messager")
                     .short('m')
-                    .long("messaging")
+                    .long("messager")
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
-                        "The providers of messaging. (supported are: {})",
-                        SigbotMqttClient::NAME,
+                        "The providers of messager. (supported are: {})",
+                        MessagerProvider::MQTT.as_str(),
                     ))
-                    .default_value(SigbotMqttClient::NAME),
+                    .default_value(MessagerProvider::MQTT.as_str()),
             )
     }
 

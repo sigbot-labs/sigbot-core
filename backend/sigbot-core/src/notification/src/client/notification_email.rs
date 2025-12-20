@@ -22,7 +22,7 @@ use crate::client::notification_factory::ISigbotNotificationClient;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::modules::notification::notification::NotificationInfo;
+use sigbot_types::modules::notification::notification::{NotificationInfo, NotificationProvider};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -81,8 +81,6 @@ pub struct SigbotEmailClient {
 }
 
 impl SigbotEmailClient {
-    pub const NAME: &'static str = "EMAIL"; // NotificationKind::EMAIL
-
     pub async fn new(config: Option<Arc<SigbotEmailClientConfig>>) -> Arc<Self> {
         Arc::new(Self {
             config: config.expect("Config is required"),
@@ -93,8 +91,8 @@ impl SigbotEmailClient {
 
 #[async_trait]
 impl ISigbotNotificationClient for SigbotEmailClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> NotificationProvider {
+        NotificationProvider::EMAIL
     }
 
     async fn init(&self) {

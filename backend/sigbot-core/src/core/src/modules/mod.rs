@@ -20,7 +20,6 @@
 
 pub mod datafeed;
 pub mod exchange;
-pub mod messaging;
 pub mod notification;
 pub mod order;
 pub mod strategy;

@@ -506,8 +506,8 @@ pub struct BinanceProperties {
 pub struct ControllerProperties {
     #[serde(rename = "datafeed", default = "DatafeedControllerProperties::default")]
     pub datafeed: DatafeedControllerProperties,
-    #[serde(rename = "messaging", default = "MessagingControllerProperties::default")]
-    pub messaging: MessagingControllerProperties,
+    #[serde(rename = "messager", default = "MessagerControllerProperties::default")]
+    pub messager: MessagerControllerProperties,
     #[serde(rename = "notification", default = "NotificationControllerProperties::default")]
     pub notification: NotificationControllerProperties,
     #[serde(rename = "strategy", default = "StrategyControllerProperties::default")]
@@ -533,7 +533,7 @@ pub struct DatafeedControllerProperties {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MessagingControllerProperties {
+pub struct MessagerControllerProperties {
     #[serde(flatten)]
     pub inner: ScheduledPropertiesBase,
 }
@@ -930,7 +930,7 @@ impl Default for ControllerProperties {
     fn default() -> Self {
         ControllerProperties {
             datafeed: DatafeedControllerProperties::default(),
-            messaging: MessagingControllerProperties::default(),
+            messager: MessagerControllerProperties::default(),
             notification: NotificationControllerProperties::default(),
             strategy: StrategyControllerProperties::default(),
         }
@@ -956,9 +956,9 @@ impl Default for DatafeedControllerProperties {
     }
 }
 
-impl Default for MessagingControllerProperties {
+impl Default for MessagerControllerProperties {
     fn default() -> Self {
-        MessagingControllerProperties {
+        MessagerControllerProperties {
             inner: ScheduledPropertiesBase::default(),
         }
     }

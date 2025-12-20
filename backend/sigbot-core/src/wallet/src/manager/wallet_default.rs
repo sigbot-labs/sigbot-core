@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use common_telemetry::{error, info, warn};
 use sigbot_core::modules::wallet::store::transaction::IWalletUpdater;
 use sigbot_types::modules::order::events::SigbotTradeEvent;
-use sigbot_types::modules::wallet::SigbotWalletManagerArgument;
+use sigbot_types::modules::wallet::{wallet::WalletProvider, SigbotWalletManagerArgument};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -36,8 +36,6 @@ pub struct SigbotDefaultWalletManager {
 }
 
 impl SigbotDefaultWalletManager {
-    pub const NAME: &'static str = "DEFAULT";
-
     pub async fn new(trade_handler: Arc<dyn IWalletUpdater>) -> Arc<Self> {
         Arc::new(Self { trade_handler })
     }
@@ -79,8 +77,8 @@ impl SigbotDefaultWalletManager {
 
 #[async_trait]
 impl ISigbotWalletManager for SigbotDefaultWalletManager {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> WalletProvider {
+        WalletProvider::DEFAULT
     }
 
     async fn init(&self, _argument: Arc<SigbotWalletManagerArgument>) {

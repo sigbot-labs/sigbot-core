@@ -60,6 +60,26 @@ pub enum WalletMode {
     PAPER,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, ToSchema)]
+pub enum WalletProvider {
+    DEFAULT,
+}
+
+impl WalletProvider {
+    pub fn of(provider: &str) -> Result<WalletProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "DEFAULT" => Ok(WalletProvider::DEFAULT),
+            _ => Err(anyhow::anyhow!("Unsupported the wallet provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            WalletProvider::DEFAULT => "DEFAULT",
+        }
+    }
+}
+
 impl WalletMode {
     pub fn of(mode: &str) -> Result<WalletMode, String> {
         match mode.to_uppercase().as_str() {

@@ -23,7 +23,7 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::notification::SigbotNotificationArgument;
+use sigbot_types::modules::notification::{notification::NotificationProvider, SigbotNotificationArgument};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -31,7 +31,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotNotificationClient: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn provider(&self) -> NotificationProvider;
     async fn init(&self);
     async fn close(&self);
     async fn send_message(&self, to: &str, message: &str) -> Result<String, Error>;
@@ -69,23 +69,23 @@ impl SigbotNotificationClientFactory {
         Error,
     > {
         // e.g '--provider=email'
-        let notification_provider = matches
-            .try_get_one::<String>("provider")
+        let providers = matches
+            .try_get_one::<String>("providers")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())
+                    .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())
             })
-            .context("Failed to parse the notification provider from the command line arguments.")?
+            .context("Failed to parse the notification providers from the command line arguments.")?
             .to_uppercase();
 
-        info!("Registering Sigbot Notification: {}", &notification_provider);
+        info!("Registering Sigbot Notification: {}", &providers);
 
         // e.g '--configuration=base64_encoded_json_string'
         let configuration = matches
             .try_get_one::<String>("configuration")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotEmailClient::NAME.to_owned())
+                    .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())
             })
             .expect("Failed to parse the configuration from the command line arguments.");
 
@@ -95,38 +95,41 @@ impl SigbotNotificationClientFactory {
         );
 
         let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();
-        for provider in notification_provider.split(',').collect::<Vec<&str>>() {
-            match provider.to_owned().as_str() {
-                SigbotEmailClient::NAME => {
+        for provider in providers
+            .split(',')
+            .map(NotificationProvider::of)
+            .collect::<Result<Vec<NotificationProvider>, anyhow::Error>>()?
+        {
+            match provider {
+                NotificationProvider::EMAIL => {
                     Self::get()
                         .write()
                         .unwrap()
                         .register0(
-                            &SigbotEmailClient::NAME.to_owned(),
+                            provider.as_str(),
                             SigbotEmailClient::new(None).await, // TODO: set up run configuration?
                         )
                         .context("Failed to register the Email notification.")?;
                 }
-                SigbotTelegramClient::NAME => {
+                NotificationProvider::TELEGRAM => {
                     Self::get()
                         .write()
                         .unwrap()
                         .register0(
-                            &SigbotTelegramClient::NAME.to_owned(),
+                            provider.as_str(),
                             SigbotTelegramClient::new(None).await, // TODO: set up run configuration?
                         )
                         .context("Failed to register the Telegram notification.")?;
                 }
-                _ => panic!("Unsupported sigbot notification provider : '{}'.", provider),
             };
 
-            let registered = Self::get_implementation(provider.to_owned())
+            let registered = Self::get_implementation(provider.as_str().to_owned())
                 .await
                 .context("Failed to get the registered notification.")?;
 
-            info!("Initializing the notification with provider: {}", &provider);
+            info!("Initializing the notification with provider: {}", &provider.as_str());
             registered.init().await;
-            info!("Initialized the notification with provider: {}.", &provider);
+            info!("Initialized the notification with provider: {}.", &provider.as_str());
 
             notifications.push(registered.clone());
         }
@@ -136,7 +139,7 @@ impl SigbotNotificationClientFactory {
 
     fn register0(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<dyn ISigbotNotificationClient + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotNotificationClient + Send + Sync>, Error> {
         if self.implementations.contains_key(name) {

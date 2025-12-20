@@ -22,6 +22,7 @@ use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
+use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
 use sigbot_types::modules::{datafeed::SigbotDatefeedArgument, exchange::exchange::ExchangeInfo};
 use std::{future::Future, pin::Pin, sync::Arc};
 
@@ -31,8 +32,6 @@ pub struct SigbotBinanceDatafeedClient {
 }
 
 impl SigbotBinanceDatafeedClient {
-    pub const NAME: &'static str = "BINANCE";
-
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
@@ -40,8 +39,8 @@ impl SigbotBinanceDatafeedClient {
 
 #[async_trait]
 impl ISigbotDatafeedClient for SigbotBinanceDatafeedClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> DatafeedProvider {
+        DatafeedProvider::BINANCE
     }
 
     async fn init(&self, argument: Arc<SigbotDatefeedArgument>) {

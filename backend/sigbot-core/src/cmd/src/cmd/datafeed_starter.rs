@@ -30,8 +30,10 @@ use sigbot_datafeed::client::market::datafeed_binance::SigbotBinanceDatafeedClie
 use sigbot_datafeed::client::news::datafeed_trushsocial::SigbotTrushSocialDatafeedClient;
 use sigbot_datafeed::client::news::datafeed_twitter::SigbotTwitterDatafeedClient;
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
-use sigbot_messaging::client::messaging_local::SigbotLocalQueueClient;
-use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
+use sigbot_messager::client::messager_local::SigbotLocalMessagerClient;
+use sigbot_messager::client::messager_mqtt::SigbotMqttMessagerClient;
+use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
+use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
 
@@ -51,23 +53,23 @@ impl SigbotDatafeedIngestorStarter {
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
                         "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
-                        SigbotBinanceDatafeedClient::NAME,
-                        SigbotTwitterDatafeedClient::NAME,
-                        SigbotTrushSocialDatafeedClient::NAME
+                        DatafeedProvider::BINANCE.as_str(),
+                        DatafeedProvider::TWITTER.as_str(),
+                        DatafeedProvider::TRUSHSOCIAL.as_str()
                     ))
-                    .default_value(SigbotBinanceDatafeedClient::NAME),
+                    .default_value(DatafeedProvider::BINANCE.as_str()),
             )
             .arg(
-                Arg::new("messaging")
+                Arg::new("messager")
                     .short('m')
-                    .long("messaging")
+                    .long("messager")
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
-                        "The providers of messaging. (supported are: {}, {})",
-                        SigbotLocalQueueClient::NAME,
-                        SigbotMqttClient::NAME,
+                        "The providers of messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
                     ))
-                    .default_value(SigbotLocalQueueClient::NAME),
+                    .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
                 Arg::new("configuration")

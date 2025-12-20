@@ -42,7 +42,7 @@ use common_telemetry::{debug, error, info};
 use rust_decimal::Decimal;
 use sigbot_core::cache::{CacheContainer, ICache};
 use sigbot_types::{
-    modules::exchange::exchange::ExchangeInfo,
+    modules::exchange::exchange::{ExchangeInfo, ExchangeProvider},
     modules::exchange::models::{
         trade_market::{KlineModel, PriceModel},
         trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
@@ -270,8 +270,6 @@ pub struct SigbotBinanceClient {
 }
 
 impl SigbotBinanceClient {
-    pub const NAME: &'static str = "BINANCE"; // ExchangeProvider::BINANCE
-
     pub async fn new(exchange: Arc<ExchangeInfo>) -> Arc<Self> {
         Arc::new(Self {
             config: SigbotBinanceClientConfig::from_exchange(exchange),
@@ -298,8 +296,8 @@ impl SigbotBinanceClient {
 // see:https://github.com/binance/binance-connector-rust/blob/main/examples/derivatives_trading_usds_futures/websocket_api/trade_api/new_order.rs
 #[async_trait]
 impl ISigbotExchangeClient for SigbotBinanceClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> ExchangeProvider {
+        ExchangeProvider::BINANCE
     }
 
     async fn init(&self) {

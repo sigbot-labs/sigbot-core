@@ -33,7 +33,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotExchangeClient: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn provider(&self) -> ExchangeProvider;
     async fn init(&self);
     async fn close(&self);
     async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error>;
@@ -88,7 +88,7 @@ impl SigbotExchangeClientFactory {
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotBinanceClient::NAME.to_owned(),
+                        ExchangeProvider::BINANCE.as_str(),
                         SigbotBinanceClient::new(exchange).await, // TODO: set up run configuration?
                     )
                     .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
@@ -96,7 +96,7 @@ impl SigbotExchangeClientFactory {
             _ => panic!("Unsupported exchange provider : '{:?}'.", &provider),
         };
 
-        let registered = Self::get_implementation(provider.as_string())
+        let registered = Self::get_implementation(provider.as_str())
             .await
             .expect(&format!("Failed to get the registered exchange with provider: {:?}.", &provider).as_str());
 
@@ -109,7 +109,7 @@ impl SigbotExchangeClientFactory {
 
     fn register0(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<dyn ISigbotExchangeClient + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
         if self.implementations.contains_key(name) {
@@ -120,10 +120,10 @@ impl SigbotExchangeClientFactory {
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
+    pub async fn get_implementation(name: &str) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotExchangeClientFactory::get().read().unwrap();
-        if let Some(implementation) = this.implementations.get(&name) {
+        if let Some(implementation) = this.implementations.get(name) {
             Ok(implementation.to_owned())
         } else {
             let errmsg = format!("Could not obtain registered sigbot exchange manager '{}'.", name);

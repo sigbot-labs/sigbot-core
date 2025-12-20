@@ -23,7 +23,7 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::order::SigbotOrderManagerArgument;
+use sigbot_types::modules::order::{OrderProvider, SigbotOrderManagerArgument};
 use std::{
     collections::HashMap,
     future::Future,
@@ -33,7 +33,7 @@ use std::{
 
 #[async_trait]
 pub trait ISigbotOrderManager: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn provider(&self) -> OrderProvider;
     async fn init(&self, argument: Arc<SigbotOrderManagerArgument>);
     async fn close(&self);
     async fn subscribe(
@@ -72,29 +72,26 @@ impl SigbotOrderManagerFactory {
         verbose: bool,
     ) -> Result<
         (
-            Arc<Vec<Arc<dyn ISigbotOrderManager + Send + Sync>>>,
+            Arc<dyn ISigbotOrderManager + Send + Sync>,
             Arc<SigbotOrderManagerArgument>,
         ),
         Error,
     > {
         // e.g '--provider=default'
-        let ordermgr_provider = matches
-            .try_get_one::<String>("provider")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotDefaultOrderManager::NAME.to_owned())
-            })
-            .expect("Failed to parse the Order manager provider from the command line arguments.")
-            .to_uppercase();
+        let provider = OrderProvider::of(
+            &matches
+                .get_one::<String>("provider")
+                .unwrap_or(&OrderProvider::DEFAULT.as_str().to_owned()),
+        )?;
 
-        info!("Registering Sigbot Order manager: {}", &ordermgr_provider);
+        info!("Registering Sigbot Order manager: {}", &provider.as_str());
 
         // e.g '--configuration=<base64_encoded_json_string>'
         let configuration = matches
             .try_get_one::<String>("configuration")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotDefaultOrderManager::NAME.to_owned())
+                    .unwrap_or_else(|| OrderProvider::DEFAULT.as_str().to_owned())
             })
             .expect("Failed to parse the configuration from the command line arguments.");
 
@@ -103,38 +100,30 @@ impl SigbotOrderManagerFactory {
                 .context("Failed to parse the configuration from the command line arguments.")?,
         );
 
-        let mut order_manager: Vec<Arc<dyn ISigbotOrderManager + Send + Sync>> = Vec::new();
-        for provider in ordermgr_provider.split(',').collect::<Vec<&str>>() {
-            match provider.to_owned().as_str() {
-                SigbotDefaultOrderManager::NAME => {
-                    Self::get()
-                        .write()
-                        .unwrap()
-                        .register0(
-                            &SigbotDefaultOrderManager::NAME.to_owned(),
-                            SigbotDefaultOrderManager::new().await,
-                        )
-                        .expect("Failed to register the Default Order manager.");
-                }
-                _ => panic!("Unsupported Order manager provider : '{}'.", provider),
-            };
+        match provider {
+            OrderProvider::DEFAULT => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(provider.as_str(), SigbotDefaultOrderManager::new().await)
+                    .expect("Failed to register the Default Order manager.");
+            }
+        };
 
-            let registered = Self::get_implementation(provider.to_owned())
-                .await
-                .expect("Failed to get the registered Order manager.");
+        let registered = Self::get_implementation(provider.as_str().to_owned())
+            .await
+            .expect("Failed to get the registered Order manager.");
 
-            info!("Initializing the Order manager with name: {}", &provider);
-            registered.init(argument.to_owned()).await;
-            order_manager.push(registered);
-            info!("Initialized the Order manager with name: {}.", &provider);
-        }
+        info!("Initializing the Order manager with provider: {}", &provider.as_str());
+        registered.init(argument.to_owned()).await;
+        info!("Initialized the Order manager with provider: {}.", &provider.as_str());
 
-        Ok((Arc::new(order_manager), argument))
+        Ok((registered, argument))
     }
 
     fn register0(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<dyn ISigbotOrderManager + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotOrderManager + Send + Sync>, Error> {
         if self.implementations.contains_key(name) {

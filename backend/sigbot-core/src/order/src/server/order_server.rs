@@ -21,8 +21,8 @@
 use crate::manager::order_factory::SigbotOrderManagerFactory;
 use anyhow::Error;
 use common_telemetry::{error, info};
-use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::{messaging::TOPIC_TRADING_SIGNALS, order::events::SigbotTradeSignal};
+use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+use sigbot_types::modules::{messager::TOPIC_TRADING_SIGNALS, order::events::SigbotTradeSignal};
 use std::sync::Arc;
 
 pub struct SigbotOrderServer {}
@@ -34,62 +34,60 @@ impl SigbotOrderServer {
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         info!("Initializing Order manager.");
-        let (ordermgr, argument) = SigbotOrderManagerFactory::init(matches, verbose)
+        let (manager, argument) = SigbotOrderManagerFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Order manager.");
-        info!("Initialized Order manager. {:?}", ordermgr.len());
+        info!("Initialized Order manager. {}", manager.provider().as_str());
 
-        info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
+        info!("Initializing Messager client.");
+        let messager = SigbotMessagerClientFactory::init(matches, argument.messager_config.to_owned())
             .await
-            .expect("Failed to initialize Messaging client.");
-        info!("Initialized Messaging client. {:?}", messaging.name());
+            .expect("Failed to initialize Messager client.");
+        info!("Initialized Messager client. {}", messager.provider().as_str());
 
         // Subscribe to trading signal topics.
-        for manager in ordermgr.iter() {
-            let manager0 = manager.clone();
-            let messaging0 = messaging.clone();
+        let manager0 = manager.to_owned();
+        let messager0 = messager.to_owned();
 
-            // Subscribe to all tenant's signal topics (using wildcard).
-            // Should subscribe to specific tenant's topics based on configuration.
-            let topic = TOPIC_TRADING_SIGNALS.replace("{tenant_id}", "+"); // +: MQTT single-level wildcard
+        // Subscribe to all tenant's signal topics (using wildcard).
+        // Should subscribe to specific tenant's topics based on configuration.
+        let topic = TOPIC_TRADING_SIGNALS.replace("{tenant_id}", "+"); // +: MQTT single-level wildcard
 
-            let handler: Arc<
-                dyn Fn(Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, Error>> + Send>>
-                    + Send
-                    + Sync,
-            > = Arc::new(move |data: Vec<u8>| {
-                let manager1 = manager0.clone();
-                Box::pin(async move {
-                    let signal: SigbotTradeSignal = match serde_json::from_slice(&data) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            error!("Failed to deserialize SigbotTradeSignal: {}", e);
-                            return Err(Error::msg(format!("Failed to deserialize SigbotTradeSignal: {}", e)));
-                        }
-                    };
+        let handler: Arc<
+            dyn Fn(Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, Error>> + Send>>
+                + Send
+                + Sync,
+        > = Arc::new(move |data: Vec<u8>| {
+            let manager1 = manager0.clone();
+            Box::pin(async move {
+                let signal: SigbotTradeSignal = match serde_json::from_slice(&data) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("Failed to deserialize SigbotTradeSignal: {}", e);
+                        return Err(Error::msg(format!("Failed to deserialize SigbotTradeSignal: {}", e)));
+                    }
+                };
 
-                    info!(
-                        "Received SigbotTradeSignal: signal_id={}, tenant_id={}",
-                        signal.signal_id, signal.tenant_id
-                    );
+                info!(
+                    "Received SigbotTradeSignal: signal_id={}, tenant_id={}",
+                    signal.signal_id, signal.tenant_id
+                );
 
-                    let manager2 = manager1.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = manager2.process_signal(signal).await {
-                            error!("Failed to process signal: {}", e);
-                        }
-                    });
+                let manager2 = manager1.to_owned();
+                tokio::spawn(async move {
+                    if let Err(e) = manager2.process_signal(signal).await {
+                        error!("Failed to process signal: {}", e);
+                    }
+                });
 
-                    Ok(String::from_utf8_lossy(&data).to_string())
-                })
-            });
+                Ok(String::from_utf8_lossy(&data).to_string())
+            })
+        });
 
-            messaging0
-                .subscribe(&topic, handler)
-                .await
-                .expect("Failed to subscribe to signal topic");
-        }
+        messager0
+            .subscribe(&topic, handler)
+            .await
+            .expect("Failed to subscribe to signal topic");
 
         info!("Subscribed to Order manager.");
     }
@@ -99,9 +97,9 @@ impl SigbotOrderServer {
         SigbotOrderManagerFactory::close().await;
         info!("Shutdown Order manager.");
 
-        info!("Shutting down Messaging client.");
-        SigbotMessagingClientFactory::close().await;
-        info!("Shutdown Messaging client.");
+        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::close().await;
+        info!("Shutdown Messager client.");
     }
 }
 

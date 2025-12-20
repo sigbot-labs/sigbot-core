@@ -20,7 +20,7 @@
 
 use crate::executor::strategy_factory::SigbotStrategyExecutorFactory;
 use common_telemetry::info;
-use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
+use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
 use std::sync::Arc;
 
 pub struct SigbotStrategyRunner {}
@@ -35,17 +35,17 @@ impl SigbotStrategyRunner {
         let (executor, argument) = SigbotStrategyExecutorFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Strategy Executor.");
-        info!("Initialized Strategy Executor. {:?}", executor.name());
+        info!("Initialized Strategy Executor. {}", executor.provider().as_str());
 
-        info!("Initializing Messaging Client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, argument.to_owned().messaging_config.to_owned())
+        info!("Initializing Messager Client.");
+        let messager = SigbotMessagerClientFactory::init(matches, argument.to_owned().messager_config.to_owned())
             .await
-            .expect("Failed to initialize Messaging Client.");
-        info!("Initialized Messaging Client. {:?}", messaging.name());
+            .expect("Failed to initialize Messager Client.");
+        info!("Initialized Messager Client. {}", messager.provider().as_str());
 
-        info!("Starting Strategy Executor: {}", executor.name());
-        executor.startup(messaging.to_owned()).await;
-        info!("Started Strategy Executor: {}.", executor.name());
+        info!("Starting Strategy Executor: {}", executor.provider().as_str());
+        executor.startup(messager.to_owned()).await;
+        info!("Started Strategy Executor: {}", executor.provider().as_str());
     }
 
     pub async fn shutdown() {
@@ -53,9 +53,9 @@ impl SigbotStrategyRunner {
         SigbotStrategyExecutorFactory::shutdown().await;
         info!("Shutdown Strategy Executor.");
 
-        info!("Shutting down Messaging Client.");
-        SigbotMessagingClientFactory::close().await;
-        info!("Shutdown Messaging Client.");
+        info!("Shutting down Messager Client.");
+        SigbotMessagerClientFactory::close().await;
+        info!("Shutdown Messager Client.");
     }
 }
 

@@ -21,8 +21,10 @@
 use crate::manager::wallet_factory::SigbotWalletManagerFactory;
 use anyhow::Error;
 use common_telemetry::{error, info};
-use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::{messaging::TOPIC_TRADING_RESULTS, order::events::SigbotTradeEvent};
+use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+use sigbot_types::modules::{
+    messager::TOPIC_TRADING_RESULTS, order::events::SigbotTradeEvent, wallet::wallet::WalletProvider,
+};
 use std::sync::Arc;
 
 pub struct SigbotWalletServer {}
@@ -37,17 +39,17 @@ impl SigbotWalletServer {
         let (walletmgr, argument) = SigbotWalletManagerFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Wallet server.");
-        info!("Initialized Wallet manager. {:?}", walletmgr.name());
+        info!("Initialized Wallet manager. {:?}", walletmgr.provider());
 
-        info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
+        info!("Initializing Messager client.");
+        let messager = SigbotMessagerClientFactory::init(matches, argument.messager_config.to_owned())
             .await
-            .expect("Failed to initialize Messaging client.");
-        info!("Initialized Messaging client. {:?}", messaging.name());
+            .expect("Failed to initialize Messager client.");
+        info!("Initialized Messager client. {:?}", messager.provider());
 
         // Subscribe to trade event topics.
         let manager0 = walletmgr.to_owned();
-        let messaging0 = messaging.to_owned();
+        let messager0 = messager.to_owned();
 
         // Subscribe to all tenant's trade topics (using wildcard).
         let topic = TOPIC_TRADING_RESULTS.replace("{tenant_id}", "+"); // MQTT single level wildcard
@@ -83,7 +85,7 @@ impl SigbotWalletServer {
             })
         });
 
-        messaging0
+        messager0
             .subscribe(&topic, handler)
             .await
             .expect("Failed to subscribe to trade topic");
@@ -96,9 +98,9 @@ impl SigbotWalletServer {
         SigbotWalletManagerFactory::close().await;
         info!("Shutdown Wallet manager.");
 
-        info!("Shutting down Messaging client.");
-        SigbotMessagingClientFactory::close().await;
-        info!("Shutdown Messaging client.");
+        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::close().await;
+        info!("Shutdown Messager client.");
     }
 }
 

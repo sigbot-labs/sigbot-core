@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod messaging;
+pub mod messager;
 
 /// This topic for strategy runner to receive strategies configuration push.
 /// data-flow: from api-server to strategy-runner.

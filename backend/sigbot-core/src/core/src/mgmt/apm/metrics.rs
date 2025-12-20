@@ -65,7 +65,7 @@ lazy_static! {
             "sigbot_system_active_connections",
             "Number of active connections"
         ),
-        &["component"] // component: datafeed, exchange, messaging, etc.
+        &["component"] // component: datafeed, exchange, messager, etc.
     ).expect("system_active_connections metric can be created");
 
     /// Number of messages in queue backlog

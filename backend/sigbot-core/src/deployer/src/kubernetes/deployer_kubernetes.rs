@@ -113,10 +113,10 @@ impl SigbotKubernetesDeployer {
     }
 
     async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
-        // let messaging = Arc::new(MessagingInfo {
+        // let messager = Arc::new(MessagerInfo {
         //     base: EntityBase::new_with_id(Some(1)),
         //     name: tenant.name.clone(),
-        //     provider: Some(MessagingProvider::MQTT),
+        //     provider: Some(MessagerProvider::MQTT),
         //     configuration: None,
         //     secrets: None,
         //     description: Some(format!(
@@ -151,7 +151,7 @@ impl SigbotKubernetesDeployer {
             )),
         });
         // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot datafeed --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messaging-type=emqx --messaging-url=emqx://host:18083)
+        // (e.g: sigbot datafeed --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
     }
 
     async fn shutdown_datafeed_runner(&self, tenant: Arc<Tenant>) {
@@ -170,7 +170,7 @@ impl SigbotKubernetesDeployer {
             )),
         });
         // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot strategy --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messaging-type=emqx --messaging-url=emqx://host:18083)
+        // (e.g: sigbot strategy --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
     }
 
     async fn shutdown_strategy_runner(&self, tenant: Arc<Tenant>) {
@@ -179,7 +179,7 @@ impl SigbotKubernetesDeployer {
 
     async fn startup_notification_forwarder(&self, tenant: Arc<Tenant>) {
         // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot notification --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messaging-type=emqx --messaging-url=emqx://host:18083)
+        // (e.g: sigbot notification --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
     }
 
     async fn shutdown_notification_forwarder(&self, tenant: Arc<Tenant>) {
@@ -188,7 +188,7 @@ impl SigbotKubernetesDeployer {
 
     async fn startup_backtest_runner(&self, tenant: Arc<Tenant>) {
         // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot backtest --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messaging-type=emqx --messaging-url=emqx://host:18083)
+        // (e.g: sigbot backtest --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
     }
 
     async fn shutdown_backtest_runner(&self, tenant: Arc<Tenant>) {

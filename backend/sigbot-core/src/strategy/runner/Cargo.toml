@@ -14,7 +14,7 @@ sigbot-types.workspace = true
 sigbot-utils.workspace = true
 sigbot-core.workspace = true
 sigbot-strategy-sdk.workspace = true
-sigbot-messaging.workspace = true
+sigbot-messager.workspace = true
 sigbot-exchange.workspace = true
 
 # Thirdparty dependencies.

@@ -25,14 +25,38 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum BacktestProvider {
+    TRADES,
+    KLINE,
+}
+
+impl BacktestProvider {
+    pub fn of(provider: &str) -> Result<BacktestProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "TRADES" => Ok(BacktestProvider::TRADES),
+            "KLINE" => Ok(BacktestProvider::KLINE),
+            _ => Err(anyhow::anyhow!("Unsupported the backtest provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            BacktestProvider::TRADES => "TRADES",
+            BacktestProvider::KLINE => "KLINE",
+        }
+    }
+}
+
 #[async_trait]
 pub trait ISigbotBacktestRunner: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn provider(&self) -> BacktestProvider;
     async fn startup(&self);
     async fn shutdown(&self);
 }
@@ -60,49 +84,65 @@ impl SigbotBacktestRunnerFactory {
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
         info!("Starting backtest runners ...");
 
-        // e.g '--provider=TICKER_BASED'
-        let provider = matches
+        // e.g '--provider=TRADES'
+        let provider_str = matches
             .try_get_one::<String>("provider")
             .map(|s| {
                 s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotTradesBacktestRunner::NAME.to_owned())
+                    .unwrap_or_else(|| BacktestProvider::TRADES.as_str().to_owned())
             })
             .expect("Failed to parse the backtest runner provider from the command line arguments.")
             .to_uppercase();
 
-        info!("Registering backtest runner with provider: {}", &provider);
-        match provider.as_str() {
-            SigbotTradesBacktestRunner::NAME => {
+        let provider =
+            BacktestProvider::of(&provider_str).expect(&format!("Failed to parse backtest provider: {}", provider_str));
+
+        info!("Registering backtest runner with provider: {}", &provider.as_str());
+        match provider {
+            BacktestProvider::TRADES => {
                 Self::get()
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotTradesBacktestRunner::NAME.to_owned(),
+                        &provider.as_str().to_owned(),
                         SigbotTradesBacktestRunner::new(None, None).await, // TODO: set up run configuration?
                     )
-                    .expect(&format!("Failed to register the backtest runner with provider: {}.", &provider).as_str());
+                    .expect(
+                        &format!(
+                            "Failed to register the backtest runner with provider: {}.",
+                            &provider.as_str()
+                        )
+                        .as_str(),
+                    );
             }
-            SigbotKlineBacktestRunner::NAME => {
+            BacktestProvider::KLINE => {
                 Self::get()
                     .write()
                     .unwrap()
                     .register0(
-                        &SigbotKlineBacktestRunner::NAME.to_owned(),
+                        &provider.as_str().to_owned(),
                         SigbotKlineBacktestRunner::new(None, None).await, // TODO: set up run configuration?
                     )
-                    .expect(&format!("Failed to register the backtest runner with provider: {}.", &provider).as_str());
+                    .expect(
+                        &format!(
+                            "Failed to register the backtest runner with provider: {}.",
+                            &provider.as_str()
+                        )
+                        .as_str(),
+                    );
             }
-            _ => panic!("Unsupported backtest runner provider : '{}'.", provider),
         };
 
-        let registered = Self::get_implementation(provider.to_owned()).await.expect(&format!(
-            "Failed to get the registered backtest runner with provider: {}.",
-            &provider
-        ));
+        let registered = Self::get_implementation(provider.as_str().to_owned())
+            .await
+            .expect(&format!(
+                "Failed to get the registered backtest runner with provider: {}.",
+                &provider.as_str()
+            ));
 
-        info!("Starting the backtest runner with provider: {}", &provider);
+        info!("Starting the backtest runner with provider: {}", &provider.as_str());
         registered.startup().await;
-        info!("Started the backtest runner with provider: {}.", &provider);
+        info!("Started the backtest runner with provider: {}.", &provider.as_str());
     }
 
     fn register0<T: ISigbotBacktestRunner + Send + Sync + 'static>(

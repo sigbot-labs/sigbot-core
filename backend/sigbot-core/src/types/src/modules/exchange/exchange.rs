@@ -139,18 +139,18 @@ impl ExchangeProvider {
         }
     }
 
-    pub fn as_string(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
             // CEX
-            ExchangeProvider::BINANCE => "BINANCE".to_string(),
-            ExchangeProvider::OKX => "OKX".to_string(),
-            ExchangeProvider::COINBASE => "COINBASE".to_string(),
-            ExchangeProvider::BITGET => "BITGET".to_string(),
-            ExchangeProvider::BYBIT => "BYBIT".to_string(),
-            ExchangeProvider::KRAKEN => "KRAKEN".to_string(),
+            ExchangeProvider::BINANCE => "BINANCE",
+            ExchangeProvider::OKX => "OKX",
+            ExchangeProvider::COINBASE => "COINBASE",
+            ExchangeProvider::BITGET => "BITGET",
+            ExchangeProvider::BYBIT => "BYBIT",
+            ExchangeProvider::KRAKEN => "KRAKEN",
             // DEX
-            ExchangeProvider::HYPERLIQUID => "HYPERLIQUID".to_string(),
-            ExchangeProvider::LIGHTER => "LIGHTER".to_string(),
+            ExchangeProvider::HYPERLIQUID => "HYPERLIQUID",
+            ExchangeProvider::LIGHTER => "LIGHTER",
         }
     }
 }

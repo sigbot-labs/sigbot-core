@@ -113,6 +113,7 @@ impl<'r> FromRow<'r, PgRow> for DatafeedInfo {
 pub enum DatafeedProvider {
     BINANCE,
     TWITTER,
+    TRUSHSOCIAL,
 }
 
 impl DatafeedProvider {
@@ -120,7 +121,16 @@ impl DatafeedProvider {
         match provider.to_uppercase().as_str() {
             "BINANCE" => Ok(DatafeedProvider::BINANCE),
             "TWITTER" => Ok(DatafeedProvider::TWITTER),
+            "TRUSHSOCIAL" => Ok(DatafeedProvider::TRUSHSOCIAL),
             _ => Err(anyhow::anyhow!("Unsupported the datafeed provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            DatafeedProvider::BINANCE => "BINANCE",
+            DatafeedProvider::TWITTER => "TWITTER",
+            DatafeedProvider::TRUSHSOCIAL => "TRUSHSOCIAL",
         }
     }
 }

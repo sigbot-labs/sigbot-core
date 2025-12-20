@@ -18,20 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::messaging_factory::ISigbotMessagingClient;
+use crate::client::messager_factory::ISigbotMessagerClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
-use sigbot_types::modules::messaging::messaging::MessagingInfo;
+use sigbot_types::modules::messager::messager::{MessagerConfiguration, MessagerProvider};
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 use tokio::{sync::Mutex, task};
 
 #[derive(Clone)]
-pub struct SigbotLocalQueueClientConfig {
+pub struct SigbotLocalMessagerClientConfig {
     pub queue_size: usize,
 }
 
-impl std::fmt::Display for SigbotLocalQueueClientConfig {
+impl std::fmt::Display for SigbotLocalMessagerClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -44,14 +44,13 @@ impl std::fmt::Display for SigbotLocalQueueClientConfig {
     }
 }
 
-impl SigbotLocalQueueClientConfig {
-    pub fn from_messaging(messaging: Arc<MessagingInfo>) -> Self {
-        let plain_config = messaging
-            .configuration
-            .as_ref()
-            .expect("Plain configuration is required");
+impl SigbotLocalMessagerClientConfig {
+    pub fn from_config(configuration: Arc<MessagerConfiguration>) -> Self {
         Self {
-            queue_size: plain_config
+            queue_size: configuration
+                .configuration
+                .as_ref()
+                .expect("Queue size is required")
                 .get("queue_size")
                 .expect("Queue size is required")
                 .parse::<usize>()
@@ -60,8 +59,8 @@ impl SigbotLocalQueueClientConfig {
     }
 }
 
-pub struct SigbotLocalQueueClient {
-    config: Arc<SigbotLocalQueueClientConfig>,
+pub struct SigbotLocalMessagerClient {
+    config: Arc<SigbotLocalMessagerClientConfig>,
     // Per topic blocking queue (similar to Java BlockingQueue)
     // Store (sender, receiver) pairs
     topic_queues: Arc<
@@ -89,10 +88,8 @@ pub struct SigbotLocalQueueClient {
     >,
 }
 
-impl SigbotLocalQueueClient {
-    pub const NAME: &'static str = "LOCAL";
-
-    pub async fn new(config: Arc<SigbotLocalQueueClientConfig>) -> Arc<Self> {
+impl SigbotLocalMessagerClient {
+    pub async fn new(config: Arc<SigbotLocalMessagerClientConfig>) -> Arc<Self> {
         Arc::new(Self {
             config,
             topic_queues: Arc::new(Mutex::new(HashMap::new())),
@@ -127,19 +124,19 @@ impl SigbotLocalQueueClient {
 }
 
 #[async_trait]
-impl ISigbotMessagingClient for SigbotLocalQueueClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+impl ISigbotMessagerClient for SigbotLocalMessagerClient {
+    fn provider(&self) -> MessagerProvider {
+        MessagerProvider::LOCAL
     }
 
     async fn init(&self) {
-        info!("Initializing Local Queue messaging with config={}", self.config);
+        info!("Initializing Local Queue messager with config={}", self.config);
         // Local queue does not require additional initialization, queues will be created on first use
-        info!("Initialized Local Queue messaging with config={}", self.config);
+        info!("Initialized Local Queue messager with config={}", self.config);
     }
 
     async fn close(&self) {
-        info!("Closing Local Queue messaging with {}", self.config);
+        info!("Closing Local Queue messager with {}", self.config);
 
         // Cancel all subscription tasks and clear registrations
         let mut registrations = self.subscription_registrations.lock().await;
@@ -154,7 +151,7 @@ impl ISigbotMessagingClient for SigbotLocalQueueClient {
         queues.clear();
         drop(queues);
 
-        info!("Closed Local Queue messaging with {}", self.config);
+        info!("Closed Local Queue messager with {}", self.config);
     }
 
     async fn publish(&self, topic: &str, message: &str) -> Result<String, Error> {

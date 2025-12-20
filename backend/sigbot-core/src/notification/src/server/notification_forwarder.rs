@@ -21,8 +21,8 @@
 use crate::client::notification_factory::SigbotNotificationClientFactory;
 use anyhow::{Context, Error};
 use common_telemetry::info;
-use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::messaging::TOPIC_NOTIFICATION_MESSAGES;
+use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+use sigbot_types::modules::messager::TOPIC_NOTIFICATION_MESSAGES;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotNotificationForwarder {
@@ -42,10 +42,10 @@ impl SigbotNotificationForwarder {
             .expect("Failed to initialize Notification clients.");
         info!("Initialized Notification clients.");
 
-        info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
+        info!("Initializing Messager client.");
+        let messager = SigbotMessagerClientFactory::init(matches, argument.messager_config.to_owned())
             .await
-            .expect("Failed to initialize Messaging client.");
+            .expect("Failed to initialize Messager client.");
 
         // TODO: Subscribe alarm messages.
         let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
@@ -64,11 +64,11 @@ impl SigbotNotificationForwarder {
                     Ok("OK".to_string())
                 })
             });
-        let _ = messaging
+        let _ = messager
             .subscribe(TOPIC_NOTIFICATION_MESSAGES, handler) // TODO: configuable
             .await
-            .context("Failed to subscribe to the messaging topic.");
-        info!("Initialized Messaging client with provider: {:?}.", messaging.name());
+            .context("Failed to subscribe to the messager topic.");
+        info!("Initialized Messager client with provider: {:?}.", messager.provider());
     }
 
     pub async fn shutdown() {
@@ -76,9 +76,9 @@ impl SigbotNotificationForwarder {
         SigbotNotificationClientFactory::close().await;
         info!("Shutting down Notification clients.");
 
-        info!("Shutting down Messaging client.");
-        SigbotMessagingClientFactory::close().await;
-        info!("Shutting down Messaging client.");
+        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::close().await;
+        info!("Shutting down Messager client.");
     }
 }
 

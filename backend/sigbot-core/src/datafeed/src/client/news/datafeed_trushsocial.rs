@@ -22,6 +22,7 @@ use crate::client::datafeed_factory::ISigbotDatafeedClient;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
+use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
 use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
 use std::{future::Future, pin::Pin, sync::Arc};
 
@@ -31,8 +32,6 @@ pub struct SigbotTrushSocialDatafeedClient {
 }
 
 impl SigbotTrushSocialDatafeedClient {
-    pub const NAME: &'static str = "TRUSHSOCIAL";
-
     pub async fn new() -> Arc<Self> {
         Arc::new(Self {})
     }
@@ -48,8 +47,8 @@ impl SigbotTrushSocialDatafeedClient {
 
 #[async_trait]
 impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> DatafeedProvider {
+        DatafeedProvider::TRUSHSOCIAL
     }
 
     async fn init(&self, _: Arc<SigbotDatefeedArgument>) {

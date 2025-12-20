@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-// use crate::modules::{exchange::exchange::ExchangeInfo, messaging::messaging::MessagingInfo};
+// use crate::modules::{exchange::exchange::ExchangeInfo, messager::messager::MessagerInfo};
 // use anyhow::{Context, Error};
 // use serde::{Deserialize, Serialize};
 

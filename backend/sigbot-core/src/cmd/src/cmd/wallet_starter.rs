@@ -24,10 +24,9 @@ use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
-use sigbot_messaging::client::messaging_local::SigbotLocalQueueClient;
-use sigbot_messaging::client::messaging_mqtt::SigbotMqttClient;
+use sigbot_types::modules::messager::messager::MessagerProvider;
+use sigbot_types::modules::wallet::wallet::WalletProvider;
 use sigbot_utils::panics::PanicHelper;
-use sigbot_wallet::manager::wallet_default::SigbotDefaultWalletManager;
 use sigbot_wallet::server::wallet_server::SigbotWalletServer;
 use std::env;
 use tokio::sync::oneshot;
@@ -48,9 +47,9 @@ impl SigbotWalletManagerStarter {
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
                         "The providers of Wallet Manager. (supported are: {})",
-                        SigbotDefaultWalletManager::NAME
+                        WalletProvider::DEFAULT.as_str()
                     ))
-                    .default_value(SigbotDefaultWalletManager::NAME),
+                    .default_value(WalletProvider::DEFAULT.as_str()),
             )
             .arg(
                 Arg::new("configuration")
@@ -60,16 +59,16 @@ impl SigbotWalletManagerStarter {
                     .help("The configuration of wallet manager. (base64 encoded JSON string)"),
             )
             .arg(
-                Arg::new("messaging")
+                Arg::new("messager")
                     .short('m')
-                    .long("messaging")
+                    .long("messager")
                     .value_parser(clap::value_parser!(String))
                     .help(format!(
-                        "The providers of messaging. (supported are: {}, {})",
-                        SigbotLocalQueueClient::NAME,
-                        SigbotMqttClient::NAME,
+                        "The providers of messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
                     ))
-                    .default_value(SigbotLocalQueueClient::NAME),
+                    .default_value(MessagerProvider::LOCAL.as_str()),
             )
     }
 

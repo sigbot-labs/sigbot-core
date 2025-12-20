@@ -26,10 +26,14 @@ use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
 use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
-use sigbot_messaging::client::messaging_factory::ISigbotMessagingClient;
+use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::{
-    messaging::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_STREAMS},
-    strategy::{models::strategy_sdk::StrategyExecutionInput, strategy::StrategyInfo, SigbotStrategyArgument},
+    messager::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_STREAMS},
+    strategy::{
+        models::strategy_execution::StrategyExecutionInput,
+        strategy::{StrategyInfo, StrategyProvider},
+        SigbotStrategyArgument,
+    },
 };
 use std::{
     collections::HashMap,
@@ -46,8 +50,6 @@ pub struct SigbotPythonStrategyExecutor {
 }
 
 impl SigbotPythonStrategyExecutor {
-    pub const NAME: &'static str = "PYTHON";
-
     pub async fn new(argument: Arc<SigbotStrategyArgument>) -> Arc<Self> {
         Arc::new(Self {
             argument,
@@ -57,14 +59,14 @@ impl SigbotPythonStrategyExecutor {
     }
 
     #[allow(unused_variables)]
-    pub async fn execute_batch(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
+    pub async fn execute_batch(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>) {
         unimplemented!()
     }
 
     #[allow(unused_variables)]
     pub async fn execute_streaming(
         &self,
-        messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>,
+        messager: Arc<dyn ISigbotMessagerClient + Send + Sync>,
         executor: Arc<StreamingStrategyExecutor>,
     ) {
         let strategy = executor.to_owned().configuration.to_owned();
@@ -102,7 +104,7 @@ impl SigbotPythonStrategyExecutor {
                                 if let Some(signal) = trade_signal {
                                     info!("Received trading signal: {:?}", signal);
                                     // Get exchange client (assuming BINANCE for now, can be made configurable)
-                                    match SigbotExchangeClientFactory::get_implementation("BINANCE".to_string()).await {
+                                    match SigbotExchangeClientFactory::get_implementation("BINANCE").await {
                                         Ok(exchange_client) => match exchange_client.entry_position(signal).await {
                                             Ok(trade_result) => {
                                                 info!(
@@ -157,7 +159,7 @@ impl SigbotPythonStrategyExecutor {
             })
         });
 
-        let _ = messaging
+        let _ = messager
             .subscribe(TOPIC_MARKET_STREAMS, market_data_handler) // TODO: configuable
             .await
             .expect("Failed to subscribe to market data topic.");
@@ -167,18 +169,18 @@ impl SigbotPythonStrategyExecutor {
 
 #[async_trait]
 impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> StrategyProvider {
+        StrategyProvider::PYTHON
     }
 
-    async fn startup(&self, messaging: Arc<dyn ISigbotMessagingClient + Send + Sync>) {
+    async fn startup(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>) {
         if self.argument.run_mode == "BATCH" {
             unimplemented!()
         } else if self.argument.run_mode == "STREAMING" {
             // let executor = Arc::new(StreamingStrategyExecutor::new(self.argument.clone()));
             // *self.streaming_executor.lock().unwrap() = Some(executor.clone());
 
-            let messaging0 = messaging.to_owned();
+            let messager0 = messager.to_owned();
             let executors0 = self.running_streaming_executors.to_owned();
             // SAFETY: We know that `self` is actually an Arc<Self> because `startup` is called
             // through `Arc<dyn ISigbotStrategyExecutor>` (see strategy_runner.rs:47). We create
@@ -199,7 +201,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
             > = Arc::new(move |data: Vec<u8>| {
                 debug!("Received configuration message: {:?}", data);
 
-                let messaging1 = messaging0.to_owned();
+                let messager1 = messager0.to_owned();
                 let executors1 = executors0.to_owned();
                 let self_arc1 = self_arc0.to_owned();
 
@@ -250,7 +252,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
 
                         info!("Starting Python Streaming Strategy Runner.");
                         self_arc1
-                            .execute_streaming(messaging1.to_owned(), executor.to_owned())
+                            .execute_streaming(messager1.to_owned(), executor.to_owned())
                             .await;
                         info!("Started Python Streaming Strategy Runner.");
                     }
@@ -259,7 +261,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                 })
             });
 
-            let _ = messaging
+            let _ = messager
                 .to_owned()
                 .subscribe(TOPIC_CONFIG_STRATEGY, config_strategy_handler.to_owned())
                 .await

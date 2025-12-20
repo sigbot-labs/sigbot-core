@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::backtest_factory::ISigbotBacktestRunner;
+use crate::server::backtest_factory::{BacktestProvider, ISigbotBacktestRunner};
 use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
@@ -35,7 +35,6 @@ pub struct SigbotKlineBacktestRunner {
 }
 
 impl SigbotKlineBacktestRunner {
-    pub const NAME: &'static str = "KLINE";
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
@@ -87,8 +86,8 @@ impl SigbotKlineBacktestRunner {
 
 #[async_trait]
 impl ISigbotBacktestRunner for SigbotKlineBacktestRunner {
-    fn name(&self) -> &'static str {
-        Self::NAME
+    fn provider(&self) -> BacktestProvider {
+        BacktestProvider::KLINE
     }
 
     async fn startup(&self) {

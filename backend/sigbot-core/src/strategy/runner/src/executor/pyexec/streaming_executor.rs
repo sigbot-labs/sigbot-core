@@ -25,7 +25,7 @@ use pyo3::types::PyAnyMethods;
 use pyo3::types::{PyDict, PyModule};
 use sigbot_strategy_sdk::sdk::core::models::trade_signal::TradingSignal;
 use sigbot_types::modules::exchange::models::trade_position::EntryTradePosition;
-use sigbot_types::modules::strategy::models::strategy_sdk::{StrategyExecutionInput, StrategyExecutionResult};
+use sigbot_types::modules::strategy::models::strategy_execution::{StrategyExecutionInput, StrategyExecutionResult};
 use sigbot_types::modules::strategy::strategy::StrategyInfo;
 use sigbot_types::modules::strategy::SigbotStrategyArgument;
 use std::collections::HashMap;
@@ -318,7 +318,7 @@ has_on_process = callable(globals().get('on_process', None))
     fn build_context_dict<'py>(
         &self,
         py: Python<'py>,
-        context: &sigbot_types::modules::strategy::models::strategy_sdk::StrategyContext,
+        context: &sigbot_types::modules::strategy::models::strategy_execution::StrategyContext,
     ) -> Result<Bound<'py, PyDict>> {
         // Import json module for parsing JSON strings
         let json_module = py.import_bound("json")?;
@@ -400,8 +400,8 @@ mod tests {
             trade_market::KlineModel,
             trade_position::{OrderType, TradeSide},
         },
-        messaging::messaging::MessagingInfo,
-        strategy::{models::strategy_sdk::StrategyContext, strategy::StrategyInfo},
+        messager::messager::MessagerConfiguration,
+        strategy::{models::strategy_execution::StrategyContext, strategy::StrategyInfo},
     };
     use std::thread;
 
@@ -487,7 +487,7 @@ def on_process(context):
             Arc::new(SigbotStrategyArgument {
                 sys_environment: Some(HashMap::new()),
                 run_mode: "STREAMING".to_string(),
-                messaging_config: Arc::new(MessagingInfo::default()),
+                messager_config: Arc::new(MessagerConfiguration::default()),
             }),
             Arc::new(StrategyInfo::default()),
         );
@@ -537,7 +537,7 @@ def on_process(context):
             Arc::new(SigbotStrategyArgument {
                 sys_environment: Some(HashMap::new()),
                 run_mode: "STREAMING".to_string(),
-                messaging_config: Arc::new(MessagingInfo::default()),
+                messager_config: Arc::new(MessagerConfiguration::default()),
             }),
             Arc::new(StrategyInfo::default()),
         ));

@@ -111,16 +111,32 @@ impl<'r> FromRow<'r, PgRow> for NotificationInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum NotificationProvider {
-    BINANCE,
-    TWITTER,
+    EMAIL,
+    TELEGRAM,
 }
 
 impl NotificationProvider {
     pub fn of(provider: &str) -> Result<NotificationProvider, anyhow::Error> {
         match provider.to_uppercase().as_str() {
-            "BINANCE" => Ok(NotificationProvider::BINANCE),
-            "TWITTER" => Ok(NotificationProvider::TWITTER),
+            "EMAIL" => Ok(NotificationProvider::EMAIL),
+            "TELEGRAM" => Ok(NotificationProvider::TELEGRAM),
             _ => Err(anyhow::anyhow!("Unsupported the notification provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            NotificationProvider::EMAIL => "EMAIL",
+            NotificationProvider::TELEGRAM => "TELEGRAM",
+        }
+    }
+}
+
+impl std::fmt::Display for NotificationProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NotificationProvider::EMAIL => write!(f, "EMAIL"),
+            NotificationProvider::TELEGRAM => write!(f, "TELEGRAM"),
         }
     }
 }

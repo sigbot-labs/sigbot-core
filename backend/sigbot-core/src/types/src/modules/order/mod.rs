@@ -18,38 +18,44 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::modules::messaging::messaging::MessagingInfo;
+use crate::modules::messager::messager::MessagerConfiguration;
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+use utoipa::ToSchema;
 
 pub mod events;
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, ToSchema)]
+pub enum OrderProvider {
+    DEFAULT,
+}
+
+impl OrderProvider {
+    pub fn of(provider: &str) -> Result<OrderProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "DEFAULT" => Ok(OrderProvider::DEFAULT),
+            _ => Err(anyhow::anyhow!("Unsupported the order provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            OrderProvider::DEFAULT => "DEFAULT",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotOrderManagerArgument {
-    pub provider: Option<OrderMgrProvider>,
     pub configuration: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
-    pub messaging_config: Arc<MessagingInfo>,
+    pub messager_config: Arc<MessagerConfiguration>,
 }
 
 impl SigbotOrderManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
         serde_json::from_str(json).context(format!("Failed to parse order manager info from JSON. - {}", json))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub enum OrderMgrProvider {
-    DEFAULT,
-}
-
-impl OrderMgrProvider {
-    pub fn of(provider: &str) -> Result<OrderMgrProvider, anyhow::Error> {
-        match provider.to_uppercase().as_str() {
-            "DEFAULT" => Ok(OrderMgrProvider::DEFAULT),
-            _ => Err(anyhow::anyhow!("Unsupported the Order Manager provider: {}", provider)),
-        }
     }
 }
 

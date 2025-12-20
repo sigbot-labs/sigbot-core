@@ -40,6 +40,26 @@ pub struct StrategyInfo {
     pub description: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
+pub enum StrategyProvider {
+    PYTHON,
+}
+
+impl StrategyProvider {
+    pub fn of(provider: &str) -> Result<StrategyProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "PYTHON" => Ok(StrategyProvider::PYTHON),
+            _ => Err(anyhow::anyhow!("Unsupported the strategy provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            StrategyProvider::PYTHON => "PYTHON",
+        }
+    }
+}
+
 impl Default for StrategyInfo {
     fn default() -> Self {
         StrategyInfo {

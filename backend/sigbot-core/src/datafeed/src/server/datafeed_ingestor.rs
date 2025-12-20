@@ -21,8 +21,8 @@
 use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
 use anyhow::{Context, Error};
 use common_telemetry::info;
-use sigbot_messaging::client::messaging_factory::SigbotMessagingClientFactory;
-use sigbot_types::modules::messaging::TOPIC_MARKET_STREAMS;
+use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+use sigbot_types::modules::messager::TOPIC_MARKET_STREAMS;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotDatafeedIngestor {}
@@ -37,28 +37,28 @@ impl SigbotDatafeedIngestor {
         let (datafeeds, argument) = SigbotDatafeedClientFactory::init(matches, verbose)
             .await
             .expect("Failed to initialize Datafeed clients.");
-        info!("Initialized Datafeed clients. {:?}", datafeeds.len());
+        info!("Initialized Datafeed clients. {}", datafeeds.len());
 
-        info!("Initializing Messaging client.");
-        let messaging = SigbotMessagingClientFactory::init(matches, argument.messaging_config.to_owned())
+        info!("Initializing Messager client.");
+        let messager = SigbotMessagerClientFactory::init(matches, argument.messager_config.to_owned())
             .await
-            .expect("Failed to initialize Messaging client.");
-        info!("Initialized Messaging client. {:?}", messaging.name());
+            .expect("Failed to initialize Messager client.");
+        info!("Initialized Messager client. {}", messager.provider().as_str());
 
-        // TODO: Publish the datafeed data to messaging topics.
+        // TODO: Publish the datafeed data to messager topics.
         let handler: Arc<
             dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
         > = Arc::new(move |data: Vec<u8>| {
-            let messaging0 = messaging.to_owned();
+            let messager0 = messager.to_owned();
             Box::pin(async move {
                 let data0 = String::from_utf8(data.clone())
                     .context("Failed to convert data to string.")
                     .unwrap_or_default();
                 info!("Received data: {:?}", data0);
-                messaging0
+                messager0
                     .publish(TOPIC_MARKET_STREAMS, &data0)
                     .await
-                    .context("Failed to publish data to messaging topic.")?;
+                    .context("Failed to publish data to messager topic.")?;
                 Ok(data)
             })
         });
@@ -73,9 +73,9 @@ impl SigbotDatafeedIngestor {
         SigbotDatafeedClientFactory::close().await;
         info!("Shutting down Datafeed clients.");
 
-        info!("Shutting down Messaging client.");
-        SigbotMessagingClientFactory::close().await;
-        info!("Shutting down Messaging client.");
+        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::close().await;
+        info!("Shutting down Messager client.");
     }
 }
 

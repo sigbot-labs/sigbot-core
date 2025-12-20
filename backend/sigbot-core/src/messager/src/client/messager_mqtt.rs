@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::messaging_factory::ISigbotMessagingClient;
+use crate::client::messager_factory::ISigbotMessagerClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
@@ -26,13 +26,12 @@ use rumqttc::v5::{
     mqttbytes::{v5::Packet, QoS},
     AsyncClient, Event, EventLoop, MqttOptions,
 };
-use sigbot_types::modules::messaging::messaging::MessagingInfo;
+use sigbot_types::modules::messager::messager::{MessagerConfiguration, MessagerProvider};
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, task};
 
 #[derive(Clone)]
-pub struct SigbotMqttClientConfig {
-    pub id: i64,
+pub struct SigbotMqttMessagerClientConfig {
     pub mqtt_server: String,
     pub mqtt_port: u16,
     pub mqtt_username: String,
@@ -44,28 +43,38 @@ pub struct SigbotMqttClientConfig {
     pub mqtt_retain: bool,
 }
 
-impl std::fmt::Display for SigbotMqttClientConfig {
+impl std::fmt::Display for SigbotMqttMessagerClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SigbotMqttClientConfig=(
-                    id={}, mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password={:?}),
+            "SigbotMqttMessagerClientConfig=(
+                    mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password_len={:?}, mqtt_client_id={:?}, mqtt_timeout={:?}, mqtt_clean_start={:?}, mqtt_qos={:?}, mqtt_retain={:?}),
             )
             ",
-            self.id, self.mqtt_server, self.mqtt_port, self.mqtt_username, self.mqtt_password,
+            self.mqtt_server,
+            self.mqtt_port,
+            self.mqtt_username,
+            self.mqtt_password.chars().count(),
+            self.mqtt_client_id,
+            self.mqtt_timeout,
+            self.mqtt_clean_start,
+            self.mqtt_qos,
+            self.mqtt_retain,
         )
     }
 }
 
-impl SigbotMqttClientConfig {
-    pub fn from_messaging(messaging: Arc<MessagingInfo>) -> Self {
-        let plain_config = messaging
+impl SigbotMqttMessagerClientConfig {
+    pub fn from_config(configuration: Arc<MessagerConfiguration>) -> Self {
+        let plain_config = configuration
             .configuration
             .as_ref()
             .expect("Plain configuration is required");
-        let secret_config = messaging.secrets.as_ref().expect("Secret configuration is required");
+        let secret_config = configuration
+            .secrets
+            .as_ref()
+            .expect("Secret configuration is required");
         Self {
-            id: messaging.base.id.expect("Messaging ID is required"),
             mqtt_server: plain_config
                 .get("mqtt_server")
                 .expect("MQTT server is required")
@@ -114,8 +123,8 @@ impl SigbotMqttClientConfig {
     }
 }
 
-pub struct SigbotMqttClient {
-    config: Arc<SigbotMqttClientConfig>,
+pub struct SigbotMqttMessagerClient {
+    config: Arc<SigbotMqttMessagerClientConfig>,
     client: Arc<Mutex<Option<AsyncClient>>>,
     eventloop: Arc<Mutex<Option<EventLoop>>>,
     subscription_registrations: Arc<
@@ -128,10 +137,8 @@ pub struct SigbotMqttClient {
     >,
 }
 
-impl SigbotMqttClient {
-    pub const NAME: &'static str = "MQTT";
-
-    pub async fn new(config: Arc<SigbotMqttClientConfig>) -> Arc<Self> {
+impl SigbotMqttMessagerClient {
+    pub async fn new(config: Arc<SigbotMqttMessagerClientConfig>) -> Arc<Self> {
         Arc::new(Self {
             config,
             client: Arc::new(Mutex::new(None)),
@@ -151,13 +158,13 @@ impl SigbotMqttClient {
 }
 
 #[async_trait]
-impl ISigbotMessagingClient for SigbotMqttClient {
-    fn name(&self) -> &'static str {
-        Self::NAME
+impl ISigbotMessagerClient for SigbotMqttMessagerClient {
+    fn provider(&self) -> MessagerProvider {
+        MessagerProvider::MQTT
     }
 
     async fn init(&self) {
-        info!("Initializing MQTT messaging with config={}", self.config);
+        info!("Initializing MQTT messager with config={}", self.config);
 
         let client_id = self.config.mqtt_client_id.as_deref().unwrap_or("sigbot-client");
         let mut mqttoptions = MqttOptions::new(client_id, &self.config.mqtt_server, self.config.mqtt_port);
@@ -170,11 +177,11 @@ impl ISigbotMessagingClient for SigbotMqttClient {
         *self.client.lock().await = Some(client);
         *self.eventloop.lock().await = Some(eventloop);
 
-        info!("Initialized MQTT messaging with clientId={}", client_id);
+        info!("Initialized MQTT messager with clientId={}", client_id);
     }
 
     async fn close(&self) {
-        info!("Closing MQTT messaging with {}", self.config);
+        info!("Closing MQTT messager with {}", self.config);
         let client = {
             let mut guard = self.client.lock().await;
             guard.take()
@@ -182,7 +189,7 @@ impl ISigbotMessagingClient for SigbotMqttClient {
         if let Some(mqtt_client) = client {
             mqtt_client.disconnect().await.unwrap();
         }
-        info!("Closed MQTT messaging with {}", self.config);
+        info!("Closed MQTT messager with {}", self.config);
     }
 
     async fn publish(&self, topic: &str, message: &str) -> Result<String, Error> {
