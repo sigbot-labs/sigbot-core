@@ -44,7 +44,7 @@ impl SigbotStandaloneStarter {
     pub const COMMAND_NAME: &'static str = "standalone";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run SigBot All Components in One with Standalone.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Components All in One with Standalone.")
     }
 
     #[tokio::main]
@@ -66,7 +66,6 @@ impl SigbotStandaloneStarter {
         signal_handle.await.unwrap();
     }
 
-    #[allow(unused_variables)]
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
         SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;

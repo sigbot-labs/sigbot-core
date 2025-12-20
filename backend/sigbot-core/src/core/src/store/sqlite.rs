@@ -22,7 +22,7 @@ use super::AsyncRepository;
 use crate::config::config::SqliteAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
+use common_telemetry::{debug, error, info};
 use sigbot_types::{PageRequest, PageResponse};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite, SqlitePool};
 use std::any::Any;
@@ -49,42 +49,41 @@ impl SQLitePoolManager {
         let db_dir = Path::new(&dir);
         if !db_dir.exists() {
             fs::create_dir_all(db_dir).map_err(|e| {
-                info!("Failed to sqlite db create directory: {:?}", e);
+                error!("Failed to create the sqlite database directory: {}", e);
                 e
             })?;
         }
 
         let db_url: String = format!("sqlite://{}/sqlite.db", &dir).to_string();
         if !Sqlite::database_exists(db_url.as_str()).await.unwrap_or(false) {
-            info!("Creating database {}", db_url);
+            info!("Creating the sqlite database ...");
             match Sqlite::create_database(db_url.as_str()).await {
-                Ok(_) => info!("Create db success"),
+                Ok(_) => info!("The sqlite database created successfully."),
                 Err(error) => panic!("Error to create db: {}", error),
             }
         } else {
-            debug!("SQLite DB already exists and skip init migration.");
+            debug!("The sqlite database already exists, skip migration.");
         }
 
         match SqlitePool::connect(&db_url).await {
             Ok(pool) => {
-                info!("Successfully connected to the database");
-                let pool = Self::init_migration(pool).await;
+                info!("Connected to the sqlite database to migration ...");
+                let pool = Self::run_migration(pool).await;
                 Ok(Arc::new(SQLitePoolManager { pool: Arc::new(pool) }))
             }
             Err(e) => {
-                info!("Database sqlite connection error: {:?}", e);
-                info!("Error details: {}", e);
+                error!("Failed to connect to the sqlite database to migration: {}", e);
                 Err(e.into())
             }
         }
     }
 
-    async fn init_migration(pool: Pool<Sqlite>) -> Pool<Sqlite> {
+    async fn run_migration(pool: Pool<Sqlite>) -> Pool<Sqlite> {
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
         match results {
-            Ok(_) => info!("SQLite DB migration successfully."),
+            Ok(_) => info!("The sqlite database migrated successfully."),
             Err(error) => {
-                panic!("Error to migrate SQLite DB: {}", error);
+                panic!("Error to migrate the sqlite database: {}", error);
             }
         }
         pool

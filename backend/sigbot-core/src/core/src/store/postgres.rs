@@ -22,7 +22,7 @@ use super::AsyncRepository;
 use crate::config::config::PostgresAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
+use common_telemetry::{debug, error, info};
 use sigbot_types::{PageRequest, PageResponse};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{PgPool, Postgres};
@@ -60,30 +60,29 @@ impl PostgresPoolManager {
                 Err(error) => panic!("Error to create db: {}", error),
             }
         } else {
-            debug!("Postgres DB already exists and skip init migration.");
+            debug!("The postgres database already exists, skip migration.");
         }
 
         match PgPool::connect(&db_url).await {
             Ok(pool) => {
-                info!("Successfully connected to the database");
-                let pool = Self::init_migration(pool).await;
+                info!("Connected to the postgres database to migration ...");
+                let pool = Self::run_migration(pool).await;
                 Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
             }
             Err(e) => {
-                info!("Database postgres connection error: {:?}", e);
-                info!("Error details: {}", e);
+                error!("Failed to connect to the postgres database to migration: {}", e);
                 Err(e.into())
             }
         }
     }
 
-    async fn init_migration(pool: PgPool) -> PgPool {
+    async fn run_migration(pool: PgPool) -> PgPool {
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        info!("Postgres DB migration result: {:?}", results);
+        info!("The postgres database migration result: {:?}", results);
         match results {
-            Ok(_) => info!("Postgres DB migration successfully."),
+            Ok(_) => info!("The postgres database migration successfully."),
             Err(error) => {
-                panic!("Error to migrate Postgres DB: {}", error);
+                panic!("Error to migrate the postgres database: {}", error);
             }
         }
         pool

@@ -186,19 +186,19 @@ pub async fn init_metrics(config: &Arc<AppConfig>) {
         if let Err(e) = register_default_metrics() {
             error!(e; "Failed to register default metrics");
         } else {
-            info!("Default metrics registered successfully");
+            info!("Registered default metrics.");
         }
 
-        // Call all custom registrars
+        // Call custom registrars
         if let Ok(registrars) = REGISTRARS.lock() {
             for registrar in registrars.iter() {
                 if let Err(e) = registrar.register_metrics() {
                     error!(e; "Failed to register custom metrics");
+                } else {
+                    info!("Registered custom metrics.");
                 }
             }
         }
-
-        info!("All metrics registered successfully");
     }
 }
 

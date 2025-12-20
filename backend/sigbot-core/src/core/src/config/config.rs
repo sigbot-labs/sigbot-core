@@ -1133,11 +1133,10 @@ fn init() -> Arc<AppConfig> {
     let mut builder = Config::builder();
 
     // Step 1: Set defaults as base (LOWEST priority)
-    // Serialize default config to JSON Value and use it as a source
+    // Serialize default config to JSON string and use it as a source
     let default_config = AppConfigProperties::default();
-    let default_json = serde_json::to_value(&default_config).expect("Failed to serialize default config");
-    let default_source: Config = Config::try_from(&default_json).expect("Failed to create default config source");
-    builder = builder.add_source(default_source);
+    let default_json_str = serde_json::to_string(&default_config).expect("Failed to serialize default config");
+    builder = builder.add_source(config::File::from_str(&default_json_str, config::FileFormat::Json));
 
     // Step 2: Add file config source if SIGBOT_CFG_PATH is set (MEDIUM priority)
     if let Ok(path) = env::var("SIGBOT_CFG_PATH") {
