@@ -60,9 +60,9 @@ impl SigbotDatafeedIngestorStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("DATAFEED_PROVIDER")
+                Arg::new("DATAFEED_PROVIDERS")
                     .short('p')
-                    .long("datafeed-provider")
+                    .long("datafeed-providers")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(

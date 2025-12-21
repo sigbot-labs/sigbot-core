@@ -54,9 +54,9 @@ impl SigbotNotificationForwarderStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("NOTIFICATION_PROVIDER")
+                Arg::new("NOTIFICATION_PROVIDERS")
                     .short('p')
-                    .long("notification-provider")
+                    .long("notification-providers")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(

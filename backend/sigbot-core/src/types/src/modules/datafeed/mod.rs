@@ -27,8 +27,8 @@ pub mod datafeed;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotDatefeedArgument {
-    pub datafeed_config: Arc<DatafeedInfo>,
     pub messager_config: Arc<MessagerConfiguration>,
+    pub datafeed_config: Arc<DatafeedInfo>,
 }
 
 impl SigbotDatefeedArgument {

@@ -67,8 +67,8 @@ impl SigbotStandaloneStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("DATAFEED_PROVIDER")
-                    .long("datafeed-provider")
+                Arg::new("DATAFEED_PROVIDERS")
+                    .long("datafeed-providers")
                     .value_parser(clap::value_parser!(String))
                     .display_order(10)
                     .help(format!(
@@ -98,7 +98,7 @@ impl SigbotStandaloneStarter {
                     .default_value(StrategyProvider::PYTHON.as_str()),
             )
             .arg(
-                Arg::new("STRATEGY_CONFIGURATION")
+                Arg::new("STRATEGY_RUNNER_CONFIGURATION")
                     .long("strategy-runner-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(21)
@@ -160,8 +160,8 @@ impl SigbotStandaloneStarter {
                     .help("The configuration of backtest manager. (base64 encoded JSON string)"),
             )
             .arg(
-                Arg::new("NOTIFICATION_PROVIDER")
-                    .long("notification-provider")
+                Arg::new("NOTIFICATION_PROVIDERS")
+                    .long("notification-providers")
                     .value_parser(clap::value_parser!(String))
                     .display_order(60)
                     .help(format!(
@@ -200,7 +200,6 @@ impl SigbotStandaloneStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;
         SigbotStrategyRunner::startup(matches, verbose).await;
         SigbotOrderServer::startup(matches, verbose).await;
@@ -208,6 +207,7 @@ impl SigbotStandaloneStarter {
         SigbotNotificationForwarder::startup(matches, verbose).await;
         SigbotBacktestServer::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;
+        SigbotAPIServer::startup(matches, verbose, None, None).await;
     }
 
     fn print_banner(verbose: bool) {

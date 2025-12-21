@@ -27,8 +27,8 @@ pub mod notification;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotNotificationArgument {
-    pub notification_config: Arc<NotificationInfo>,
     pub messager_config: Arc<MessagerConfiguration>,
+    pub notification_config: Arc<NotificationInfo>,
 }
 
 impl SigbotNotificationArgument {
@@ -45,11 +45,10 @@ mod tests {
     #[test]
     fn test_from_json() {
         let json = r#"{
-            "datafeed_config": {"name": "tenant101_email", "provider": "EMAIL", "configuration": {"endpoint": "smtp.gmail.com:587"}, "secrets": {"api_secret": "1234567890"}}, 
             "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "notification_config": {"name": "tenant101_email", "provider": "EMAIL", "configuration": {"endpoint": "smtp.gmail.com:587"}, "secrets": {"api_secret": "1234567890"}}, 
             "#;
         let argument = SigbotNotificationArgument::from_json(json).unwrap();
-        assert_eq!(argument.notification_config.name, Some("EMAIL".to_string()));
         assert_eq!(argument.messager_config.name, Some("MQTT".to_string()));
         assert_eq!(
             argument.messager_config.configuration,

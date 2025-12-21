@@ -65,7 +65,7 @@ impl SigbotStrategyRunnerStarter {
                     .default_value(StrategyProvider::PYTHON.as_str()),
             )
             .arg(
-                Arg::new("STRATEGY_CONFIGURATION")
+                Arg::new("STRATEGY_RUNNER_CONFIGURATION")
                     .short('c')
                     .long("strategy-runner-configuration")
                     .value_parser(clap::value_parser!(String))

@@ -78,9 +78,9 @@ impl SigbotDatafeedClientFactory {
         ),
         Error,
     > {
-        // e.g '--datafeed-provider=binance'
+        // e.g '--datafeed-providers=binance'
         let providers = matches
-            .try_get_one::<String>("DATAFEED_PROVIDER")
+            .try_get_one::<String>("DATAFEED_PROVIDERS")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| DatafeedProvider::BINANCE.as_str().to_owned())

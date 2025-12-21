@@ -71,9 +71,9 @@ impl SigbotNotificationClientFactory {
         ),
         Error,
     > {
-        // e.g '--notification-provider=email'
+        // e.g '--notification-providers=email'
         let providers = matches
-            .try_get_one::<String>("NOTIFICATION_PROVIDER")
+            .try_get_one::<String>("NOTIFICATION_PROVIDERS")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())

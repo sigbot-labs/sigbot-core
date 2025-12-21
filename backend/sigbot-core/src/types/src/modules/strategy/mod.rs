@@ -28,12 +28,12 @@ pub mod strategy;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotStrategyArgument {
+    /// Messager configuration for communication with the strategy runner
+    pub messager_config: Arc<MessagerConfiguration>,
     /// System-level environment variables set during strategy runner pod startup
     pub sys_environment: Option<HashMap<String, String>>,
     /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
     pub run_mode: String,
-    /// Messager configuration for communication with the strategy runner
-    pub messager_config: Arc<MessagerConfiguration>,
 }
 
 impl SigbotStrategyArgument {
