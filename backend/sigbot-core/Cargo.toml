@@ -19,8 +19,8 @@ members = [
     "src/strategy/sdk",
     "src/order",
     "src/wallet",
-    "src/notification",
     "src/backtest",
+    "src/notification",
 ]
 resolver = "2"
 
@@ -62,8 +62,8 @@ sigbot-strategy-runner = { path = "src/strategy/runner" }
 sigbot-strategy-sdk = { path = "src/strategy/sdk" }
 sigbot-order = { path = "src/order" }
 sigbot-wallet = { path = "src/wallet" }
-sigbot-notification = { path = "src/notification" }
 sigbot-backtest = { path = "src/backtest" }
+sigbot-notification = { path = "src/notification" }
 
 # Lang libs
 regex = "1.11.1"

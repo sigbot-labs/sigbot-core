@@ -23,7 +23,10 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::order::{OrderMgrProvider, SigbotOrderManagerArgument};
+use sigbot_types::modules::{
+    decode_arg_configuration,
+    order::{OrderMgrProvider, SigbotOrderManagerArgument},
+};
 use std::{
     collections::HashMap,
     future::Future,
@@ -80,15 +83,15 @@ impl SigbotOrderManagerFactory {
         // e.g '--order-manager-provider=default'
         let provider = OrderMgrProvider::of(
             &matches
-                .get_one::<String>("order-manager-provider")
+                .get_one::<String>("ORDER_MANAGER_PROVIDER")
                 .unwrap_or(&OrderMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Order manager: {}", &provider.as_str());
 
-        // e.g '--order-manager-config=<base64_encoded_json_string>'
+        // e.g '--order-manager-configuration=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("order-manager-config")
+            .try_get_one::<String>("ORDER_MANAGER_CONFIGURATION")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| OrderMgrProvider::DEFAULT.as_str().to_owned())
@@ -96,8 +99,11 @@ impl SigbotOrderManagerFactory {
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(
-            SigbotOrderManagerArgument::from_json(&configuration)
-                .context("Failed to parse the configuration from the command line arguments.")?,
+            SigbotOrderManagerArgument::from_json(
+                &decode_arg_configuration(&configuration)
+                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+            )
+            .context(format!("Failed to parse the configuration: {}", configuration))?,
         );
 
         match provider {

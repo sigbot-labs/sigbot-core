@@ -40,10 +40,24 @@ impl SigbotStrategyRunnerStarter {
             .about("Run Sigbot tenantization Strategy Runner.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
-                Arg::new("provider")
-                    .short('p')
-                    .long("provider")
+                Arg::new("MESSAGER_PROVIDER")
+                    .short('m')
+                    .long("messager-provider")
                     .value_parser(clap::value_parser!(String))
+                    .display_order(1)
+                    .help(format!(
+                        "The provider of messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
+                    ))
+                    .default_value(MessagerProvider::LOCAL.as_str()),
+            )
+            .arg(
+                Arg::new("STRATEGY_PROVIDER")
+                    .short('p')
+                    .long("strategy-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(2)
                     .help(format!(
                         "The strategy runner provider to use. (supported are: {})",
                         StrategyProvider::PYTHON.as_str(),
@@ -51,23 +65,12 @@ impl SigbotStrategyRunnerStarter {
                     .default_value(StrategyProvider::PYTHON.as_str()),
             )
             .arg(
-                Arg::new("configuration")
+                Arg::new("STRATEGY_CONFIGURATION")
                     .short('c')
-                    .long("configuration")
+                    .long("strategy-configuration")
                     .value_parser(clap::value_parser!(String))
+                    .display_order(3)
                     .help("The configuration of strategy. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("messager")
-                    .short('m')
-                    .long("messager")
-                    .value_parser(clap::value_parser!(String))
-                    .help(format!(
-                        "The providers of messager. (supported are: {}, {})",
-                        MessagerProvider::LOCAL.as_str(),
-                        MessagerProvider::MQTT.as_str(),
-                    ))
-                    .default_value(MessagerProvider::LOCAL.as_str()),
             )
     }
 

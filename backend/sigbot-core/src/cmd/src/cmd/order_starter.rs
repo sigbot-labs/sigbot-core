@@ -41,35 +41,38 @@ impl SigbotOrderManagerStarter {
             .about("Run Sigbot tenantization Order Manager")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
-                Arg::new("provider")
+                Arg::new("MESSAGER_PROVIDER")
+                    .short('m')
+                    .long("messager-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(1)
+                    .help(format!(
+                        "The provider of Messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
+                    ))
+                    .default_value(MessagerProvider::LOCAL.as_str()),
+            )
+            .arg(
+                Arg::new("ORDER_MANAGER_PROVIDER")
                     .short('p')
-                    .long("provider")
+                    .long("order-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     // .value_parser(OrderMgrProvider::of)
+                    .display_order(2)
                     .help(format!(
-                        "The providers of Order Manager. (supported are: {})",
+                        "The provider of Order Manager. (supported are: {})",
                         OrderMgrProvider::DEFAULT.as_str(),
                     ))
                     .default_value(OrderMgrProvider::DEFAULT.as_str()),
             )
             .arg(
-                Arg::new("configuration")
+                Arg::new("ORDER_MANAGER_CONFIGURATION")
                     .short('c')
-                    .long("configuration")
+                    .long("order-manager-configuration")
                     .value_parser(clap::value_parser!(String))
-                    .help("The configuration of order manager. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("messager")
-                    .short('m')
-                    .long("messager")
-                    .value_parser(clap::value_parser!(String))
-                    .help(format!(
-                        "The providers of messager. (supported are: {}, {})",
-                        MessagerProvider::LOCAL.as_str(),
-                        MessagerProvider::MQTT.as_str(),
-                    ))
-                    .default_value(MessagerProvider::LOCAL.as_str()),
+                    .display_order(3)
+                    .help("The configuration of Order Manager. (base64 encoded JSON string)"),
             )
     }
 

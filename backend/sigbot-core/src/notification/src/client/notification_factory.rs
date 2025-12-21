@@ -23,7 +23,10 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::notification::{notification::NotificationProvider, SigbotNotificationArgument};
+use sigbot_types::modules::{
+    decode_arg_configuration,
+    notification::{notification::NotificationProvider, SigbotNotificationArgument},
+};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -70,7 +73,7 @@ impl SigbotNotificationClientFactory {
     > {
         // e.g '--notification-provider=email'
         let providers = matches
-            .try_get_one::<String>("notification-provider")
+            .try_get_one::<String>("NOTIFICATION_PROVIDER")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())
@@ -80,9 +83,9 @@ impl SigbotNotificationClientFactory {
 
         info!("Registering Sigbot Notification: {}", &providers);
 
-        // e.g '--notification-config=base64_encoded_json_string'
+        // e.g '--notification-configuration=base64_encoded_json_string'
         let configuration = matches
-            .try_get_one::<String>("notification-config")
+            .try_get_one::<String>("NOTIFICATION_CONFIGURATION")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| NotificationProvider::EMAIL.as_str().to_owned())
@@ -90,8 +93,11 @@ impl SigbotNotificationClientFactory {
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(
-            SigbotNotificationArgument::from_json(&configuration)
-                .context("Failed to parse the configuration from the command line arguments.")?,
+            SigbotNotificationArgument::from_json(
+                &decode_arg_configuration(&configuration)
+                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+            )
+            .context(format!("Failed to parse the configuration: {}", configuration))?,
         );
 
         let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();

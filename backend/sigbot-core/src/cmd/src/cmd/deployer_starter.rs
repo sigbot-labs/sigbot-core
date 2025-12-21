@@ -41,10 +41,11 @@ impl SigbotDeployerManagerStarter {
             .about("Run Sigbot platformization Deployer Manager (Lifecycle Management for Components).")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
-                Arg::new("provider")
+                Arg::new("RUNTIME_MODE")
                     .short('p')
-                    .long("provider")
+                    .long("runtime-mode")
                     .value_parser(clap::value_parser!(String))
+                    .display_order(1)
                     .help(format!(
                         "The deployer provider to use. (supported are: {}, {})",
                         SigbotKubernetesDeployer::NAME,

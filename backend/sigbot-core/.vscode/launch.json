@@ -30,8 +30,8 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--features",
-                    "deadlock_detection,profiling-mem-prof,profiling-pprof,profiling-tokio-console,profiling-pyroscope"
+                    // "--features",
+                    // "deadlock_detection,profiling-mem-prof,profiling-pprof,profiling-tokio-console,profiling-pyroscope"
                 ],
                 "filter": {
                     "name": "sigbot",
@@ -42,11 +42,37 @@
                 "MALLOC_CONF": "prof:true,lg_prof_interval:28", // Set the stack trace sampling interval of jemalloc to bytes, e.g. 28 about is 256 MB
                 "RUST_BACKTRACE": "full",
                 "SIGBOT_CFG_VERBOSE": "false",
-                //"SIGBOT_CFG_PATH": "${workspaceFolder}/etc/sigbot.yaml",
+                "SIGBOT_CFG_PATH": "${workspaceFolder}/etc/sigbot.yaml",
             },
             "envFile": "${workspaceFolder}/.env",
             "args": [
-                "standalone" // api|datafeed|strategy|notification|backtest
+                "standalone", // api|deployer|datafeed|strategy|order|wallet|notification|backtest
+                // "--messager-provider",
+                // "LOCAL",
+                "--datafeed-provider",
+                "BINANCE,TRUTHSOCIAL",
+                "--datafeed-configuration",
+                "{}",
+                // "--strategy-provider",
+                // "PYTHON",
+                // "--strategy-configuration",
+                // "",
+                // "--order-provider",
+                // "DEFAULT",
+                // "--order-configuration",
+                // "",
+                // "--wallet-provider",
+                // "DEFAULT",
+                // "--wallet-configuration",
+                // "",
+                // "--notification-provider",
+                // "EMAIL,TELGRAME",
+                // "--notification-configuration",
+                // "",
+                // "--backtest-provider",
+                // "KLINE",
+                // "--backtest-configuration",
+                // "",
             ],
             "cwd": "${workspaceFolder}"
         }

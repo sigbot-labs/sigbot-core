@@ -26,7 +26,10 @@ use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_types::modules::datafeed::{datafeed::DatafeedProvider, SigbotDatefeedArgument};
+use sigbot_types::modules::{
+    datafeed::{datafeed::DatafeedProvider, SigbotDatefeedArgument},
+    decode_arg_configuration,
+};
 use std::{
     collections::HashMap,
     future::Future,
@@ -77,7 +80,7 @@ impl SigbotDatafeedClientFactory {
     > {
         // e.g '--datafeed-provider=binance'
         let providers = matches
-            .try_get_one::<String>("datafeed-provider")
+            .try_get_one::<String>("DATAFEED_PROVIDER")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| DatafeedProvider::BINANCE.as_str().to_owned())
@@ -87,18 +90,18 @@ impl SigbotDatafeedClientFactory {
 
         info!("Registering Sigbot Datafeed: {}", &providers);
 
-        // e.g '--datafeed-config=<base64_encoded_json_string>'
+        // e.g '--datafeed-configuration=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("configuration")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| DatafeedProvider::BINANCE.as_str().to_owned())
-            })
+            .try_get_one::<String>("DATAFEED_CONFIGURATION")
+            .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(
-            SigbotDatefeedArgument::from_json(&configuration)
-                .context("Failed to parse the configuration from the command line arguments.")?,
+            SigbotDatefeedArgument::from_json(
+                &decode_arg_configuration(&configuration)
+                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+            )
+            .context(format!("Failed to parse the configuration: {}", configuration))?,
         );
 
         let mut datafeeds: Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>> = Vec::new();

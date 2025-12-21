@@ -20,9 +20,9 @@
 
 use super::api_starter::SigbotAPIServer;
 use crate::cmd::internal::management_server::SigbotManagementServer;
-use clap::Command;
+use clap::{Arg, Command};
 use common_telemetry::info;
-use sigbot_backtest::server::backtest_factory::SigbotBacktestRunnerFactory;
+use sigbot_backtest::server::backtest_factory::{BacktestProvider, SigbotBacktestRunnerFactory};
 use sigbot_core::config::config::get_config;
 use sigbot_core::llm::handler::llm_factory::SigbotLLMFactory;
 use sigbot_core::{
@@ -33,6 +33,12 @@ use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_order::server::order_server::SigbotOrderServer;
 use sigbot_strategy_runner::server::strategy_runner::SigbotStrategyRunner;
+use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
+use sigbot_types::modules::messager::messager::MessagerProvider;
+use sigbot_types::modules::notification::notification::NotificationProvider;
+use sigbot_types::modules::order::OrderMgrProvider;
+use sigbot_types::modules::strategy::strategy::StrategyProvider;
+use sigbot_types::modules::wallet::WalletMgrProvider;
 use sigbot_utils::panics::PanicHelper;
 use sigbot_wallet::server::wallet_server::SigbotWalletServer;
 use std::env;
@@ -44,7 +50,133 @@ impl SigbotStandaloneStarter {
     pub const COMMAND_NAME: &'static str = "standalone";
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot Components All in One with Standalone.")
+        Command::new(Self::COMMAND_NAME)
+            .about("Run Sigbot Components All in One with Standalone.")
+            .arg_required_else_help(true) // When no args are provided, show help.
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(1)
+                    .help(format!(
+                        "The providers of messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
+                    ))
+                    .default_value(MessagerProvider::LOCAL.as_str()),
+            )
+            .arg(
+                Arg::new("DATAFEED_PROVIDER")
+                    .long("datafeed-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(10)
+                    .help(format!(
+                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
+                        DatafeedProvider::BINANCE.as_str(),
+                        DatafeedProvider::TWITTER.as_str(),
+                        DatafeedProvider::TRUSHSOCIAL.as_str()
+                    ))
+                    .default_value(DatafeedProvider::BINANCE.as_str()),
+            )
+            .arg(
+                Arg::new("DATAFEED_CONFIGURATION")
+                    .long("datafeed-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(11)
+                    .help("The configuration of datafeed. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("STRATEGY_PROVIDER")
+                    .long("strategy-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(20)
+                    .help(format!(
+                        "The strategy runner provider to use. (supported are: {})",
+                        StrategyProvider::PYTHON.as_str(),
+                    ))
+                    .default_value(StrategyProvider::PYTHON.as_str()),
+            )
+            .arg(
+                Arg::new("STRATEGY_CONFIGURATION")
+                    .long("strategy-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(21)
+                    .help("The configuration of strategy. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("ORDER_MANAGER_PROVIDER")
+                    .long("order-manager-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(30)
+                    .help(format!(
+                        "The provider of Order Manager. (supported are: {})",
+                        OrderMgrProvider::DEFAULT.as_str(),
+                    ))
+                    .default_value(OrderMgrProvider::DEFAULT.as_str()),
+            )
+            .arg(
+                Arg::new("ORDER_MANAGER_CONFIGURATION")
+                    .long("order-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(31)
+                    .help("The configuration of order manager. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("WALLET_MANAGER_PROVIDER")
+                    .long("wallet-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(40)
+                    .help(format!(
+                        "The provider of Wallet Manager. (supported are: {})",
+                        WalletMgrProvider::DEFAULT.as_str()
+                    ))
+                    .default_value(WalletMgrProvider::DEFAULT.as_str()),
+            )
+            .arg(
+                Arg::new("WALLET_MANAGER_CONFIGURATION")
+                    .long("wallet-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(41)
+                    .help("The configuration of wallet manager. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("BACKTEST_PROVIDER")
+                    .long("backtest-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(50)
+                    .help(format!(
+                        "The backtest runner provider to use. (supported are: {}, {})",
+                        BacktestProvider::KLINE.as_str(),
+                        BacktestProvider::TRADES.as_str(),
+                    ))
+                    .default_value(BacktestProvider::KLINE.as_str()),
+            )
+            .arg(
+                Arg::new("BACKTEST_CONFIGURATION")
+                    .long("backtest-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(51)
+                    .help("The configuration of backtest. (base64 encoded JSON string)"),
+            )
+            .arg(
+                Arg::new("NOTIFICATION_PROVIDER")
+                    .long("notification-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(60)
+                    .help(format!(
+                        "The providers of multi notification separated by commas. (supported are: {}, {})",
+                        NotificationProvider::EMAIL.as_str(),
+                        NotificationProvider::TELEGRAM.as_str(),
+                    ))
+                    .default_value(NotificationProvider::EMAIL.as_str()),
+            )
+            .arg(
+                Arg::new("NOTIFICATION_CONFIGURATION")
+                    .long("notification-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(61)
+                    .help("The configuration of notification. (base64 encoded JSON string)"),
+            )
     }
 
     #[tokio::main]

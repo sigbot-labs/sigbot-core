@@ -18,6 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use anyhow::{Error, Result};
+use sigbot_utils::base64s;
+
 pub mod datafeed;
 pub mod exchange;
 pub mod messager;
@@ -25,3 +28,26 @@ pub mod notification;
 pub mod order;
 pub mod strategy;
 pub mod wallet;
+
+pub fn decode_arg_configuration(configuration: &str) -> Result<String, Error> {
+    // if there are base64 encoded, decode it first, otherwise return the original string.
+    match base64s::Base64Helper::decode(configuration) {
+        Ok(decoded_bytes) => {
+            // Successfully decoded, try to convert to UTF-8 string
+            match String::from_utf8(decoded_bytes) {
+                Ok(decoded_str) => Ok(decoded_str),
+                Err(_) => {
+                    // Decoded but not valid UTF-8, return original string
+                    Err(Error::msg(format!(
+                        "Failed to convert the configuration to string: {}",
+                        configuration
+                    )))
+                }
+            }
+        }
+        Err(_) => {
+            // Not base64 encoded, return original string
+            Ok(configuration.to_string())
+        }
+    }
+}

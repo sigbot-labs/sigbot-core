@@ -27,7 +27,10 @@ use sigbot_core::{
     config::config::PostgresAppDBProperties,
     modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater},
 };
-use sigbot_types::modules::wallet::{SigbotWalletManagerArgument, WalletMgrProvider};
+use sigbot_types::modules::{
+    decode_arg_configuration,
+    wallet::{SigbotWalletManagerArgument, WalletMgrProvider},
+};
 use std::{
     collections::HashMap,
     future::Future,
@@ -84,15 +87,15 @@ impl SigbotWalletManagerFactory {
         // e.g '--wallet-manager-provider=default'
         let provider = WalletMgrProvider::of(
             &matches
-                .get_one::<String>("wallet-manager-provider")
+                .get_one::<String>("WALLET_MANAGER_PROVIDER")
                 .unwrap_or(&WalletMgrProvider::DEFAULT.as_str().to_owned()),
         )?;
 
         info!("Registering Sigbot Wallet manager: {}", &provider.as_str());
 
-        // e.g '--wallet-manager-config=<base64_encoded_json_string>'
+        // e.g '--wallet-manager-configuration=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("wallet-manager-config")
+            .try_get_one::<String>("WALLET_MANAGER_CONFIGURATION")
             .map(|s| {
                 s.map(|s| s.to_owned())
                     .unwrap_or_else(|| WalletMgrProvider::DEFAULT.as_str().to_owned())
@@ -100,8 +103,11 @@ impl SigbotWalletManagerFactory {
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(
-            SigbotWalletManagerArgument::from_json(&configuration)
-                .context("Failed to parse the configuration from the command line arguments.")?,
+            SigbotWalletManagerArgument::from_json(
+                &decode_arg_configuration(&configuration)
+                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+            )
+            .context(format!("Failed to parse the configuration: {}", configuration))?,
         );
 
         match provider {

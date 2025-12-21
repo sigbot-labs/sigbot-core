@@ -47,12 +47,26 @@ impl SigbotDatafeedIngestorStarter {
             .about("Run Sigbot tenantization Datafeed Ingestor.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
-                Arg::new("provider")
-                    .short('p')
-                    .long("provider")
+                Arg::new("MESSAGER_PROVIDER")
+                    .short('m')
+                    .long("messager-provider")
                     .value_parser(clap::value_parser!(String))
+                    .display_order(1)
                     .help(format!(
-                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
+                        "The provider of Messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
+                    ))
+                    .default_value(MessagerProvider::LOCAL.as_str()),
+            )
+            .arg(
+                Arg::new("DATAFEED_PROVIDER")
+                    .short('p')
+                    .long("datafeed-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(2)
+                    .help(format!(
+                        "The providers of multi Datafeeds separated by commas. (supported are: {}, {}, {})",
                         DatafeedProvider::BINANCE.as_str(),
                         DatafeedProvider::TWITTER.as_str(),
                         DatafeedProvider::TRUSHSOCIAL.as_str()
@@ -60,23 +74,12 @@ impl SigbotDatafeedIngestorStarter {
                     .default_value(DatafeedProvider::BINANCE.as_str()),
             )
             .arg(
-                Arg::new("messager")
-                    .short('m')
-                    .long("messager")
-                    .value_parser(clap::value_parser!(String))
-                    .help(format!(
-                        "The providers of messager. (supported are: {}, {})",
-                        MessagerProvider::LOCAL.as_str(),
-                        MessagerProvider::MQTT.as_str(),
-                    ))
-                    .default_value(MessagerProvider::LOCAL.as_str()),
-            )
-            .arg(
-                Arg::new("configuration")
+                Arg::new("DATAFEED_CONFIGURATION")
                     .short('c')
-                    .long("configuration")
+                    .long("datafeed-configuration")
                     .value_parser(clap::value_parser!(String))
-                    .help("The configuration of datafeed. (base64 encoded JSON string)"),
+                    .display_order(3)
+                    .help("The configuration of Datafeed. (base64 encoded JSON string)"),
             )
     }
 

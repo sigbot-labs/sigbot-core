@@ -41,34 +41,37 @@ impl SigbotWalletManagerStarter {
             .about("Run Sigbot tenantization Wallet Manager")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
-                Arg::new("provider")
-                    .short('p')
-                    .long("provider")
+                Arg::new("MESSAGER_PROVIDER")
+                    .short('m')
+                    .long("messager-provider")
                     .value_parser(clap::value_parser!(String))
+                    .display_order(1)
                     .help(format!(
-                        "The providers of Wallet Manager. (supported are: {})",
+                        "The provider of Messager. (supported are: {}, {})",
+                        MessagerProvider::LOCAL.as_str(),
+                        MessagerProvider::MQTT.as_str(),
+                    ))
+                    .default_value(MessagerProvider::LOCAL.as_str()),
+            )
+            .arg(
+                Arg::new("WALLET_MANAGER_PROVIDER")
+                    .short('p')
+                    .long("wallet-manager-provider")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(2)
+                    .help(format!(
+                        "The provider of Wallet Manager. (supported are: {})",
                         WalletMgrProvider::DEFAULT.as_str()
                     ))
                     .default_value(WalletMgrProvider::DEFAULT.as_str()),
             )
             .arg(
-                Arg::new("configuration")
+                Arg::new("WALLET_MANAGER_CONFIGURATION")
                     .short('c')
-                    .long("configuration")
+                    .long("wallet-manager-configuration")
                     .value_parser(clap::value_parser!(String))
-                    .help("The configuration of wallet manager. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("messager")
-                    .short('m')
-                    .long("messager")
-                    .value_parser(clap::value_parser!(String))
-                    .help(format!(
-                        "The providers of messager. (supported are: {}, {})",
-                        MessagerProvider::LOCAL.as_str(),
-                        MessagerProvider::MQTT.as_str(),
-                    ))
-                    .default_value(MessagerProvider::LOCAL.as_str()),
+                    .display_order(3)
+                    .help("The configuration of Wallet Manager. (base64 encoded JSON string)"),
             )
     }
 

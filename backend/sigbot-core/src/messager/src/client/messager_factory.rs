@@ -74,7 +74,7 @@ impl SigbotMessagerClientFactory {
         // e.g '--messager-provider=mqtt'
         let provider = MessagerProvider::of(
             &matches
-                .get_one::<String>("messager-provider")
+                .get_one::<String>("MESSAGER_PROVIDER")
                 .unwrap_or(&MessagerProvider::MQTT.as_str().to_owned()),
         )?;
 

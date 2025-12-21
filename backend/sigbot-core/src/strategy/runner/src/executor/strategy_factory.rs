@@ -24,7 +24,10 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use lazy_static::lazy_static;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
-use sigbot_types::modules::strategy::{strategy::StrategyProvider, SigbotStrategyArgument};
+use sigbot_types::modules::{
+    decode_arg_configuration,
+    strategy::{strategy::StrategyProvider, SigbotStrategyArgument},
+};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -73,21 +76,24 @@ impl SigbotStrategyExecutorFactory {
         // e.g '--strategy-provider=python'
         let provider = StrategyProvider::of(
             &matches
-                .get_one::<String>("strategy-provider")
+                .get_one::<String>("STRATEGY_PROVIDER")
                 .unwrap_or(&StrategyProvider::PYTHON.as_str().to_owned()),
         )?;
 
         info!("Registering Strategy Executor with provider: {}", &provider.as_str());
 
-        // e.g '--strategy-config=<base64_encoded_json_string>'
+        // e.g '--strategy-configuration=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("strategy-config")
+            .try_get_one::<String>("STRATEGY_CONFIGURATION")
             .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
 
         let argument = Arc::new(
-            SigbotStrategyArgument::from_json(&configuration)
-                .expect("Failed to parse the configuration from the command line arguments."),
+            SigbotStrategyArgument::from_json(
+                &decode_arg_configuration(&configuration)
+                    .map_err(|e| Error::msg(format!("Failed to decode the configuration: {}", e)))?,
+            )
+            .map_err(|e| Error::msg(format!("Failed to parse the configuration: {}", e)))?,
         );
 
         match provider {
