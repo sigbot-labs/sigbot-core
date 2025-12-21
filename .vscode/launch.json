@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
+//
+// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// James Wong is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
+//
+// IMPORTANT: Any software that fully or partially contains or uses materials
+// covered by this license must also be released under the GNU GPL license.
+// This includes modifications and derived works.
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "[standalone] profiling & default config",
+            "cargo": {
+                "args": [
+                    "build",
+                    // "--features",
+                    // "deadlock_detection,profiling-mem-prof,profiling-pprof,profiling-tokio-console,profiling-pyroscope"
+                ],
+                "filter": {
+                    "name": "sigbot",
+                    "kind": "bin"
+                },
+            },
+            "env": {
+                // "RUST_BACKTRACE": "full",
+                "MALLOC_CONF": "prof:true,lg_prof_interval:28", // Set the stack trace sampling interval of jemalloc to bytes, e.g. 28 about is 256 MB
+                "SIGBOT_CFG_VERBOSE": "false",
+                //"SIGBOT_CFG_PATH": "${workspaceFolder}/etc/sigbot.yaml",
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "args": [
+                "standalone", // api|deployer|datafeed|strategy|order|wallet|notification|backtest
+                "--messager-provider=LOCAL",
+                "--datafeed-providers=BINANCE,TRUTHSOCIAL",
+                "--datafeed-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"datafeed_config\":{\"properties\":{\"endpoint\":\"https://api.binance.com\"},\"secrets\":{\"api_secret\":\"1234567890\"}}}",
+                "--strategy-runner-provider=PYTHON",
+                "--strategy-runner-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"sys_environment\":{\"SIGBOT_VERSION\":\"V1.0.0\"},\"run_mode\":\"STREAMING\"}",
+                "--order-manager-provider=DEFAULT",
+                "--order-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
+                "--wallet-manager-provider=DEFAULT",
+                "--wallet-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
+                "--backtest-manager-provider=KLINE",
+                "--backtest-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
+                "--notification-providers=EMAIL,TELEGRAM",
+                "--notification-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"notification_config\":{\"id\":1,\"properties\":{\"smtp_host\":\"smtp.gmail.com\",\"smtp_port\":\"587\",\"smtp_username\":\"example.gmail.com\",\"from_address\":\"example@gmail.com\",\"telegram_bot_token\":\"abcdefghijklmnopqrstuvwxyz\",\"default_telegram_chat_id\":\"1234567890\"},\"secrets\":{\"smtp_password\":\"123456\"}}}",
+            ],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
