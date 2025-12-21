@@ -18,9 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt;
 use std::option::Option;
 
 pub fn copy_properties<T: Serialize, U: for<'de> Deserialize<'de>>(
@@ -63,6 +64,193 @@ where
     }
 
     Ok(())
+}
+
+// --- Deserialization helpers for environment variables. ---
+// These functions allow deserializing numeric types from either strings or numbers,
+// which is useful when reading configuration from environment variables (which are
+// always strings) or from YAML/JSON files (which can be numbers).
+
+/// Deserialize u16 from string or number (for environment variable support)
+///
+/// This is useful when reading configuration from environment variables where
+/// numeric values are represented as strings (e.g., `PORT=8080`).
+///
+/// # Example
+/// ```rust
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     #[serde(deserialize_with = "sigbot_utils::serde_beans::deserialize_u16_from_string_or_number")]
+///     port: u16,
+/// }
+/// ```
+pub fn deserialize_u16_from_string_or_number<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct U16Visitor;
+
+    impl<'de> de::Visitor<'de> for U16Visitor {
+        type Value = u16;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a u16 number or a string containing a u16 number")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value > u16::MAX as u64 {
+                Err(E::custom(format!("value {} exceeds u16::MAX", value)))
+            } else {
+                Ok(value as u16)
+            }
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 || value > u16::MAX as i64 {
+                Err(E::custom(format!("value {} is out of range for u16", value)))
+            } else {
+                Ok(value as u16)
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            value
+                .parse::<u16>()
+                .map_err(|_| E::custom(format!("failed to parse '{}' as u16", value)))
+        }
+    }
+
+    deserializer.deserialize_any(U16Visitor)
+}
+
+/// Deserialize Option<u32> from string or number (for environment variable support)
+///
+/// This is useful when reading configuration from environment variables where
+/// numeric values are represented as strings (e.g., `MAX_CONNECTIONS=100`).
+///
+/// # Example
+/// ```rust
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     #[serde(deserialize_with = "sigbot_utils::serde_beans::deserialize_option_u32_from_string_or_number")]
+///     max_connections: Option<u32>,
+/// }
+/// ```
+pub fn deserialize_option_u32_from_string_or_number<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct OptionU32Visitor;
+
+    impl<'de> de::Visitor<'de> for OptionU32Visitor {
+        type Value = Option<u32>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an optional u32 number or a string containing a u32 number")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            Ok(Some(deserializer.deserialize_any(U32Visitor)?))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value > u32::MAX as u64 {
+                Err(E::custom(format!("value {} exceeds u32::MAX", value)))
+            } else {
+                Ok(Some(value as u32))
+            }
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 || value > u32::MAX as i64 {
+                Err(E::custom(format!("value {} is out of range for u32", value)))
+            } else {
+                Ok(Some(value as u32))
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            value
+                .parse::<u32>()
+                .map(Some)
+                .map_err(|_| E::custom(format!("failed to parse '{}' as u32", value)))
+        }
+    }
+
+    struct U32Visitor;
+
+    impl<'de> de::Visitor<'de> for U32Visitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a u32 number or a string containing a u32 number")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value > u32::MAX as u64 {
+                Err(E::custom(format!("value {} exceeds u32::MAX", value)))
+            } else {
+                Ok(value as u32)
+            }
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 || value > u32::MAX as i64 {
+                Err(E::custom(format!("value {} is out of range for u32", value)))
+            } else {
+                Ok(value as u32)
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            value
+                .parse::<u32>()
+                .map_err(|_| E::custom(format!("failed to parse '{}' as u32", value)))
+        }
+    }
+
+    deserializer.deserialize_any(OptionU32Visitor)
 }
 
 #[cfg(test)]

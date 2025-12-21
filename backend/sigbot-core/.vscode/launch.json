@@ -58,7 +58,7 @@
                 "--wallet-manager-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"configuration\":{},\"secrets\":{}}",
                 "--backtest-manager-provider=KLINE",
                 "--backtest-manager-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"configuration\":{},\"secrets\":{}}",
-                "--notification-providers=EMAIL,TELGRAME",
+                "--notification-providers=EMAIL,TELEGRAM",
                 "--notification-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"notification_config\":{\"configuration\":{\"email_smtp_server\":\"smtp.gmail.com:587\"},\"secrets\":{\"email_username\":\"example@email.com\",\"email_password\":\"123456\"}}}",
             ],
             "cwd": "${workspaceFolder}"

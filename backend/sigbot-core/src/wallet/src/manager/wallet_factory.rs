@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_core::{
-    config::config::PostgresAppDBProperties,
+    config::config::get_config,
     modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater},
 };
 use sigbot_types::modules::{
@@ -112,10 +112,8 @@ impl SigbotWalletManagerFactory {
 
         match provider {
             WalletMgrProvider::DEFAULT => {
-                // Create trade handler from config
-                // Note: Idempotency is now handled at database level via ON CONFLICT
-                let db_config = PostgresAppDBProperties::default();
-                let trade_handler: Arc<dyn IWalletUpdater> = Arc::new(
+                let db_config = get_config().appdb.postgres.to_owned();
+                let wallet_updater: Arc<dyn IWalletUpdater> = Arc::new(
                     // TODO: using wallet updater factory
                     PostgresWalletUpdater::new(&db_config)
                         .await
@@ -126,7 +124,7 @@ impl SigbotWalletManagerFactory {
                     .unwrap()
                     .register0(
                         WalletMgrProvider::DEFAULT.as_str(),
-                        SigbotDefaultWalletManager::new(trade_handler).await,
+                        SigbotDefaultWalletManager::new(wallet_updater).await,
                     )
                     .expect("Failed to register the Default Wallet manager.");
             }

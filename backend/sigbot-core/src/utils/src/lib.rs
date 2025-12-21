@@ -31,7 +31,7 @@ pub mod panics;
 pub mod rsa_ciphers;
 pub mod rwlock_maps;
 pub mod secrets;
-pub mod serde_beans;
+pub mod serde_models;
 pub mod snowflake;
 pub mod time_format;
 pub mod tokio_signal;

@@ -30,6 +30,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sigbot_utils::secrets::SecretHelper;
+use sigbot_utils::serde_models::{deserialize_option_u32_from_string_or_number, deserialize_u16_from_string_or_number};
 use std::{env, ops::Deref, str::FromStr, sync::Arc, time::Duration};
 use validator::Validate;
 
@@ -325,7 +326,7 @@ pub struct SqliteAppDBProperties {
 pub struct PostgresPropertiesBase {
     #[serde(rename = "host")]
     pub host: String,
-    #[serde(rename = "port")]
+    #[serde(rename = "port", deserialize_with = "deserialize_u16_from_string_or_number")]
     pub port: u16,
     #[serde(rename = "database")]
     pub database: String,
@@ -335,9 +336,15 @@ pub struct PostgresPropertiesBase {
     pub username: String,
     #[serde(rename = "password")]
     pub password: Option<String>,
-    #[serde(rename = "min-connections")]
+    #[serde(
+        rename = "min-connections",
+        deserialize_with = "deserialize_option_u32_from_string_or_number"
+    )]
     pub min_connections: Option<u32>,
-    #[serde(rename = "max-connections")]
+    #[serde(
+        rename = "max-connections",
+        deserialize_with = "deserialize_option_u32_from_string_or_number"
+    )]
     pub max_connections: Option<u32>,
     #[serde(rename = "use-ssl")]
     pub use_ssl: bool,
