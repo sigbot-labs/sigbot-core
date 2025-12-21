@@ -20,14 +20,23 @@
 
 use crate::config::config::AppConfig;
 use serde::{Deserialize, Serialize};
+use sigbot_utils::time_format::Iso8601TimeFormatter;
 use std::{
     fmt::{self, Display},
-    io::LineWriter,
+    io::{IsTerminal, LineWriter},
     str::FromStr,
     sync::Arc,
 };
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{filter::Targets, EnvFilter, Layer};
+use tracing_subscriber::{
+    filter::Targets,
+    fmt::{
+        format::{FormatEvent, FormatFields},
+        time::FormatTime,
+        FmtContext, FormatFields as FormatFieldsTrait,
+    },
+    EnvFilter, Layer,
+};
 
 pub type LogRouteHandle = tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
 
@@ -143,19 +152,154 @@ impl FromStr for LogLevel {
     }
 }
 
+// Fixed width module path formatter (with color support)
+const TARGET_WIDTH: usize = 35;
+
+// ANSI color codes
+mod ansi {
+    pub const RESET: &str = "\x1b[0m";
+
+    // Module path color (blue/light)
+    pub const TARGET: &str = "\x1b[94m"; // Bright blue
+
+    // Log level color
+    pub const ERROR: &str = "\x1b[31m"; // Red
+    pub const WARN: &str = "\x1b[33m"; // Yellow
+    pub const INFO: &str = "\x1b[32m"; // Green
+    pub const DEBUG: &str = "\x1b[36m"; // Cyan
+    pub const TRACE: &str = "\x1b[90m"; // Gray
+}
+
+/// Simplify the module path by removing the crate name (the part before the first `::`)
+///
+/// # Examples
+/// - `sigbot_cmd::cmd::internal::management_server` -> `cmd::internal::management_server`
+/// - `sigbot_order::server::order_server` -> `server::order_server`
+/// - `datafeed::client::market::datafeed_binance` -> `client::market::datafeed_binance`
+fn simplify_target(target: &str) -> String {
+    // Remove the crate name (the part before the first `::`)
+    if let Some(pos) = target.find("::") {
+        let after_crate = &target[pos + 2..];
+        if !after_crate.is_empty() {
+            return after_crate.to_string();
+        }
+    }
+
+    // If it doesn't contain `::`, return the original string
+    target.to_string()
+}
+
+struct FixedWidthTargetFormatter {
+    ansi_enabled: bool,
+}
+
+impl FixedWidthTargetFormatter {
+    fn new(ansi_enabled: bool) -> Self {
+        Self { ansi_enabled }
+    }
+
+    fn level_color(&self, level: &tracing::Level) -> &'static str {
+        if !self.ansi_enabled {
+            return "";
+        }
+        match *level {
+            tracing::Level::ERROR => ansi::ERROR,
+            tracing::Level::WARN => ansi::WARN,
+            tracing::Level::INFO => ansi::INFO,
+            tracing::Level::DEBUG => ansi::DEBUG,
+            tracing::Level::TRACE => ansi::TRACE,
+        }
+    }
+
+    fn reset_color(&self) -> &'static str {
+        if self.ansi_enabled {
+            ansi::RESET
+        } else {
+            ""
+        }
+    }
+}
+
+impl<S, N> FormatEvent<S, N> for FixedWidthTargetFormatter
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+    N: for<'a> FormatFieldsTrait<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: tracing_subscriber::fmt::format::Writer<'_>,
+        event: &tracing::Event<'_>,
+    ) -> fmt::Result {
+        let meta = event.metadata();
+        let time_format = Iso8601TimeFormatter::new(self.ansi_enabled);
+        let level = *meta.level();
+
+        // Format the timestamp (ISO 8601 format) with color
+        time_format.format_time(&mut writer)?;
+        write!(writer, " ")?;
+
+        // Format the log level with color
+        let color = self.level_color(&level);
+        let reset = self.reset_color();
+        write!(writer, "{color}{:5}{reset} ", level)?;
+
+        // Simplify the module path (remove the same prefix)
+        let target = simplify_target(meta.target());
+
+        // Format the fixed width target (module path), add color and separator
+        let target_color = if self.ansi_enabled { ansi::TARGET } else { "" };
+        let reset = self.reset_color();
+
+        if target.len() > TARGET_WIDTH {
+            // If it exceeds the fixed width, truncate and add ellipsis
+            let truncated = &target[..TARGET_WIDTH.saturating_sub(3)];
+            write!(writer, "{target_color}{truncated}...{reset}: ")?;
+        } else {
+            // If it is less than the fixed width, right-align fill spaces, then add separator
+            write!(
+                writer,
+                "{target_color}{:>width$}{reset}: ",
+                target,
+                width = TARGET_WIDTH
+            )?;
+        }
+
+        // Format the fields
+        ctx.format_fields(writer.by_ref(), event)?;
+        writeln!(writer)?;
+
+        Ok(())
+    }
+}
+
 pub(super) fn default_log_route_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
 }
 
 pub(super) fn default_log_stderr_layer(config: &Arc<AppConfig>) -> LogStderrType {
-    let layer = tracing_subscriber::fmt::layer()
-        .with_writer(|| LineWriter::new(std::io::stderr()))
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+    // Check if ANSI color is supported (check if stderr is a TTY)
+    // Use the standard library's IsTerminal trait, avoid using the unsafe atty crate
+    let ansi_enabled = std::io::stderr().is_terminal();
 
     let layer = match config.logging.mode {
-        LogMode::HUMAN => Box::new(layer) as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>,
+        LogMode::HUMAN => {
+            // Use a custom formatter to format the module path to a fixed width, and add color support
+            let formatter = FixedWidthTargetFormatter::new(ansi_enabled);
+            let layer = tracing_subscriber::fmt::layer()
+                .with_writer(|| LineWriter::new(std::io::stderr()))
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_ansi(ansi_enabled)
+                .event_format(formatter);
+            Box::new(layer) as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>
+        }
         LogMode::JSON => {
-            Box::new(layer.json()) as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>
+            let layer = tracing_subscriber::fmt::layer()
+                .with_writer(|| LineWriter::new(std::io::stderr()))
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_ansi(ansi_enabled)
+                .json();
+            Box::new(layer) as Box<dyn tracing_subscriber::Layer<SubscriberForSecondLayer> + Send + Sync>
         }
     };
 

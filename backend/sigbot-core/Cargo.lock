@@ -7824,6 +7824,7 @@ dependencies = [
  "tokio",
  "tower-cookies",
  "tracing",
+ "tracing-subscriber",
  "url",
  "validator",
 ]

@@ -105,6 +105,7 @@ validator = { version = "0.20.0", features = ["derive"] }
 # Logger libs
 env_logger = "0.11.3"
 log = "0.4.22"
+#atty = "0.2" # see more about RUSTSEC-2021-0145 in deny.toml.
 
 # Prometheus libs
 prometheus = "0.14.0"
