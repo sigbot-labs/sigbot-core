@@ -139,7 +139,7 @@ impl SigbotHostedDeployer {
             base: EntityBase::new_with_id(Some(1)), // TODO: Get the datafeed id from the tenant.
             name: tenant.name.clone(),              // TODO: Get the datafeed name from the tenant.
             provider: Some(DatafeedProvider::BINANCE), // TODO: Get the provider from the tenant.
-            configuration: None,
+            properties: None,
             secrets: None,
             description: Some(format!(
                 "Datafeed Runner for tenant {}",

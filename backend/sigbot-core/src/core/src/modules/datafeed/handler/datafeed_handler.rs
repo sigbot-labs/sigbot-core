@@ -60,7 +60,7 @@ impl<'a> IDatafeedInfoHandler for DatafeedInfoHandler<'a> {
             base: EntityBase::new_with_id(id),
             name: None,
             provider: None,
-            configuration: None,
+            properties: None,
             secrets: None,
             description: None,
         };

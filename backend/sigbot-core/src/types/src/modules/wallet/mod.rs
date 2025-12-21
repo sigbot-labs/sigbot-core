@@ -31,7 +31,7 @@ pub mod wallet;
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotWalletManagerArgument {
     pub messager_config: Arc<MessagerConfiguration>,
-    pub configuration: Option<HashMap<String, String>>,
+    pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
 }
 

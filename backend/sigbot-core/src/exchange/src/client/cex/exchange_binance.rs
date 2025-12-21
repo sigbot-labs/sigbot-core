@@ -125,10 +125,7 @@ impl std::fmt::Display for SigbotBinanceClientConfig {
 
 impl SigbotBinanceClientConfig {
     pub fn from_exchange(exchange: Arc<ExchangeInfo>) -> Self {
-        let plain_config = exchange
-            .configuration
-            .as_ref()
-            .expect("Plain configuration is required");
+        let plain_config = exchange.properties.as_ref().expect("Plain configuration is required");
         let secret_config = exchange.secrets.as_ref().expect("Secret configuration is required");
 
         Self {

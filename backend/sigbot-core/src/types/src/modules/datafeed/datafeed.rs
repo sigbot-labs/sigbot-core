@@ -37,7 +37,7 @@ pub struct DatafeedInfo {
     pub base: EntityBase,
     pub name: Option<String>,
     pub provider: Option<DatafeedProvider>,
-    pub configuration: Option<HashMap<String, String>>,
+    pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
     pub description: Option<String>,
 }
@@ -48,7 +48,7 @@ impl Default for DatafeedInfo {
             base: EntityBase::new_empty(),
             name: None,
             provider: None,
-            configuration: None,
+            properties: None,
             secrets: None,
             description: None,
         }
@@ -75,7 +75,7 @@ impl<'r> FromRow<'r, SqliteRow> for DatafeedInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            configuration: None,
+            properties: None,
             secrets: None,
             description: Some(row.try_get("description")?),
         })
@@ -102,7 +102,7 @@ impl<'r> FromRow<'r, PgRow> for DatafeedInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            configuration: None,
+            properties: None,
             secrets: None,
             description: Some(row.try_get("description")?),
         })
@@ -164,7 +164,7 @@ impl QueryDatafeedRequest {
                 DatafeedProvider::of(self.provider.to_owned().unwrap_or_default().as_str())
                     .context("Failed to parse datafeed provider")?,
             ),
-            configuration: None,
+            properties: None,
             secrets: None,
             description: None,
         })
@@ -211,7 +211,7 @@ impl SaveDatafeedRequest {
             provider: Some(
                 DatafeedProvider::of(self.provider.to_owned().as_str()).context("Failed to parse datafeed provider")?,
             ),
-            configuration: self.plain_configuration.clone(),
+            properties: self.plain_configuration.clone(),
             secrets: self.secret_configuration.clone(),
             description: self.description.clone(),
         })

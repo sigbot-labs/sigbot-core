@@ -36,7 +36,7 @@ pub struct ExchangeInfo {
     pub base: EntityBase,
     pub name: Option<String>,
     pub provider: Option<ExchangeProvider>,
-    pub configuration: Option<HashMap<String, String>>,
+    pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
     pub description: Option<String>,
 }
@@ -47,7 +47,7 @@ impl Default for ExchangeInfo {
             base: EntityBase::new_empty(),
             name: None,
             provider: None,
-            configuration: None,
+            properties: None,
             secrets: None,
             description: None,
         }
@@ -74,7 +74,7 @@ impl<'r> FromRow<'r, SqliteRow> for ExchangeInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            configuration: None,
+            properties: None,
             secrets: None,
             description: Some(row.try_get("description")?),
         })
@@ -101,7 +101,7 @@ impl<'r> FromRow<'r, PgRow> for ExchangeInfo {
                     )
                 })?,
             // TODO: auto convert and wrap to Map attribute.
-            configuration: None,
+            properties: None,
             secrets: None,
             description: Some(row.try_get("description")?),
         })
@@ -186,7 +186,7 @@ impl QueryExchangeRequest {
             base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
             provider: ExchangeProvider::of(self.provider.clone().unwrap_or_default().as_str()).ok(),
-            configuration: None,
+            properties: None,
             secrets: None,
             description: None,
         }
@@ -231,7 +231,7 @@ impl SaveExchangeRequest {
             base: EntityBase::new_with_id(self.id),
             name: Some(self.name.clone()),
             provider: ExchangeProvider::of(self.provider.clone().as_str()).ok(),
-            configuration: self.plain_configuration.clone(),
+            properties: self.plain_configuration.clone(),
             secrets: self.secret_configuration.clone(),
             description: self.description.clone(),
         }

@@ -91,11 +91,16 @@ impl SigbotPythonStrategyExecutor {
                     serde_json::from_slice(&data0).context("Failed to parse the data from the message.")?;
                 debug!("Parsed input: {:?}", input);
 
+                // Metrics: start timer for strategy execution duration
+                let timer = sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTION_DURATION
+                    .with_label_values(&[strategy_id0.as_str(), "streaming"])
+                    .start_timer();
+
                 let result: Result<String, Error> = {
                     match executor0.process(&input) {
                         Ok((execution_result, trade_signal)) => {
                             if execution_result.success {
-                                // Statistics to strategy execution total metrics.
+                                // Metrics: strategy executions total.
                                 sigbot_core::mgmt::apm::metrics::STRATEGY_EXECUTIONS_TOTAL
                                     .with_label_values(&[strategy_id0.as_str(), "success"])
                                     .inc();
@@ -148,6 +153,9 @@ impl SigbotPythonStrategyExecutor {
                     }
                 };
 
+                // Metrics: stop timer (automatically records duration when dropped)
+                drop(timer);
+
                 if let Err(ref e) = result {
                     warn!("Failed to execute strategy: {}", e);
                     // TODO: statistics the error metrics.
@@ -159,8 +167,9 @@ impl SigbotPythonStrategyExecutor {
             })
         });
 
+        let topic = TOPIC_MARKET_STREAMS.replace("{tenant_id}", "+"); // MQTT single level wildcard
         let _ = messager
-            .subscribe(TOPIC_MARKET_STREAMS, market_data_handler) // TODO: configuable
+            .subscribe(&topic, market_data_handler) // TODO: configuable
             .await
             .expect("Failed to subscribe to market data topic.");
         info!("Subscribed to market data topic: {:?}.", TOPIC_MARKET_STREAMS);
@@ -177,9 +186,6 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
         if self.argument.run_mode == "BATCH" {
             unimplemented!()
         } else if self.argument.run_mode == "STREAMING" {
-            // let executor = Arc::new(StreamingStrategyExecutor::new(self.argument.clone()));
-            // *self.streaming_executor.lock().unwrap() = Some(executor.clone());
-
             let messager0 = messager.to_owned();
             let executors0 = self.running_streaming_executors.to_owned();
             // SAFETY: We know that `self` is actually an Arc<Self> because `startup` is called
@@ -196,10 +202,11 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
             let self_arc0 = self_arc.to_owned();
             std::mem::forget(self_arc); // Don't drop the original, it's managed elsewhere
 
-            let config_strategy_handler: Arc<
+            // Subscribe to dynamic strategies updated messages.
+            let dynamic_strategy_update_handler: Arc<
                 dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync,
             > = Arc::new(move |data: Vec<u8>| {
-                debug!("Received configuration message: {:?}", data);
+                debug!("Received strategy updated message: {:?}", data);
 
                 let messager1 = messager0.to_owned();
                 let executors1 = executors0.to_owned();
@@ -222,7 +229,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                         .to_string();
 
                     // Check if executor exists and handle shutdown if needed
-                    let should_create_new = {
+                    let should_create = {
                         let mut executors = executors1.lock().unwrap();
                         if let Some(executor) = executors.get(&strategy_id) {
                             executor
@@ -230,13 +237,19 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                                 .shutdown()
                                 .expect("Failed to shutdown streaming executor.");
                             executors.remove(&strategy_id);
+
+                            // Metrics: strategy inactive count
+                            sigbot_core::mgmt::apm::metrics::STRATEGY_ACTIVE_COUNT
+                                .with_label_values(&[strategy_id.as_str(), "inactive"])
+                                .inc();
+
                             false // Found existing, don't create new
                         } else {
                             true // Not found, create new
                         }
                     };
 
-                    if should_create_new {
+                    if should_create {
                         info!("Initializing Python Strategy Streaming Executor.");
                         let executor = Arc::new(StreamingStrategyExecutor::new(
                             self_arc1.argument.to_owned(),
@@ -255,15 +268,20 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                             .execute_streaming(messager1.to_owned(), executor.to_owned())
                             .await;
                         info!("Started Python Streaming Strategy Runner.");
+
+                        // Metrics: strategy active count.
+                        sigbot_core::mgmt::apm::metrics::STRATEGY_ACTIVE_COUNT
+                            .with_label_values(&[strategy_id.as_str(), "active"])
+                            .inc();
                     }
 
-                    Ok(format!("Configured the strategy: {}", strategy_id))
+                    Ok(format!("Dynamic strategy updated: {}", strategy_id))
                 })
             });
 
             let _ = messager
                 .to_owned()
-                .subscribe(TOPIC_CONFIG_STRATEGY, config_strategy_handler.to_owned())
+                .subscribe(TOPIC_CONFIG_STRATEGY, dynamic_strategy_update_handler.to_owned())
                 .await
                 .expect("Failed to subscribe to strategy config topic.");
             info!("Subscribed to strategy config topic: {:?}.", TOPIC_CONFIG_STRATEGY);
@@ -277,11 +295,16 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
         for (_, executor) in self.running_batch_executors.lock().unwrap().iter() {
             executor.shutdown().expect("Failed to shutdown batch executor.");
         }
-        for (_, executor) in self.running_streaming_executors.lock().unwrap().iter() {
+        for (strategy_id, executor) in self.running_streaming_executors.lock().unwrap().iter() {
             executor
                 .to_owned()
                 .shutdown()
                 .expect("Failed to shutdown streaming executor.");
+
+            // Metrics: strategy inactive count
+            sigbot_core::mgmt::apm::metrics::STRATEGY_ACTIVE_COUNT
+                .with_label_values(&[strategy_id.as_str(), "inactive"])
+                .inc();
         }
         info!("Shutdown Embed Strategy Runner.");
     }

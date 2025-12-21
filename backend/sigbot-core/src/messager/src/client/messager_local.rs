@@ -41,7 +41,7 @@ impl SigbotLocalMessagerClientConfig {
     pub fn from_config(configuration: Arc<MessagerConfiguration>) -> Self {
         Self {
             queue_size: configuration
-                .configuration
+                .properties
                 .as_ref()
                 .expect("Queue size is required")
                 .get("queue_size")

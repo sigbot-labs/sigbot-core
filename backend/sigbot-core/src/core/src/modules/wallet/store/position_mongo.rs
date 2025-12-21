@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use futures::stream::TryStreamExt;
 use mongodb::bson::doc;
-use mongodb::{options::FindOptions, Collection};
+use mongodb::Collection;
 use sigbot_types::modules::wallet::position::PositionInfo;
 use sigbot_types::{PageRequest, PageResponse};
 use std::sync::Arc;

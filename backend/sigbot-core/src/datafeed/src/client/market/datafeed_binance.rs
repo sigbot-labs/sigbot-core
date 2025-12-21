@@ -54,7 +54,7 @@ impl ISigbotDatafeedClient for SigbotBinanceDatafeedClient {
 
         let kline_params = argument
             .datafeed_config
-            .configuration
+            .properties
             .as_ref()
             .context("Datafeed config is required")
             .map(|config| {

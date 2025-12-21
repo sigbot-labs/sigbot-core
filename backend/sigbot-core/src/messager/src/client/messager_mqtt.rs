@@ -64,7 +64,7 @@ impl std::fmt::Display for SigbotMqttMessagerClientConfig {
 impl SigbotMqttMessagerClientConfig {
     pub fn from_config(configuration: Arc<MessagerConfiguration>) -> Self {
         let plain_config = configuration
-            .configuration
+            .properties
             .as_ref()
             .expect("Plain configuration is required");
         let secret_config = configuration

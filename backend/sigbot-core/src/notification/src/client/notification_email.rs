@@ -64,7 +64,7 @@ impl SigbotEmailClientConfig {
         let plain_config = notification
             .as_ref()
             .to_owned()
-            .configuration
+            .properties
             .expect("Plain configuration is required")
             .to_owned();
         let secret_config = notification

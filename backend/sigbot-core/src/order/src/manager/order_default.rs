@@ -37,16 +37,15 @@ use tokio::time::{sleep, Duration};
 /// Risk check configuration.
 #[derive(Clone, Debug)]
 struct RiskConfig {
-    max_position_size: f64,
     max_order_size: f64,
+    max_position_size: f64,
     max_leverage: f64,
 }
-
 impl Default for RiskConfig {
     fn default() -> Self {
         Self {
-            max_position_size: 1000000.0,
             max_order_size: 100000.0,
+            max_position_size: 1000000.0,
             max_leverage: 10.0,
         }
     }

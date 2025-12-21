@@ -49,9 +49,8 @@ mod tests {
             "notification_config": {"name": "tenant101_email", "provider": "EMAIL", "configuration": {"endpoint": "smtp.gmail.com:587"}, "secrets": {"api_secret": "1234567890"}}, 
             "#;
         let argument = SigbotNotificationArgument::from_json(json).unwrap();
-        assert_eq!(argument.messager_config.name, Some("MQTT".to_string()));
         assert_eq!(
-            argument.messager_config.configuration,
+            argument.messager_config.properties,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://localhost:1883".to_string()

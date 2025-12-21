@@ -51,16 +51,15 @@ mod tests {
     fn test_from_json() {
         let json = r#"{
             "sys_environment": {"SIGBOT_VERSION": "V1.0.0"}}, 
-            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
+            "messager_config": {"configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
             "#;
         let argument = SigbotStrategyArgument::from_json(json).unwrap();
         assert_eq!(
             argument.sys_environment,
             Some(HashMap::from([("SIGBOT_VERSION".to_string(), "V1.0.0".to_string())]))
         );
-        assert_eq!(argument.messager_config.name, Some("tenant101_messager".to_string()));
         assert_eq!(
-            argument.messager_config.configuration,
+            argument.messager_config.properties,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://localhost:1883".to_string()

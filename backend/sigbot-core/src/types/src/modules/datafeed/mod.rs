@@ -45,21 +45,20 @@ mod tests {
     #[test]
     fn test_from_json() {
         let json = r#"{
-            "datafeed_config": {"name": "tenant101_datafeed", "provider": "BINANCE", "configuration": {"endpoint": "https://api.binance.com"}, "secrets": {"api_secret": "1234567890"}}, 
-            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}
+            "datafeed_config": {"configuration": {"endpoint": "https://api.binance.com"}, "secrets": {"api_secret": "1234567890"}}, 
+            "messager_config": {"configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}
             }"#;
         let argument = SigbotDatefeedArgument::from_json(json).unwrap();
         assert_eq!(argument.datafeed_config.name, Some("BINANCE".to_string()));
-        assert_eq!(argument.messager_config.name, Some("MQTT".to_string()));
         assert_eq!(
-            argument.datafeed_config.configuration,
+            argument.datafeed_config.properties,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://api.binance.com".to_string()
             )]))
         );
         assert_eq!(
-            argument.messager_config.configuration,
+            argument.messager_config.properties,
             Some(HashMap::from([(
                 "endpoint".to_string(),
                 "https://localhost:1883".to_string()

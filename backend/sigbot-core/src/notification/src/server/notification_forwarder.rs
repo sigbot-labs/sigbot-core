@@ -47,16 +47,16 @@ impl SigbotNotificationForwarder {
             .await
             .expect("Failed to initialize Messager client.");
 
-        // TODO: Subscribe alarm messages.
         let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
             Arc::new(move |data: Vec<u8>| {
                 info!("Received message: {:?}", data);
                 let notifications0 = notifications.to_owned();
                 Box::pin(async move {
+                    // TODO: improvement to the content message parsing mechanism.
                     let message = String::from_utf8_lossy(&data);
                     for notification in notifications0.iter() {
                         info!("Sending message: {:?} : {}", notification.provider(), &message);
-                        // TODO: improvement the sent result confirmation mechanism.
+                        // TODO: improvement to the sent result confirmation mechanism.
                         let res = notification
                             .send_simple_message(None, &message)
                             .await
@@ -70,8 +70,10 @@ impl SigbotNotificationForwarder {
                     Ok("OK".to_string())
                 })
             });
+
+        let topic = TOPIC_NOTIFICATION_MESSAGES.replace("{tenant_id}", "+"); // MQTT single level wildcard
         let _ = messager
-            .subscribe(TOPIC_NOTIFICATION_MESSAGES, handler) // TODO: configuable
+            .subscribe(&topic, handler) // TODO: configuable
             .await
             .context("Failed to subscribe to the messager topic.");
         info!("Initialized Messager client with provider: {:?}.", messager.provider());

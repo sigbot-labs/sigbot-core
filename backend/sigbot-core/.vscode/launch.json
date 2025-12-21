@@ -49,17 +49,17 @@
                 "standalone", // api|deployer|datafeed|strategy|order|wallet|notification|backtest
                 "--messager-provider=LOCAL",
                 "--datafeed-providers=BINANCE,TRUTHSOCIAL",
-                "--datafeed-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"datafeed_config\":{\"configuration\":{\"endpoint\":\"https://api.binance.com\"},\"secrets\":{\"api_secret\":\"1234567890\"}}}",
+                "--datafeed-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"datafeed_config\":{\"properties\":{\"endpoint\":\"https://api.binance.com\"},\"secrets\":{\"api_secret\":\"1234567890\"}}}",
                 "--strategy-runner-provider=PYTHON",
-                "--strategy-runner-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"sys_environment\":{\"SIGBOT_VERSION\":\"V1.0.0\"},\"run_mode\":\"STREAMING\"}",
+                "--strategy-runner-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"sys_environment\":{\"SIGBOT_VERSION\":\"V1.0.0\"},\"run_mode\":\"STREAMING\"}",
                 "--order-manager-provider=DEFAULT",
-                "--order-manager-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"configuration\":{},\"secrets\":{}}",
+                "--order-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
                 "--wallet-manager-provider=DEFAULT",
-                "--wallet-manager-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"configuration\":{},\"secrets\":{}}",
+                "--wallet-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
                 "--backtest-manager-provider=KLINE",
-                "--backtest-manager-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"configuration\":{},\"secrets\":{}}",
+                "--backtest-manager-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"properties\":{},\"secrets\":{}}",
                 "--notification-providers=EMAIL,TELEGRAM",
-                "--notification-configuration={\"messager_config\":{\"configuration\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"notification_config\":{\"configuration\":{\"email_smtp_server\":\"smtp.gmail.com:587\"},\"secrets\":{\"email_username\":\"example@email.com\",\"email_password\":\"123456\"}}}",
+                "--notification-configuration={\"messager_config\":{\"properties\":{\"queue_size\":\"1024\"},\"secrets\":{}},\"notification_config\":{\"id\":1,\"properties\":{\"email_smtp_server\":\"smtp.gmail.com:587\"},\"secrets\":{\"email_username\":\"example@email.com\",\"email_password\":\"123456\"}}}",
             ],
             "cwd": "${workspaceFolder}"
         }

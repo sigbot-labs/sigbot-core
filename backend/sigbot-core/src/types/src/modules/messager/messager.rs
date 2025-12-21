@@ -25,18 +25,14 @@ use std::collections::HashMap;
 // #[derive(Serialize, Deserialize, Clone, Debug, sqlx::sqlite::FromRow, sqlx::sqlite::Decode)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct MessagerConfiguration {
-    pub name: Option<String>,
-    pub provider: Option<MessagerProvider>,
-    pub configuration: Option<HashMap<String, String>>,
+    pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
 }
 
 impl Default for MessagerConfiguration {
     fn default() -> Self {
         MessagerConfiguration {
-            name: None,
-            provider: None,
-            configuration: None,
+            properties: None,
             secrets: None,
         }
     }

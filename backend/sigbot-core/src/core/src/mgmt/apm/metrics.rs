@@ -21,7 +21,7 @@
 use crate::config::config::AppConfig;
 use common_telemetry::{debug, error, info};
 use lazy_static::lazy_static;
-use prometheus::{CounterVec, Gauge, GaugeVec, HistogramVec};
+use prometheus::{CounterVec, GaugeVec, HistogramVec};
 use std::sync::{Arc, Mutex};
 
 /// MetricRegistrar: Metrics registration extension point trait
@@ -118,9 +118,12 @@ lazy_static! {
     ).expect("strategy_execution_duration metric can be created");
 
     /// Number of active strategies
-    pub static ref STRATEGY_ACTIVE_COUNT: Gauge = Gauge::new(
-        "sigbot_strategy_active_count",
-        "Number of active strategies"
+    pub static ref STRATEGY_ACTIVE_COUNT: GaugeVec = GaugeVec::new(
+        prometheus::Opts::new(
+            "sigbot_strategy_active_count",
+            "Number of active strategies"
+        ),
+        &["strategy_id", "status"] // status: active, inactive
     ).expect("strategy_active_count metric can be created");
 
     // Trading related metrics
