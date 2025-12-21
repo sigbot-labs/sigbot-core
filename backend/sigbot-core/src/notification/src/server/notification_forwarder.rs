@@ -50,16 +50,22 @@ impl SigbotNotificationForwarder {
         // TODO: Subscribe alarm messages.
         let handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync> =
             Arc::new(move |data: Vec<u8>| {
+                info!("Received message: {:?}", data);
                 let notifications0 = notifications.to_owned();
                 Box::pin(async move {
-                    info!("Received message: {:?}", data);
+                    let message = String::from_utf8_lossy(&data);
                     for notification in notifications0.iter() {
-                        // TODO: Forwarding message via notification client.
+                        info!("Sending message: {:?} : {}", notification.provider(), &message);
+                        // TODO: improvement the sent result confirmation mechanism.
                         let res = notification
-                            .send_message("test@example.com", "Hello, world!")
+                            .send_simple_message(None, &message)
                             .await
                             .context("Failed to send message.")?;
-                        info!("Sent notification message: {:?}.", res);
+                        info!(
+                            "Sent message to provider: {:?}, result: {:?}.",
+                            notification.provider(),
+                            res
+                        );
                     }
                     Ok("OK".to_string())
                 })

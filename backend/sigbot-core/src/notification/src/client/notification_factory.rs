@@ -18,7 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::{notification_email::SigbotEmailClient, notification_telegram::SigbotTelegramClient};
+use crate::client::{
+    notification_email::{SigbotEmailClient, SigbotEmailClientConfig},
+    notification_telegram::{SigbotTelegramClient, SigbotTelegramConfig},
+};
 use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -37,7 +40,7 @@ pub trait ISigbotNotificationClient: Send + Sync {
     fn provider(&self) -> NotificationProvider;
     async fn init(&self);
     async fn close(&self);
-    async fn send_message(&self, to: &str, message: &str) -> Result<String, Error>;
+    async fn send_simple_message(&self, to: Option<Vec<String>>, message: &str) -> Result<String, Error>;
 }
 
 lazy_static! {
@@ -113,7 +116,10 @@ impl SigbotNotificationClientFactory {
                         .unwrap()
                         .register0(
                             provider.as_str(),
-                            SigbotEmailClient::new(None).await, // TODO: set up run configuration?
+                            SigbotEmailClient::new(Some(SigbotEmailClientConfig::from_config(
+                                argument.notification_config.to_owned(),
+                            )))
+                            .await, // TODO: set up run configuration?
                         )
                         .context("Failed to register the Email notification.")?;
                 }
@@ -123,7 +129,10 @@ impl SigbotNotificationClientFactory {
                         .unwrap()
                         .register0(
                             provider.as_str(),
-                            SigbotTelegramClient::new(None).await, // TODO: set up run configuration?
+                            SigbotTelegramClient::new(Some(SigbotTelegramConfig::from_config(
+                                argument.notification_config.to_owned(),
+                            )))
+                            .await,
                         )
                         .context("Failed to register the Telegram notification.")?;
                 }

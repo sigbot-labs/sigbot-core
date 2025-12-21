@@ -177,11 +177,14 @@ ethers = "2.0.14"
 openai = "1.0.0"
 langchain-rust = { version = "4.6.0", features = ["sqlite", "postgres"] }
 
-# Python integration libs
+# Python integration libs.
 pyo3 = { version = "0.22", features = ["auto-initialize"] }
 
-# Build dependencies
+# Build dependencies.
 criterion = "0.4"
 
+# Thirdparty Instant Messaging libs.
+lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-native-tls", "smtp-transport", "builder"] } # email clients
+
 # [workspace.dev-dependencies]
-# clippy = "0.1.85" # 0.0.302
+#clippy = "0.1.85" # 0.0.302

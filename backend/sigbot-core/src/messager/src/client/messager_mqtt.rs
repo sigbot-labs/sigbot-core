@@ -120,6 +120,8 @@ impl SigbotMqttMessagerClientConfig {
     }
 }
 
+/// MQTT messager client definition.
+/// related crates: https://crates.io/crates/rumqttc, https://crates.io/crates/paho-mqtt
 pub struct SigbotMqttMessagerClient {
     config: Arc<SigbotMqttMessagerClientConfig>,
     client: Arc<Mutex<Option<AsyncClient>>>,
