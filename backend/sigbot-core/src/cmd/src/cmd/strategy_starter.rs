@@ -53,9 +53,9 @@ impl SigbotStrategyRunnerStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("STRATEGY_PROVIDER")
+                Arg::new("STRATEGY_RUNNER_PROVIDER")
                     .short('p')
-                    .long("strategy-provider")
+                    .long("strategy-runner-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(
@@ -67,7 +67,7 @@ impl SigbotStrategyRunnerStarter {
             .arg(
                 Arg::new("STRATEGY_CONFIGURATION")
                     .short('c')
-                    .long("strategy-configuration")
+                    .long("strategy-runner-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(3)
                     .help("The configuration of strategy. (base64 encoded JSON string)"),

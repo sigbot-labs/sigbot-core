@@ -27,7 +27,7 @@ use axum::{
     Router,
 };
 use clap::Command;
-use common_telemetry::{debug, error, info};
+use common_telemetry::{error, info};
 use sigbot_core::{
     config::{
         config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
@@ -45,7 +45,6 @@ use std::{env, future::Future, pin::Pin};
 use tokio::{net::TcpListener, sync::oneshot};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
-
 pub struct SigbotAPIServer {}
 
 pub type MiddlewareFunction =
@@ -123,7 +122,7 @@ impl SigbotAPIServer {
 
         // 3. Merge the swagger router.
         if config.swagger.enabled {
-            debug!("Register Web server swagger middlewares ...");
+            info!("Registering Web server swagger middlewares ...");
             app_router = app_router.merge(swagger::init(&config));
         }
 
@@ -132,7 +131,7 @@ impl SigbotAPIServer {
         // The later the higher the priority? For example, if auth_middleware is set at the end, it will
         // enter when requesting '/', otherwise it will not enter if it is set at the front, and will
         // directly enter handle_root().
-        info!("Register API Server auth middlewares ...");
+        info!("Registering API Server auth middlewares ...");
         app_router = app_router.layer(
             ServiceBuilder::new()
                 .layer(axum::middleware::from_fn_with_state(
@@ -157,10 +156,10 @@ impl SigbotAPIServer {
         //.route_layer(axum::Extension(app_state));
 
         let bind_addr = config.server.get_bind_addr();
-        info!("Starting web server on {}", bind_addr);
+        info!("Starting API Server on {}", bind_addr);
         let listener = match TcpListener::bind(&bind_addr).await {
             Ok(l) => {
-                info!("Web server is ready on {}", bind_addr);
+                info!("API Server is ready on {}", bind_addr);
                 l
             }
             Err(e) => {
@@ -175,11 +174,11 @@ impl SigbotAPIServer {
             .await
         {
             Ok(_) => {
-                info!("Web server shut down gracefully");
+                info!("API Server shut down gracefully");
             }
             Err(e) => {
-                error!("Error running web server: {}", e);
-                panic!("Error starting API server: {}", e);
+                error!("Error running API Server: {}", e);
+                panic!("Error starting API Server: {}", e);
             }
         }
     }

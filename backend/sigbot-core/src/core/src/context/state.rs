@@ -23,6 +23,11 @@ use crate::{
     config::config::{AppConfig, AppDBType},
     mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
+        backtest::store::{
+            backtest_case_mongo::BacktestCaseInfoMongoRepository,
+            backtest_case_postgres::BacktestCaseInfoPostgresRepository,
+            backtest_case_sqlite::BacktestCaseInfoSQLiteRepository,
+        },
         datafeed::store::{
             datafeed_mongo::DatafeedInfoMongoRepository, datafeed_postgres::DatafeedInfoPostgresRepository,
             datafeed_sqlite::DatafeedInfoSQLiteRepository,
@@ -59,9 +64,12 @@ use crate::{
 use oauth2::basic::BasicClient;
 use sigbot_types::{
     modules::{
-        datafeed::datafeed::DatafeedInfo, exchange::exchange::ExchangeInfo,
-        notification::notification::NotificationInfo, strategy::strategy::StrategyInfo, wallet::balance::BalanceInfo,
-        wallet::ledger::LedgerInfo, wallet::position::PositionInfo, wallet::wallet::WalletInfo,
+        backtest::backtest_case::BacktestCaseInfo,
+        datafeed::datafeed::DatafeedInfo,
+        exchange::exchange::ExchangeInfo,
+        notification::notification::NotificationInfo,
+        strategy::strategy::StrategyInfo,
+        wallet::{balance::BalanceInfo, ledger::LedgerInfo, position::PositionInfo, wallet::WalletInfo},
     },
     sys::{dlock::DLock, tenant::Tenant, user::User},
 };
@@ -89,6 +97,7 @@ pub struct SigbotState {
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
+    pub backtest_case_repo: Arc<Mutex<RepositoryContainer<BacktestCaseInfo>>>,
     pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
     // The Wallet module repositories.
     pub wallet_repo: Arc<Mutex<RepositoryContainer<WalletInfo>>>,
@@ -220,6 +229,28 @@ impl SigbotState {
                 _ => None,
             },
         );
+        let backtest_case_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    BacktestCaseInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    BacktestCaseInfoPostgresRepository::new(&db_config.postgres)
+                        .await
+                        .unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    BacktestCaseInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
         let notification_repo = RepositoryContainer::new(
             match db_config.db_type {
                 AppDBType::SQLITE => Some(Box::new(
@@ -342,6 +373,7 @@ impl SigbotState {
             datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
+            backtest_case_repo: Arc::new(Mutex::new(backtest_case_repo)),
             notification_repo: Arc::new(Mutex::new(notification_repo)),
             // The Wallet repositories.
             wallet_repo: Arc::new(Mutex::new(wallet_repo)),

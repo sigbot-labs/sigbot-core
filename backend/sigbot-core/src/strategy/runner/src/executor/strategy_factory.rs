@@ -73,18 +73,18 @@ impl SigbotStrategyExecutorFactory {
     > {
         info!("Starting Strategy Executor ...");
 
-        // e.g '--strategy-provider=python'
+        // e.g '--strategy-runner-provider=python'
         let provider = StrategyProvider::of(
             &matches
-                .get_one::<String>("STRATEGY_PROVIDER")
+                .get_one::<String>("STRATEGY_RUNNER_PROVIDER")
                 .unwrap_or(&StrategyProvider::PYTHON.as_str().to_owned()),
         )?;
 
         info!("Registering Strategy Executor with provider: {}", &provider.as_str());
 
-        // e.g '--strategy-configuration=<base64_encoded_json_string>'
+        // e.g '--strategy-runner-configuration=<base64_encoded_json_string>'
         let configuration = matches
-            .try_get_one::<String>("STRATEGY_CONFIGURATION")
+            .try_get_one::<String>("STRATEGY_RUNNER_CONFIGURATION")
             .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
 

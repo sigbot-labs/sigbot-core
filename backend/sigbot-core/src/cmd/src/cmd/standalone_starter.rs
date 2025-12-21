@@ -22,7 +22,7 @@ use super::api_starter::SigbotAPIServer;
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::{Arg, Command};
 use common_telemetry::info;
-use sigbot_backtest::server::backtest_factory::{BacktestProvider, SigbotBacktestRunnerFactory};
+use sigbot_backtest::server::backtest_server::SigbotBacktestServer;
 use sigbot_core::config::config::get_config;
 use sigbot_core::llm::handler::llm_factory::SigbotLLMFactory;
 use sigbot_core::{
@@ -33,6 +33,7 @@ use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_order::server::order_server::SigbotOrderServer;
 use sigbot_strategy_runner::server::strategy_runner::SigbotStrategyRunner;
+use sigbot_types::modules::backtest::BacktestMgrProvider;
 use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
 use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_types::modules::notification::notification::NotificationProvider;
@@ -74,7 +75,7 @@ impl SigbotStandaloneStarter {
                         "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
                         DatafeedProvider::BINANCE.as_str(),
                         DatafeedProvider::TWITTER.as_str(),
-                        DatafeedProvider::TRUSHSOCIAL.as_str()
+                        DatafeedProvider::TRUTHSOCIAL.as_str()
                     ))
                     .default_value(DatafeedProvider::BINANCE.as_str()),
             )
@@ -86,8 +87,8 @@ impl SigbotStandaloneStarter {
                     .help("The configuration of datafeed. (base64 encoded JSON string)"),
             )
             .arg(
-                Arg::new("STRATEGY_PROVIDER")
-                    .long("strategy-provider")
+                Arg::new("STRATEGY_RUNNER_PROVIDER")
+                    .long("strategy-runner-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(20)
                     .help(format!(
@@ -98,7 +99,7 @@ impl SigbotStandaloneStarter {
             )
             .arg(
                 Arg::new("STRATEGY_CONFIGURATION")
-                    .long("strategy-configuration")
+                    .long("strategy-runner-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(21)
                     .help("The configuration of strategy. (base64 encoded JSON string)"),
@@ -116,14 +117,14 @@ impl SigbotStandaloneStarter {
             )
             .arg(
                 Arg::new("ORDER_MANAGER_CONFIGURATION")
-                    .long("order-configuration")
+                    .long("order-manager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(31)
                     .help("The configuration of order manager. (base64 encoded JSON string)"),
             )
             .arg(
                 Arg::new("WALLET_MANAGER_PROVIDER")
-                    .long("wallet-provider")
+                    .long("wallet-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(40)
                     .help(format!(
@@ -134,29 +135,29 @@ impl SigbotStandaloneStarter {
             )
             .arg(
                 Arg::new("WALLET_MANAGER_CONFIGURATION")
-                    .long("wallet-configuration")
+                    .long("wallet-manager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(41)
                     .help("The configuration of wallet manager. (base64 encoded JSON string)"),
             )
             .arg(
-                Arg::new("BACKTEST_PROVIDER")
-                    .long("backtest-provider")
+                Arg::new("BACKTEST_MANAGER_PROVIDER")
+                    .long("backtest-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(50)
                     .help(format!(
-                        "The backtest runner provider to use. (supported are: {}, {})",
-                        BacktestProvider::KLINE.as_str(),
-                        BacktestProvider::TRADES.as_str(),
+                        "The backtest manager provider to use. (supported are: {}, {})",
+                        BacktestMgrProvider::KLINE.as_str(),
+                        BacktestMgrProvider::TRADES.as_str(),
                     ))
-                    .default_value(BacktestProvider::KLINE.as_str()),
+                    .default_value(BacktestMgrProvider::KLINE.as_str()),
             )
             .arg(
-                Arg::new("BACKTEST_CONFIGURATION")
-                    .long("backtest-configuration")
+                Arg::new("BACKTEST_MANAGER_CONFIGURATION")
+                    .long("backtest-manager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(51)
-                    .help("The configuration of backtest. (base64 encoded JSON string)"),
+                    .help("The configuration of backtest manager. (base64 encoded JSON string)"),
             )
             .arg(
                 Arg::new("NOTIFICATION_PROVIDER")
@@ -199,14 +200,14 @@ impl SigbotStandaloneStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
+        SigbotAPIServer::startup(matches, verbose, None, None).await;
         SigbotDatafeedIngestor::startup(matches, verbose).await;
         SigbotStrategyRunner::startup(matches, verbose).await;
         SigbotOrderServer::startup(matches, verbose).await;
         SigbotWalletServer::startup(matches, verbose).await;
         SigbotNotificationForwarder::startup(matches, verbose).await;
-        SigbotBacktestRunnerFactory::startup(matches, verbose).await;
+        SigbotBacktestServer::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;
-        SigbotAPIServer::startup(matches, verbose, None, None).await;
     }
 
     fn print_banner(verbose: bool) {

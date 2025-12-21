@@ -33,14 +33,7 @@ pub struct SigbotLocalMessagerClientConfig {
 
 impl std::fmt::Display for SigbotLocalMessagerClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "SigbotLocalQueueClientConfig=(
-                queue_size={:?}),
-            )
-            ",
-            self.queue_size,
-        )
+        write!(f, "(queue_size={:?})", self.queue_size)
     }
 }
 

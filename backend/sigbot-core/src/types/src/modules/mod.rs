@@ -21,6 +21,7 @@
 use anyhow::{Error, Result};
 use sigbot_utils::base64s;
 
+pub mod backtest;
 pub mod datafeed;
 pub mod exchange;
 pub mod messager;

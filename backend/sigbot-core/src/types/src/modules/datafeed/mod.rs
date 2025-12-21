@@ -46,8 +46,8 @@ mod tests {
     fn test_from_json() {
         let json = r#"{
             "datafeed_config": {"name": "tenant101_datafeed", "provider": "BINANCE", "configuration": {"endpoint": "https://api.binance.com"}, "secrets": {"api_secret": "1234567890"}}, 
-            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}}
-            "#;
+            "messager_config": {"name": "tenant101_messager", "provider": "MQTT", "configuration": {"endpoint": "https://localhost:1883"}, "secrets": {"api_secret": "1234567890"}}
+            }"#;
         let argument = SigbotDatefeedArgument::from_json(json).unwrap();
         assert_eq!(argument.datafeed_config.name, Some("BINANCE".to_string()));
         assert_eq!(argument.messager_config.name, Some("MQTT".to_string()));

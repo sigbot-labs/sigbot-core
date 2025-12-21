@@ -18,29 +18,33 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::server::backtest_factory::{BacktestProvider, ISigbotBacktestRunner};
+use crate::manager::backtest_factory::ISigbotBacktestManager;
 use async_trait::async_trait;
-use common_telemetry::info;
+use common_telemetry::{info, warn};
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
+use sigbot_types::modules::backtest::{BacktestMgrProvider, SigbotBacktestManagerArgument};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
-pub struct SigbotTradesBacktestRunner {
+pub struct SigbotKlineBacktestManager {
+    messager: Arc<Mutex<Option<Arc<dyn ISigbotMessagerClient + Send + Sync>>>>,
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
     dlock_handler: Option<Arc<dyn IDLockHandler>>,
 }
 
-impl SigbotTradesBacktestRunner {
+impl SigbotKlineBacktestManager {
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
 
     pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
         Arc::new(Self {
+            messager: Arc::new(Mutex::new(None)),
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
@@ -49,10 +53,10 @@ impl SigbotTradesBacktestRunner {
     }
 
     pub(super) async fn execute(&self) {
-        info!("Executing trades based backtest runner ...");
+        info!("Executing kline based backtest runner ...");
 
         // Acquire to distrbuted lock.
-        let dlock_name = "TRADES_BACKTEST";
+        let dlock_name = "KLINE_BACKTEST";
         let acquired = self
             .dlock_handler
             .clone()
@@ -67,30 +71,38 @@ impl SigbotTradesBacktestRunner {
                 info!("Unable to acquire dlock with {}", dlock_name);
             }
             Err(e) => {
-                info!("Failed to acquire dlock: {:?}", e.to_string());
+                warn!("Failed to acquire dlock: {:?}", e.to_string());
             }
         }
 
-        info!("Executed trades based backtest runner process ...");
+        info!("Executed kline based backtest runner process ...");
     }
 
     pub(super) async fn process(&self) {
-        info!("Processing trades based backtest runner ...");
-        // TODO: Implement the logic to process trades based backtest.
+        info!("Processing kline based backtest runner ...");
+        // TODO: Implement the logic to process kline based backtest.
         // TODO: 1. Start the mock exchange APIs for receiving from strategy runner trade signals (via EMQx pub/sub event-driven).
-        // TODO: 2. Start the ticker data extractor for pushing to strategy runner (via EMQx pub/sub event-driven).
+        // TODO: 2. Start the kline data extractor for pushing to strategy runner (via EMQx pub/sub event-driven).
         // TODO: 3. Start the summarizer for calculating the loss/profit and updating to balances (via EMQx pub/sub event-driven).
+
         unimplemented!()
     }
 }
 
 #[async_trait]
-impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
-    fn provider(&self) -> BacktestProvider {
-        BacktestProvider::TRADES
+impl ISigbotBacktestManager for SigbotKlineBacktestManager {
+    fn provider(&self) -> BacktestMgrProvider {
+        BacktestMgrProvider::KLINE
     }
 
-    async fn startup(&self) {
+    #[allow(unused_variables)] // TODO: Remove this once the argument is used.
+    async fn startup(
+        &self,
+        argument: Arc<SigbotBacktestManagerArgument>,
+        messager: Arc<dyn ISigbotMessagerClient + Send + Sync>,
+    ) {
+        *self.messager.lock().await = Some(messager.to_owned());
+
         let this = self.clone();
         let cron_expression = self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
         let channel_size = self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS);
@@ -109,15 +121,15 @@ impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
             }
         };
 
-        info!("Starting trades based backtest runner with cron '{}'", cron);
+        info!("Starting kline based backtest runner with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Running trades based backtest runner ...", chrono::Utc::now());
+                info!("{:?} Running kline based backtest runner ...", chrono::Utc::now());
                 that.execute().await;
             })
         })
-        .expect("Failed to create trades based backtest runner job");
+        .expect("Failed to create kline based backtest runner job");
 
         let scheduler = JobScheduler::new_with_channel_size(channel_size)
             .await
@@ -125,23 +137,23 @@ impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
         scheduler
             .add(job)
             .await
-            .expect("Failed to add trades based backtest runner job");
+            .expect("Failed to add kline based backtest runner job");
         scheduler
             .start()
             .await
-            .expect("Failed to start trades based backtest runner scheduler");
+            .expect("Failed to start kline based backtest runner scheduler");
 
         *self.scheduler.lock().await = Some(scheduler);
 
         info!(
-            "Started trades based backtest runner with cron '{}', channels '{}'",
+            "Started kline based backtest runner with cron '{}', channels '{}'",
             cron, channel_size
         );
     }
 
     async fn shutdown(&self) {
         info!(
-            "Closing trades based backtest runner with cron '{}', channels '{}'",
+            "Closing kline based backtest runner with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );
@@ -149,10 +161,10 @@ impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
             scheduler
                 .shutdown()
                 .await
-                .expect("Failed to shutdown trades based backtest runner scheduler");
+                .expect("Failed to shutdown kline based backtest runner scheduler");
         }
         info!(
-            "Closed trades based backtest runner with cron '{}', channels '{}'",
+            "Closed kline based backtest runner with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );
@@ -160,15 +172,4 @@ impl ISigbotBacktestRunner for SigbotTradesBacktestRunner {
 }
 
 #[cfg(test)]
-mod tests {
-    #[allow(unused)]
-    use super::*;
-    use sigbot_core::config::config::AppConfigProperties;
-
-    #[tokio::test]
-    async fn test_verify() {
-        #[allow(unused)]
-        let mut config = AppConfigProperties::default();
-        todo!()
-    }
-}
+mod tests {}

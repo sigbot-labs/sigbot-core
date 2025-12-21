@@ -47,10 +47,7 @@ impl std::fmt::Display for SigbotMqttMessagerClientConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SigbotMqttMessagerClientConfig=(
-                    mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password_len={:?}, mqtt_client_id={:?}, mqtt_timeout={:?}, mqtt_clean_start={:?}, mqtt_qos={:?}, mqtt_retain={:?}),
-            )
-            ",
+            "mqtt_server={:?}, mqtt_port={:?}, mqtt_username={:?}, mqtt_password_len={:?}, mqtt_client_id={:?}, mqtt_timeout={:?}, mqtt_clean_start={:?}, mqtt_qos={:?}, mqtt_retain={:?})",
             self.mqtt_server,
             self.mqtt_port,
             self.mqtt_username,

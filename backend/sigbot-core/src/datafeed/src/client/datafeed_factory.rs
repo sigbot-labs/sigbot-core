@@ -131,7 +131,7 @@ impl SigbotDatafeedClientFactory {
                         )
                         .expect("Failed to register the Twitter datafeed.");
                 }
-                DatafeedProvider::TRUSHSOCIAL => {
+                DatafeedProvider::TRUTHSOCIAL => {
                     Self::get()
                         .write()
                         .unwrap()

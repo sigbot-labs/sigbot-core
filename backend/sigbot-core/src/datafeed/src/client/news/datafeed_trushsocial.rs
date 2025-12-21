@@ -48,7 +48,7 @@ impl SigbotTrushSocialDatafeedClient {
 #[async_trait]
 impl ISigbotDatafeedClient for SigbotTrushSocialDatafeedClient {
     fn provider(&self) -> DatafeedProvider {
-        DatafeedProvider::TRUSHSOCIAL
+        DatafeedProvider::TRUTHSOCIAL
     }
 
     async fn init(&self, _: Arc<SigbotDatefeedArgument>) {

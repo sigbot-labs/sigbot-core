@@ -21,12 +21,13 @@
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::{Arg, Command};
 use common_telemetry::info;
-use sigbot_backtest::server::backtest_factory::{BacktestProvider, SigbotBacktestRunnerFactory};
+use sigbot_backtest::server::backtest_server::SigbotBacktestServer;
 use sigbot_core::config::config::get_config;
 use sigbot_core::{
     config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
     mgmt::apm,
 };
+use sigbot_types::modules::backtest::BacktestMgrProvider;
 use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
@@ -54,25 +55,25 @@ impl SigbotBacktestRunnerStarter {
                     .default_value(MessagerProvider::MQTT.as_str()),
             )
             .arg(
-                Arg::new("BACKTEST_PROVIDER")
+                Arg::new("BACKTEST_MANAGER_PROVIDER")
                     .short('p')
-                    .long("backtest-provider")
+                    .long("backtest-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(
-                        "The Backtest Runner provider to use. (supported are: {}, {})",
-                        BacktestProvider::KLINE.as_str(),
-                        BacktestProvider::TRADES.as_str(),
+                        "The Backtest Manager provider to use. (supported are: {}, {})",
+                        BacktestMgrProvider::KLINE.as_str(),
+                        BacktestMgrProvider::TRADES.as_str(),
                     ))
-                    .default_value(BacktestProvider::KLINE.as_str()),
+                    .default_value(BacktestMgrProvider::KLINE.as_str()),
             )
             .arg(
-                Arg::new("BACKTEST_CONFIGURATION")
+                Arg::new("BACKTEST_MANAGER_CONFIGURATION")
                     .short('c')
-                    .long("backtest-configuration")
+                    .long("backtest-manager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(3)
-                    .help("The configuration of Backtest Runner. (base64 encoded JSON string)"),
+                    .help("The configuration of Backtest Manager. (base64 encoded JSON string)"),
             )
     }
 
@@ -96,7 +97,7 @@ impl SigbotBacktestRunnerStarter {
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotBacktestRunnerFactory::startup(matches, verbose).await;
+        SigbotBacktestServer::startup(matches, verbose).await;
     }
 
     fn print_banner(verbose: bool) {

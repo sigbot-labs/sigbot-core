@@ -69,7 +69,7 @@ impl SigbotDatafeedIngestorStarter {
                         "The providers of multi Datafeeds separated by commas. (supported are: {}, {}, {})",
                         DatafeedProvider::BINANCE.as_str(),
                         DatafeedProvider::TWITTER.as_str(),
-                        DatafeedProvider::TRUSHSOCIAL.as_str()
+                        DatafeedProvider::TRUTHSOCIAL.as_str()
                     ))
                     .default_value(DatafeedProvider::BINANCE.as_str()),
             )
