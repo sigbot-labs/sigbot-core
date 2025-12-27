@@ -19,12 +19,13 @@
 // This includes modifications and derived works.
 
 use crate::client::cex::exchange_binance::SigbotBinanceClient;
+use crate::client::stock::exchange_ibkr::SigbotIBKRClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::exchange::exchange::{ExchangeInfo, ExchangeProvider};
-use sigbot_types::modules::exchange::models::trade_market::{KlineModel, PriceModel};
+use sigbot_types::modules::exchange::models::trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo};
 use sigbot_types::modules::exchange::models::trade_position::{EntryTradePosition, ExitTradePosition, TradeResult};
 use std::{
     collections::HashMap,
@@ -56,6 +57,12 @@ pub trait ISigbotExchangeClient: Send + Sync {
         original_order_id: u64,
         position: &ExitTradePosition,
     ) -> Result<TradeResult, Error>;
+    /// Search for symbols/stocks by query string
+    /// Returns a list of matching symbols with their contract IDs and metadata
+    async fn search_symbols(&self, query: &str, sec_type: Option<&str>) -> Result<Vec<SymbolInfo>, Error>;
+    /// Get current order list from the exchange
+    /// Used for syncing historical orders to wallet manager's orders table
+    async fn get_orders(&self, account_id: Option<&str>, filters: Option<&str>) -> Result<Vec<OrderInfo>, Error>;
 }
 
 lazy_static! {
@@ -91,6 +98,13 @@ impl SigbotExchangeClientFactory {
                         ExchangeProvider::BINANCE.as_str(),
                         SigbotBinanceClient::new(exchange).await, // TODO: set up run configuration?
                     )
+                    .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
+            }
+            ExchangeProvider::IBKR => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(ExchangeProvider::IBKR.as_str(), SigbotIBKRClient::new(exchange).await)
                     .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
             }
             _ => panic!("Unsupported exchange provider : '{:?}'.", &provider),

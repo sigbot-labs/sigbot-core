@@ -44,7 +44,7 @@ use sigbot_core::cache::{CacheContainer, ICache};
 use sigbot_types::{
     modules::exchange::exchange::{ExchangeInfo, ExchangeProvider},
     modules::exchange::models::{
-        trade_market::{KlineModel, PriceModel},
+        trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
         trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
     },
 };
@@ -832,5 +832,15 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
             order_id: order_id as u64,
             message: None,
         })
+    }
+
+    async fn search_symbols(&self, _query: &str, _sec_type: Option<&str>) -> Result<Vec<SymbolInfo>, Error> {
+        // TODO: Implement symbol search for Binance
+        Err(Error::msg("Symbol search not yet implemented for Binance"))
+    }
+
+    async fn get_orders(&self, _account_id: Option<&str>, _filters: Option<&str>) -> Result<Vec<OrderInfo>, Error> {
+        // TODO: Implement order list retrieval for Binance
+        Err(Error::msg("Order list retrieval not yet implemented for Binance"))
     }
 }

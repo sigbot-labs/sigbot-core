@@ -120,6 +120,8 @@ pub enum ExchangeProvider {
     // DEXs
     HYPERLIQUID,
     LIGHTER,
+    // Stock exchanges
+    IBKR,
 }
 
 impl ExchangeProvider {
@@ -135,6 +137,8 @@ impl ExchangeProvider {
             // DEX
             "HYPERLIQUID" => Ok(ExchangeProvider::HYPERLIQUID),
             "LIGHTER" => Ok(ExchangeProvider::LIGHTER),
+            // Stock exchanges
+            "IBKR" => Ok(ExchangeProvider::IBKR),
             _ => Err(format!("Unsupported the exchange provider: {}", provider)),
         }
     }
@@ -151,6 +155,8 @@ impl ExchangeProvider {
             // DEX
             ExchangeProvider::HYPERLIQUID => "HYPERLIQUID",
             ExchangeProvider::LIGHTER => "LIGHTER",
+            // Stock exchanges
+            ExchangeProvider::IBKR => "IBKR",
         }
     }
 }
