@@ -143,7 +143,7 @@ mime_guess = "2.0.4"
 reqwest = "0.12.12"
 
 # Database libs
-mongodb = "3.0.1"
+mongodb = "3.2.5"
 sqlx = { version = "0.8.3", features = ["sqlite", "postgres"] }
 pgvector = { version = "0.4", features = ["postgres"] }
 rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision"] }
