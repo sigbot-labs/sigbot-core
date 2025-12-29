@@ -19,3 +19,9 @@
 // This includes modifications and derived works.
 
 pub mod exchange_hyperliquid;
+
+use crate::client::ISigbotOrderBookExchangeClient;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait ISigbotDEXExchangeClient: ISigbotOrderBookExchangeClient + Send + Sync {}

@@ -19,3 +19,9 @@
 // This includes modifications and derived works.
 
 pub mod exchange_binance;
+
+use crate::client::ISigbotOrderBookExchangeClient;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait ISigbotCEXExchangeClient: ISigbotOrderBookExchangeClient + Send + Sync {}

@@ -18,16 +18,11 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod exchange_ibkr;
+pub mod exchange_kalshi;
+pub mod exchange_polymarket;
 
-use crate::client::ISigbotOrderBookExchangeClient;
-use anyhow::Error;
+use crate::client::exchange_factory::ISigbotExchangeClient;
 use async_trait::async_trait;
-use sigbot_types::modules::exchange::models::trade_market::OrderInfo;
 
 #[async_trait]
-pub trait ISigbotStockExchangeClient: ISigbotOrderBookExchangeClient {
-    /// Get current stock order list from the exchange
-    /// Used for syncing historical orders to wallet manager's orders table
-    async fn get_stock_orders(&self, account_id: Option<&str>, filters: Option<&str>) -> Result<Vec<OrderInfo>, Error>;
-}
+pub trait ISigbotPredictExchangeClient: ISigbotExchangeClient + Send + Sync {}

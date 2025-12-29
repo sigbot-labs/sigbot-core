@@ -7734,6 +7734,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "binance-sdk",
  "chrono",
  "clap 4.5.34",

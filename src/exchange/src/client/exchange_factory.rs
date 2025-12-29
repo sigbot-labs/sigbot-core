@@ -37,15 +37,6 @@ pub trait ISigbotExchangeClient: Send + Sync {
     fn provider(&self) -> ExchangeProvider;
     async fn init(&self);
     async fn close(&self);
-    async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error>;
-    async fn get_klines(
-        &self,
-        symbol: &str,
-        interval: &str,
-        start_time: Option<i64>,
-        end_time: Option<i64>,
-        limit: u32,
-    ) -> Result<Vec<KlineModel>, Error>;
     async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error>;
     async fn exit_loss_position(
         &self,

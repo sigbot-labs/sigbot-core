@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::exchange_factory::ISigbotExchangeClient;
+use crate::client::{
+    exchange_factory::ISigbotExchangeClient, stock::ISigbotStockExchangeClient, ISigbotOrderBookExchangeClient,
+};
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{error, info};
@@ -33,158 +35,6 @@ use sigbot_types::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-
-// IBKR API response models
-#[derive(Debug, Deserialize)]
-struct IBKRPriceResponse {
-    #[serde(rename = "last")]
-    price: Option<f64>,
-    #[serde(rename = "time")]
-    timestamp: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct IBKRKlineResponse {
-    #[serde(rename = "openTime")]
-    open_time: u64,
-    #[serde(rename = "open")]
-    open_price: f64,
-    #[serde(rename = "high")]
-    high_price: f64,
-    #[serde(rename = "low")]
-    low_price: f64,
-    #[serde(rename = "close")]
-    close_price: f64,
-    #[serde(rename = "volume")]
-    volume: f64,
-    #[serde(rename = "closeTime")]
-    close_time: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct IBKROrderRequest {
-    #[serde(rename = "conid")]
-    conid: u64, // Contract ID - needs to be obtained from IBKR's contract search
-    #[serde(rename = "orderType")]
-    order_type: String, // "LMT" for limit, "MKT" for market
-    side: String, // "BUY" or "SELL"
-    #[serde(rename = "tif")]
-    time_in_force: String, // "DAY" or "GTC"
-    quantity: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    price: Option<f64>, // Required for limit orders
-}
-
-#[derive(Debug, Deserialize)]
-struct IBKROrderResponse {
-    #[serde(rename = "order_id")]
-    order_id: Option<String>, // IBKR returns order_id as string
-    #[serde(rename = "order_status")]
-    order_status: Option<String>,
-    #[serde(rename = "encrypt_message")]
-    #[allow(dead_code)]
-    encrypt_message: Option<String>,
-}
-
-// Order reply message response (may be returned instead of order confirmation)
-#[derive(Debug, Deserialize)]
-struct IBKROrderReplyMessage {
-    id: String,
-    message: Vec<String>,
-    #[serde(rename = "isSuppressed")]
-    #[allow(dead_code)]
-    is_suppressed: bool,
-    #[serde(rename = "messageIds")]
-    #[allow(dead_code)]
-    message_ids: Vec<String>,
-}
-
-// IBKR symbol search response
-#[derive(Debug, Deserialize)]
-struct IBKRSymbolSearchResponse {
-    conid: String,
-    #[serde(rename = "companyHeader")]
-    company_header: Option<String>,
-    #[serde(rename = "companyName")]
-    company_name: Option<String>,
-    symbol: String,
-    description: Option<String>,
-    restricted: Option<String>,
-    sections: Option<Vec<IBKRSection>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct IBKRSection {
-    #[serde(rename = "secType")]
-    sec_type: String,
-    months: Option<String>,
-    exchange: Option<String>,
-}
-
-// IBKR order list response
-#[derive(Debug, Deserialize)]
-struct IBKROrderListResponse {
-    orders: Vec<IBKROrderDetail>,
-    snapshot: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-struct IBKROrderDetail {
-    acct: Option<String>,
-    conidex: Option<String>,
-    conid: Option<u64>,
-    account: Option<String>,
-    #[serde(rename = "orderId")]
-    order_id: Option<u64>,
-    #[serde(rename = "cashCcy")]
-    cash_ccy: Option<String>,
-    #[serde(rename = "sizeAndFills")]
-    size_and_fills: Option<String>,
-    #[serde(rename = "orderDesc")]
-    order_desc: Option<String>,
-    description1: Option<String>,
-    ticker: Option<String>,
-    #[serde(rename = "secType")]
-    sec_type: Option<String>,
-    #[serde(rename = "listingExchange")]
-    listing_exchange: Option<String>,
-    #[serde(rename = "remainingQuantity")]
-    remaining_quantity: Option<f64>,
-    #[serde(rename = "filledQuantity")]
-    filled_quantity: Option<f64>,
-    #[serde(rename = "totalSize")]
-    total_size: Option<f64>,
-    #[serde(rename = "companyName")]
-    company_name: Option<String>,
-    status: Option<String>,
-    #[serde(rename = "order_ccp_status")]
-    order_ccp_status: Option<String>,
-    #[serde(rename = "avgPrice")]
-    avg_price: Option<String>,
-    #[serde(rename = "origOrderType")]
-    orig_order_type: Option<String>,
-    #[serde(rename = "lastExecutionTime")]
-    last_execution_time: Option<String>,
-    #[serde(rename = "orderType")]
-    order_type: Option<String>,
-    #[serde(rename = "timeInForce")]
-    time_in_force: Option<String>,
-    #[serde(rename = "lastExecutionTime_r")]
-    last_execution_time_r: Option<u64>,
-    side: Option<String>,
-    price: Option<f64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct IBKRCancelOrderResponse {
-    msg: Option<String>,
-    #[serde(rename = "order_id")]
-    order_id: u64,
-    #[allow(dead_code)]
-    conid: Option<u64>,
-    #[allow(dead_code)]
-    account: Option<String>,
-}
 
 #[derive(Clone)]
 pub struct SigbotIBKRClientConfig {
@@ -364,118 +214,6 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
     async fn close(&self) {
         info!("Closing IBKR operator with {}", self.config);
         // IBKR HTTP client doesn't need explicit cleanup
-    }
-
-    async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error> {
-        info!("Getting current price for symbol={} from IBKR", symbol);
-
-        let url = format!("{}/v1/api/marketdata/snapshot", self.config.api_endpoint);
-        let headers = self.build_auth_headers();
-        let symbol_str = symbol.to_string();
-
-        let response = self
-            .execute_with_retry(|| {
-                self.http_client
-                    .get(&url)
-                    .headers(headers.clone())
-                    .query(&[("conid", symbol_str.as_str())])
-                    .send()
-            })
-            .await
-            .context("Failed to get current price")?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(Error::msg(format!("IBKR API returned error status: {}", status)));
-        }
-
-        let price_data: IBKRPriceResponse = response.json().await.context("Failed to parse price response")?;
-
-        Ok(PriceModel {
-            price: price_data
-                .price
-                .ok_or_else(|| Error::msg("No price available in response"))?,
-            time: price_data
-                .timestamp
-                .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
-        })
-    }
-
-    async fn get_klines(
-        &self,
-        symbol: &str,
-        interval: &str,
-        start_time: Option<i64>,
-        end_time: Option<i64>,
-        limit: u32,
-    ) -> Result<Vec<KlineModel>, Error> {
-        info!(
-            "Getting klines for symbol={} from IBKR with interval={}",
-            symbol, interval
-        );
-
-        let url = format!("{}/v1/api/marketdata/history", self.config.api_endpoint);
-        let headers = self.build_auth_headers();
-
-        // Convert interval to IBKR format (e.g., "1min", "5min", "1day")
-        let ibkr_interval = match interval {
-            "1m" | "1min" => "1min",
-            "5m" | "5min" => "5min",
-            "15m" | "15min" => "15min",
-            "30m" | "30min" => "30min",
-            "1h" | "1hour" => "1hour",
-            "1d" | "1day" => "1day",
-            "1w" | "1week" => "1week",
-            "1M" | "1month" => "1month",
-            _ => return Err(Error::msg(format!("Unsupported interval: {}", interval))),
-        };
-
-        let mut query_params: Vec<(&str, String)> = vec![
-            ("conid", symbol.to_string()),
-            ("period", ibkr_interval.to_string()),
-            ("bar", ibkr_interval.to_string()),
-        ];
-
-        if let Some(start) = start_time {
-            query_params.push(("startTime", start.to_string()));
-        }
-        if let Some(end) = end_time {
-            query_params.push(("endTime", end.to_string()));
-        }
-        query_params.push(("limit", limit.to_string()));
-
-        let response = self
-            .execute_with_retry(|| {
-                let mut request = self.http_client.get(&url).headers(headers.clone());
-                for (key, value) in &query_params {
-                    request = request.query(&[(key, value.as_str())]);
-                }
-                request.send()
-            })
-            .await
-            .context("Failed to get klines")?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(Error::msg(format!("IBKR API returned error status: {}", status)));
-        }
-
-        let klines_data: Vec<IBKRKlineResponse> = response.json().await.context("Failed to parse klines response")?;
-
-        let klines: Vec<KlineModel> = klines_data
-            .into_iter()
-            .map(|k| KlineModel {
-                open_time: k.open_time,
-                open_price: k.open_price,
-                high_price: k.high_price,
-                low_price: k.low_price,
-                close_price: k.close_price,
-                volume: k.volume,
-                close_time: k.close_time,
-            })
-            .collect();
-
-        Ok(klines)
     }
 
     async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
@@ -837,4 +575,279 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         info!("Retrieved {} orders for account {}", orders.len(), target_account_id);
         Ok(orders)
     }
+}
+
+#[async_trait]
+impl ISigbotOrderBookExchangeClient for SigbotIBKRClient {
+    async fn get_current_price(&self, symbol: &str) -> Result<PriceModel, Error> {
+        info!("Getting current price for symbol={} from IBKR", symbol);
+
+        let url = format!("{}/v1/api/marketdata/snapshot", self.config.api_endpoint);
+        let headers = self.build_auth_headers();
+        let symbol_str = symbol.to_string();
+
+        let response = self
+            .execute_with_retry(|| {
+                self.http_client
+                    .get(&url)
+                    .headers(headers.clone())
+                    .query(&[("conid", symbol_str.as_str())])
+                    .send()
+            })
+            .await
+            .context("Failed to get current price")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(Error::msg(format!("IBKR API returned error status: {}", status)));
+        }
+
+        let price_data: IBKRPriceResponse = response.json().await.context("Failed to parse price response")?;
+
+        Ok(PriceModel {
+            price: price_data
+                .price
+                .ok_or_else(|| Error::msg("No price available in response"))?,
+            time: price_data
+                .timestamp
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
+        })
+    }
+
+    async fn get_klines(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_time: Option<i64>,
+        end_time: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<KlineModel>, Error> {
+        info!(
+            "Getting klines for symbol={} from IBKR with interval={}",
+            symbol, interval
+        );
+
+        let url = format!("{}/v1/api/marketdata/history", self.config.api_endpoint);
+        let headers = self.build_auth_headers();
+
+        // Convert interval to IBKR format (e.g., "1min", "5min", "1day")
+        let ibkr_interval = match interval {
+            "1m" | "1min" => "1min",
+            "5m" | "5min" => "5min",
+            "15m" | "15min" => "15min",
+            "30m" | "30min" => "30min",
+            "1h" | "1hour" => "1hour",
+            "1d" | "1day" => "1day",
+            "1w" | "1week" => "1week",
+            "1M" | "1month" => "1month",
+            _ => return Err(Error::msg(format!("Unsupported interval: {}", interval))),
+        };
+
+        let mut query_params: Vec<(&str, String)> = vec![
+            ("conid", symbol.to_string()),
+            ("period", ibkr_interval.to_string()),
+            ("bar", ibkr_interval.to_string()),
+        ];
+
+        if let Some(start) = start_time {
+            query_params.push(("startTime", start.to_string()));
+        }
+        if let Some(end) = end_time {
+            query_params.push(("endTime", end.to_string()));
+        }
+        query_params.push(("limit", limit.to_string()));
+
+        let response = self
+            .execute_with_retry(|| {
+                let mut request = self.http_client.get(&url).headers(headers.clone());
+                for (key, value) in &query_params {
+                    request = request.query(&[(key, value.as_str())]);
+                }
+                request.send()
+            })
+            .await
+            .context("Failed to get klines")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(Error::msg(format!("IBKR API returned error status: {}", status)));
+        }
+
+        let klines_data: Vec<IBKRKlineResponse> = response.json().await.context("Failed to parse klines response")?;
+
+        let klines: Vec<KlineModel> = klines_data
+            .into_iter()
+            .map(|k| KlineModel {
+                open_time: k.open_time,
+                open_price: k.open_price,
+                high_price: k.high_price,
+                low_price: k.low_price,
+                close_price: k.close_price,
+                volume: k.volume,
+                close_time: k.close_time,
+            })
+            .collect();
+
+        Ok(klines)
+    }
+}
+
+#[async_trait]
+impl ISigbotStockExchangeClient for SigbotIBKRClient {
+    async fn get_stock_orders(&self, account_id: Option<&str>, filters: Option<&str>) -> Result<Vec<OrderInfo>, Error> {
+        unimplemented!()
+    }
+}
+
+// IBKR API response models
+// see:https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-market-data/#response-models
+
+#[derive(Debug, Deserialize)]
+struct IBKRPriceResponse {
+    #[serde(rename = "last")]
+    price: Option<f64>,
+    #[serde(rename = "time")]
+    timestamp: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKRKlineResponse {
+    #[serde(rename = "openTime")]
+    open_time: u64,
+    #[serde(rename = "open")]
+    open_price: f64,
+    #[serde(rename = "high")]
+    high_price: f64,
+    #[serde(rename = "low")]
+    low_price: f64,
+    #[serde(rename = "close")]
+    close_price: f64,
+    #[serde(rename = "volume")]
+    volume: f64,
+    #[serde(rename = "closeTime")]
+    close_time: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct IBKROrderRequest {
+    #[serde(rename = "conid")]
+    conid: u64, // Contract ID - needs to be obtained from IBKR's contract search
+    #[serde(rename = "orderType")]
+    order_type: String, // "LMT" for limit, "MKT" for market
+    side: String, // "BUY" or "SELL"
+    #[serde(rename = "tif")]
+    time_in_force: String, // "DAY" or "GTC"
+    quantity: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    price: Option<f64>, // Required for limit orders
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKROrderResponse {
+    #[serde(rename = "order_id")]
+    order_id: Option<String>, // IBKR returns order_id as string
+    #[serde(rename = "order_status")]
+    order_status: Option<String>,
+    #[serde(rename = "encrypt_message")]
+    #[allow(dead_code)]
+    encrypt_message: Option<String>,
+}
+
+// Order reply message response (may be returned instead of order confirmation)
+#[derive(Debug, Deserialize)]
+struct IBKROrderReplyMessage {
+    id: String,
+    message: Vec<String>,
+    #[serde(rename = "isSuppressed")]
+    #[allow(dead_code)]
+    is_suppressed: bool,
+    #[serde(rename = "messageIds")]
+    #[allow(dead_code)]
+    message_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKRSymbolSearchResponse {
+    conid: String,
+    #[serde(rename = "companyHeader")]
+    company_header: Option<String>,
+    #[serde(rename = "companyName")]
+    company_name: Option<String>,
+    symbol: String,
+    description: Option<String>,
+    restricted: Option<String>,
+    sections: Option<Vec<IBKRSection>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKRSection {
+    #[serde(rename = "secType")]
+    sec_type: String,
+    months: Option<String>,
+    exchange: Option<String>,
+}
+
+// IBKR order list response
+#[derive(Debug, Deserialize)]
+struct IBKROrderListResponse {
+    orders: Vec<IBKROrderDetail>,
+    snapshot: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKROrderDetail {
+    acct: Option<String>,
+    conidex: Option<String>,
+    conid: Option<u64>,
+    account: Option<String>,
+    #[serde(rename = "orderId")]
+    order_id: Option<u64>,
+    #[serde(rename = "cashCcy")]
+    cash_ccy: Option<String>,
+    #[serde(rename = "sizeAndFills")]
+    size_and_fills: Option<String>,
+    #[serde(rename = "orderDesc")]
+    order_desc: Option<String>,
+    description1: Option<String>,
+    ticker: Option<String>,
+    #[serde(rename = "secType")]
+    sec_type: Option<String>,
+    #[serde(rename = "listingExchange")]
+    listing_exchange: Option<String>,
+    #[serde(rename = "remainingQuantity")]
+    remaining_quantity: Option<f64>,
+    #[serde(rename = "filledQuantity")]
+    filled_quantity: Option<f64>,
+    #[serde(rename = "totalSize")]
+    total_size: Option<f64>,
+    #[serde(rename = "companyName")]
+    company_name: Option<String>,
+    status: Option<String>,
+    #[serde(rename = "order_ccp_status")]
+    order_ccp_status: Option<String>,
+    #[serde(rename = "avgPrice")]
+    avg_price: Option<String>,
+    #[serde(rename = "origOrderType")]
+    orig_order_type: Option<String>,
+    #[serde(rename = "lastExecutionTime")]
+    last_execution_time: Option<String>,
+    #[serde(rename = "orderType")]
+    order_type: Option<String>,
+    #[serde(rename = "timeInForce")]
+    time_in_force: Option<String>,
+    #[serde(rename = "lastExecutionTime_r")]
+    last_execution_time_r: Option<u64>,
+    side: Option<String>,
+    price: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IBKRCancelOrderResponse {
+    msg: Option<String>,
+    #[serde(rename = "order_id")]
+    order_id: u64,
+    #[allow(dead_code)]
+    conid: Option<u64>,
+    #[allow(dead_code)]
+    account: Option<String>,
 }

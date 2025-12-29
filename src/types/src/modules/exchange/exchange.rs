@@ -122,6 +122,9 @@ pub enum ExchangeProvider {
     LIGHTER,
     // Stock exchanges
     IBKR,
+    // Prediction markets
+    POLYMARKET,
+    KALSHI,
 }
 
 impl ExchangeProvider {
@@ -139,6 +142,9 @@ impl ExchangeProvider {
             "LIGHTER" => Ok(ExchangeProvider::LIGHTER),
             // Stock exchanges
             "IBKR" => Ok(ExchangeProvider::IBKR),
+            // Prediction markets
+            "POLYMARKET" => Ok(ExchangeProvider::POLYMARKET),
+            "KALSHI" => Ok(ExchangeProvider::KALSHI),
             _ => Err(format!("Unsupported the exchange provider: {}", provider)),
         }
     }
@@ -157,6 +163,9 @@ impl ExchangeProvider {
             ExchangeProvider::LIGHTER => "LIGHTER",
             // Stock exchanges
             ExchangeProvider::IBKR => "IBKR",
+            // Prediction markets
+            ExchangeProvider::POLYMARKET => "POLYMARKET",
+            ExchangeProvider::KALSHI => "KALSHI",
         }
     }
 }
