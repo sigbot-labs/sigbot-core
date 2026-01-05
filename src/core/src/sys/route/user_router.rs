@@ -29,12 +29,12 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use common_telemetry::info;
 use sigbot_types::sys::user::{DeleteUserRequest, QueryUserRequest, SaveUserRequest, User};
 use sigbot_types::{
     sys::user::{DeleteUserResponse, QueryUserResponse, SaveUserRequestWith, SaveUserResponse},
     PageRequest, RespBase,
 };
-use common_telemetry::info;
 
 pub fn init() -> Router<SigbotState> {
     Router::new()

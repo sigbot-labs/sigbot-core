@@ -21,6 +21,7 @@
 use super::llm_factory::ILLMOperation;
 use crate::config::config;
 use anyhow::{Ok, Result};
+use common_telemetry::debug;
 use langchain_rust::{
     chain::{Chain, ConversationalRetrieverChainBuilder},
     embedding::openai::OpenAiEmbedder,
@@ -39,11 +40,13 @@ use sigbot_types::llm::{
     knowledge::{KnowledgeCategory, KnowledgeStatus, KnowledgeUploadInfo},
     LLMProvider,
 };
+use sqlx::postgres::PgPoolOptions;
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     sync::Arc,
+    time::Duration,
 };
 
 /// see:https://github.com/wl4g-ai/langchain-rust/blob/main/examples/conversational_retriever_chain_with_vector_store.rs
@@ -70,8 +73,9 @@ impl LangchainOperation {
         }
 
         let vecdb_config = &config::get_config().llm.vecdb;
+        // Add connect_timeout parameter to connection URL for connection timeout
         let pgconn_url = format!(
-            "postgresql://{}:{}@{}:{}/{}?schema={}",
+            "postgresql://{}:{}@{}:{}/{}?schema={}&connect_timeout=10",
             vecdb_config.pg_vector.username,
             vecdb_config.pg_vector.password.to_owned().unwrap_or_default(),
             vecdb_config.pg_vector.host,
@@ -79,17 +83,31 @@ impl LangchainOperation {
             vecdb_config.pg_vector.database,
             vecdb_config.pg_vector.schema,
         );
+
+        debug!("Connecting to the PG vector database: {}", pgconn_url);
+
         // Create the knowledge vector store for PG vector.
         let pgvec_store = StoreBuilder::new()
             .embedder(OpenAiEmbedder::new(embedding_openai_config))
-            .pre_delete_collection(false)
-            .connection_url(pgconn_url.as_str())
             .vector_dimensions(1536)
+            .pre_delete_collection(false)
+            // Note: connection_url and pool are mutually exclusive - if pool is provided, connection_url is ignored
+            .pool(
+                PgPoolOptions::new()
+                    .acquire_timeout(Duration::from_secs(15))
+                    .idle_timeout(Duration::from_secs(600))
+                    .max_lifetime(Duration::from_secs(1800))
+                    .connect(&pgconn_url)
+                    .await
+                    .expect("Failed to connect to the PG vector database."),
+            )
             .build()
             .await
-            .unwrap();
+            .expect("Failed to create the knowledge vector store for PG vector.");
 
-        // Create call LLM config for openai compability.
+        debug!("Connected to the PG vector database successfully.");
+
+        // Create the call LLM config for openai compability.
         let mut call_openai_config = OpenAIConfig::new().with_api_base(&llm_config.generate.api_uri);
         if let Some(api_key) = &llm_config.generate.api_key {
             call_openai_config = call_openai_config.with_api_key(api_key);

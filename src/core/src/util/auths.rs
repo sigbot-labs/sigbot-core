@@ -23,14 +23,14 @@ use crate::{
     sys::{handler::auth_handler::PrincipalType, route::auth_router::EXCLUDED_PREFIX_PATHS},
 };
 use axum::body::Body;
-use sigbot_types::sys::auth::{LoggedResponse, TokenWrapper};
-use sigbot_utils::{base64s::Base64Helper, webs};
 use chrono::{Duration, Utc};
 use common_telemetry::{debug, error, warn};
 use hyper::{HeaderMap, Response, StatusCode, Uri};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use sigbot_types::sys::auth::{LoggedResponse, TokenWrapper};
+use sigbot_utils::{base64s::Base64Helper, webs};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tower_cookies::cookie::Cookie;
@@ -62,7 +62,7 @@ pub fn create_jwt(
     extra_claims: Option<HashMap<String, String>>,
 ) -> String {
     let expiration = Utc::now()
-        .checked_add_signed(Duration::milliseconds(if is_refresh {
+        .checked_add_signed(Duration::seconds(if is_refresh {
             config.auth.jwt_validity_rk.unwrap() as i64
         } else {
             config.auth.jwt_validity_ak.unwrap() as i64
@@ -79,15 +79,21 @@ pub fn create_jwt(
         ext: extra_claims,
     };
 
-    let secret = &Base64Helper::decode(&config.auth_jwt_secret.to_owned()).unwrap();
     let header = Header::new(config.auth_jwt_algorithm);
-    encode(&header, &claims, &EncodingKey::from_secret(secret)).expect("Failed to encode jwt")
+    // Only EC algorithms (ES256, ES384) are supported
+    let private_key_pem = &Base64Helper::decode(&config.auth_jwt_private_key.to_owned()).unwrap();
+    let encoding_key =
+        EncodingKey::from_ec_pem(private_key_pem).expect("Failed to create EC encoding key from private key");
+    encode(&header, &claims, &encoding_key).expect("Failed to encode jwt")
 }
 
 pub fn validate_jwt(config: &Arc<AppConfig>, token: &str) -> Result<AuthUserClaims, jsonwebtoken::errors::Error> {
-    let secret = &Base64Helper::decode(&config.auth_jwt_secret.to_owned()).unwrap();
     let validation = Validation::new(config.auth_jwt_algorithm);
-    let token_data = decode::<AuthUserClaims>(token, &DecodingKey::from_secret(secret), &validation)?;
+    // Only EC algorithms (ES256, ES384) are supported
+    let public_key_pem = &Base64Helper::decode(&config.auth_jwt_public_key.to_owned()).unwrap();
+    let decoding_key =
+        DecodingKey::from_ec_pem(public_key_pem).expect("Failed to create EC decoding key from public key");
+    let token_data = decode::<AuthUserClaims>(token, &decoding_key, &validation)?;
     Ok(token_data.claims)
 }
 

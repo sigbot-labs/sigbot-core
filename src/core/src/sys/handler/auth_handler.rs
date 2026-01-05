@@ -431,14 +431,14 @@ impl<'a> IAuthHandler for AuthHandler<'a> {
         email: &str,
         headers: &header::HeaderMap,
     ) -> hyper::Response<axum::body::Body> {
-        // TODO: 附加更多自定义 JWT 信息
+        // TODO: Add more custom JWT information.
         let extra_claims = HashMap::new();
         let ak = auths::create_jwt(config, &ptype, uid, uname, email, false, Some(extra_claims));
         let rk = auths::create_jwt(config, &ptype, uid, uname, email, true, None);
 
         let ak_cookie = CookieBuilder::new(&config.auth_jwt_ak_name, ak)
             .path("/")
-            .max_age(Duration::milliseconds(config.auth.jwt_validity_ak.unwrap() as i64))
+            .max_age(Duration::seconds(config.auth.jwt_validity_ak.unwrap() as i64))
             //.secure(true) // true: indicates that only https requests will carry
             .http_only(true)
             .same_site(SameSite::Strict)
@@ -446,7 +446,7 @@ impl<'a> IAuthHandler for AuthHandler<'a> {
 
         let rk_cookie = CookieBuilder::new(&config.auth_jwt_rk_name, rk)
             .path("/")
-            .max_age(Duration::milliseconds(config.auth.jwt_validity_rk.unwrap() as i64))
+            .max_age(Duration::seconds(config.auth.jwt_validity_rk.unwrap() as i64))
             //.secure(true) // true: indicates that only https requests will carry
             .http_only(true)
             .same_site(SameSite::Strict)

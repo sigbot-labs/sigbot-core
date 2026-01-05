@@ -29,7 +29,6 @@ use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use sigbot_utils::secrets::SecretHelper;
 use sigbot_utils::serde_models::{deserialize_option_u32_from_string_or_number, deserialize_u16_from_string_or_number};
 use std::{env, ops::Deref, str::FromStr, sync::Arc, time::Duration};
 use validator::Validate;
@@ -183,6 +182,12 @@ pub struct AuthProperties {
     pub jwt_validity_rk: Option<u64>,
     #[serde(rename = "jwt-secret")]
     pub jwt_secret: Option<String>,
+    // see:openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -pkeyopt ec_param_enc:named_curve | base64 -w 0
+    #[serde(rename = "jwt-private-key")]
+    pub jwt_private_key: Option<String>,
+    // see:openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -pkeyopt ec_param_enc:named_curve | openssl pkey -pubout | base64 -w 0
+    #[serde(rename = "jwt-public-key")]
+    pub jwt_public_key: Option<String>,
     #[serde(rename = "jwt-algorithm")]
     pub jwt_algorithm: Option<String>,
     #[serde(rename = "anonymous-paths")]
@@ -700,9 +705,11 @@ impl Default for AuthProperties {
         AuthProperties {
             jwt_ak_name: Some(String::from("_ak")),
             jwt_rk_name: Some(String::from("_rk")),
-            jwt_validity_ak: Some(3600_000),
-            jwt_validity_rk: Some(86400_000),
+            jwt_validity_ak: Some(3600),
+            jwt_validity_rk: Some(86400),
             jwt_secret: None,
+            jwt_private_key: None,
+            jwt_public_key: None,
             jwt_algorithm: None,
             anonymous_paths: None,
             oidc: OidcProperties::default(),
@@ -1052,7 +1059,8 @@ pub struct AppConfig {
     pub inner: AppConfigProperties,
     pub auth_jwt_ak_name: String,
     pub auth_jwt_rk_name: String,
-    pub auth_jwt_secret: String,
+    pub auth_jwt_private_key: String,
+    pub auth_jwt_public_key: String,
     pub auth_jwt_algorithm: Algorithm,
     pub auth_anonymous_glob_matcher: Option<GlobSet>,
 }
@@ -1087,25 +1095,35 @@ impl AppConfig {
             globset = Some(builder.build().unwrap());
         }
 
-        let jwt_secret = match config.auth.jwt_secret.to_owned() {
-            Some(secret) => secret,
-            None => {
-                let generated_jwt_secret = SecretHelper::generate_secret_base64(32).to_string();
-                tracing::debug!("Generated the jwt secret: {}", generated_jwt_secret);
-                generated_jwt_secret
-            }
-        };
-
         let auth_jwt_algorithm = Algorithm::from_str(
             config
                 .auth
                 .jwt_algorithm
                 .to_owned()
-                .unwrap_or(String::from("HS256"))
+                .unwrap_or(String::from("ES256"))
                 .as_str(),
         )
         .ok()
         .expect("Invalid JWT algorithm configured");
+
+        // Only EC algorithms (ES256, ES384) are supported
+        if !matches!(auth_jwt_algorithm, Algorithm::ES256 | Algorithm::ES384) {
+            panic!(
+                "Only EC algorithms (ES256/ES384) are supported. Got: {:?}",
+                auth_jwt_algorithm
+            );
+        }
+
+        let jwt_private_key = config
+            .auth
+            .jwt_private_key
+            .to_owned()
+            .expect("jwt-private-key is required for EC algorithms (ES256/ES384)");
+        let jwt_public_key = config
+            .auth
+            .jwt_public_key
+            .to_owned()
+            .expect("jwt-public-key is required for EC algorithms (ES256/ES384)");
 
         Arc::new(AppConfig {
             inner: config.clone(),
@@ -1121,7 +1139,8 @@ impl AppConfig {
                 .to_owned()
                 .unwrap_or(String::from("_rk"))
                 .to_string(),
-            auth_jwt_secret: jwt_secret,
+            auth_jwt_private_key: jwt_private_key,
+            auth_jwt_public_key: jwt_public_key,
             auth_jwt_algorithm,
             auth_anonymous_glob_matcher: globset,
         })

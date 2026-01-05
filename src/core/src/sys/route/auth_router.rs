@@ -69,9 +69,10 @@ pub const AUTH_CALLBACK_OIDC_URI: &str = "/auth/callback/oidc";
 pub const AUTH_CALLBACK_GITHUB_URI: &str = "/auth/callback/github";
 pub const AUTH_WALLET_ETHERS_VERIFY_URI: &str = "/auth/wallet/ethers/verify";
 pub const AUTH_LOGOUT_URI: &str = "/auth/logout";
+pub const AUTH_JWT_PUBLIC_KEY_URI: &str = "/sys/auth/jwt-public-key";
 pub const STATIC_RESOURCES_PREFIX_URI: &str = "/static";
 
-pub const EXCLUDED_PREFIX_PATHS: [&str; 8] = [
+pub const EXCLUDED_PREFIX_PATHS: [&str; 9] = [
     AUTH_PASSWORD_PUBKEY_URI,
     AUTH_PASSWORD_VERIFY_URI,
     AUTH_CONNECT_OIDC_URI,
@@ -79,6 +80,7 @@ pub const EXCLUDED_PREFIX_PATHS: [&str; 8] = [
     AUTH_CALLBACK_OIDC_URI,
     AUTH_CALLBACK_GITHUB_URI,
     AUTH_WALLET_ETHERS_VERIFY_URI,
+    AUTH_JWT_PUBLIC_KEY_URI,
     STATIC_RESOURCES_PREFIX_URI,
 ];
 
@@ -96,6 +98,7 @@ pub fn init() -> Router<SigbotState> {
         .route(AUTH_CALLBACK_GITHUB_URI, get(handle_callback_github))
         .route(AUTH_WALLET_ETHERS_VERIFY_URI, post(handle_wallet_ethers_verify))
         .route(AUTH_LOGOUT_URI, get(handle_logout))
+        .route(AUTH_JWT_PUBLIC_KEY_URI, get(handle_jwt_public_key))
         .route(static_resources_uri.as_str(), get(handle_static))
         //.without_v07_checks()
         .fallback(handle_page_404) // Global auto internal forwarding when not found.
@@ -218,16 +221,15 @@ async fn validate_token(state: &SigbotState, ak: &str) -> (bool, Option<AuthUser
 //     (StatusCode::OK, Html(DEFAULT_LOGIN_HTML))
 // }
 
-// /*
-//  * When unauthentication auto internal forword example:
-//  *
-//  *  let protected_route = get(|| async {
-//  *      if !has_permission() {
-//  *          return handle_403().await;
-//  *      }
-//  *      // Some logical process ...
-//  *  });
-//  */
+// /// When unauthentication auto internal forword example:
+// ///
+// ///  let protected_route = get(|| async {
+// ///      if !has_permission() {
+// ///          return handle_403().await;
+// ///      }
+// ///      // Some logical process ...
+// ///  });
+// ///
 // async fn handle_page_403() -> impl IntoResponse {
 //     (StatusCode::FORBIDDEN, Html(DEFAULT_403_HTML))
 // }
@@ -245,7 +247,6 @@ async fn handle_page_404() -> impl IntoResponse {
     responses((status = 200, description = "Login pubkey.")),
     tag = "Authentication"
 )]
-#[allow(unused)]
 async fn handle_password_pubkey(
     State(state): State<SigbotState>,
     ValidatedJson(param): ValidatedJson<PasswordPubKeyRequest>,
@@ -368,7 +369,7 @@ async fn handle_connect_oidc(State(state): State<SigbotState>, headers: header::
                         .path("/")
                         .http_only(true)
                         //.secure(true) // true: indicates that only https requests will carry
-                        .max_age(Duration::milliseconds(state.config.auth.jwt_validity_ak.unwrap() as i64))
+                        .max_age(Duration::seconds(state.config.auth.jwt_validity_ak.unwrap() as i64))
                         .build();
                     return auths::auth_resp_redirect_or_json(
                         &state.config,
@@ -900,6 +901,28 @@ async fn handle_logout(
             );
         }
     }
+}
+
+// ----- JWT Public Key for Gateway Service. -----
+
+#[utoipa::path(
+    get,
+    path = AUTH_JWT_PUBLIC_KEY_URI,
+    responses((status = 200, description = "Get JWT public key for token validation.")),
+    tag = "Authentication"
+)]
+async fn handle_jwt_public_key(State(state): State<SigbotState>) -> axum::Json<serde_json::Value> {
+    use axum::Json;
+
+    // Return JWT public key for token validation
+    // This endpoint is used by gateway services (like sigbot-researcher) to validate JWT tokens
+    // Only EC algorithms (ES256, ES384) are supported
+    let algorithm = state.config.auth_jwt_algorithm;
+    let response = serde_json::json!({
+        "publicKey": state.config.auth_jwt_public_key.clone(),
+        "algorithm": format!("{:?}", algorithm),
+    });
+    Json(response)
 }
 
 fn get_auth_handler(state: &SigbotState) -> Box<dyn IAuthHandler + '_> {
