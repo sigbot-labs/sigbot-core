@@ -31,7 +31,7 @@ use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
+        trade_position::{PlaceTradeSignal, ExitTradePosition, TradeResult},
     },
 };
 use std::collections::HashMap;
@@ -245,7 +245,7 @@ impl ISigbotExchangeClient for SigbotHyperliquidClient {
         unimplemented!("Hyperliquid does not support WebSocket API");
     }
 
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
         unimplemented!("Hyperliquid does not support entry position trading");
     }

@@ -1,0 +1,99 @@
+---
+description: Strategy runner module coding guidelines
+globs: src/strategy/**/*.rs,src/core/src/modules/strategy/**/*.rs
+alwaysApply: false
+---
+You are working on the Strategy Runner module (`SigbotStrategyRunner`). This microservice executes trading strategies based on market data.
+
+**Architecture & Responsibilities**:
+- **Strategy Runner**: Subscribes to market/news data from EMQX (ISigbotMessagerClient) as input, executes strategy logic to generate trading signals, and publishes trading signals to EMQX
+
+**Key Responsibilities**:
+1. **Market Data Subscription**:
+   - Subscribe to market data topics (TOPIC_MARKET_STREAMS) from EMQX
+   - Parse market data messages (klines, ticks, news)
+   - Handle real-time data streams
+
+2. **Strategy Execution**:
+   - Execute user-defined strategies (Rust, Python, etc.)
+   - Run strategies in isolated/sandboxed environment
+   - Handle strategy errors without crashing the system
+   - Generate trading signals based on strategy logic
+
+3. **Signal Publishing**:
+   - Publish trading signals (`SigbotTradeSignal`) to EMQX (TOPIC_TRADING_SIGNALS)
+   - Include signal metadata (strategy_id, signal_id, tenant_id)
+   - Ensure signal delivery reliability
+
+4. **Strategy SDK**:
+   - Provide SDK for strategy developers
+   - Support multiple programming languages
+   - Expose market data access APIs
+   - Provide order management interfaces
+
+**Coding Guidelines**:
+
+1. **Message-Driven Architecture**:
+   - Process market data asynchronously
+   - Handle data deserialization errors gracefully
+   - Support concurrent strategy execution
+   - Maintain data ordering per symbol when needed
+
+2. **Strategy Execution Engine**:
+   - Isolate strategy execution in sandboxed environment
+   - Implement strategy timeout mechanisms
+   - Handle strategy panics/errors gracefully
+   - Log strategy execution metrics (latency, errors)
+   - Support hot-reloading strategies
+
+3. **SDK Design**:
+   - Provide clear, well-documented API for strategy developers
+   - Support multiple languages (Rust, Python via SDK)
+   - Version SDK APIs carefully (backward compatibility)
+   - Provide market data access functions
+   - Expose technical indicators and utilities
+
+4. **Data Processing**:
+   - Efficiently process high-frequency market data
+   - Use efficient data structures (avoid unnecessary cloning)
+   - Cache frequently accessed data
+   - Support data aggregation (OHLCV, indicators)
+
+5. **Signal Generation**:
+   - Validate signals before publishing
+   - Include all required metadata in signals
+   - Support different signal types (buy, sell, modify, cancel)
+   - Handle signal generation errors
+
+6. **AI Integration** (for sigbot-researcher):
+   - Use LangChain for LLM interactions
+   - Validate generated strategy code before execution
+   - Implement code review and safety checks
+   - Cache generated strategies when appropriate
+
+7. **Performance**:
+   - Optimize strategy execution for low latency
+   - Use efficient data structures for market data
+   - Implement strategy result caching
+   - Profile strategy execution regularly
+   - Support parallel strategy execution
+
+8. **Error Handling**:
+   - Handle strategy errors without crashing the system
+   - Log errors with full context (strategy_id, data, error)
+   - Implement circuit breaker for failing strategies
+   - Support error recovery mechanisms
+
+9. **Testing**:
+   - Test strategy execution with various market data inputs
+   - Verify strategy isolation and sandboxing
+   - Test signal generation logic
+   - Test concurrent strategy execution
+   - Test error scenarios (strategy panics, timeouts)
+   - Validate generated code safety (for AI-generated strategies)
+
+10. **Configuration**:
+    - Support per-strategy configuration
+    - Allow enabling/disabling specific strategies
+    - Configure execution timeouts and resource limits
+    - Support strategy-specific parameters

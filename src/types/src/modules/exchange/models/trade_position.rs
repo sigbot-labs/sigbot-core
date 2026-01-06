@@ -21,20 +21,20 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EntryTradePosition {
-    pub open_pos: EntryPosition,
-    pub stop_loss: Option<ExitTradePosition>,
-    pub stop_profit: Option<ExitTradePosition>,
+pub struct PlaceTradeSignal {
+    pub enter_pos: EntryPosition,
+    pub exit_loss: Option<ExitTradePosition>,
+    pub exit_profit: Option<ExitTradePosition>,
     pub description: String,
 }
 
-impl EntryTradePosition {
-    pub fn validate(&self) -> Result<&EntryTradePosition, String> {
-        self.open_pos.validate()?;
-        if let Some(pos) = &self.stop_loss {
+impl PlaceTradeSignal {
+    pub fn validate(&self) -> Result<&PlaceTradeSignal, String> {
+        self.enter_pos.validate()?;
+        if let Some(pos) = &self.exit_loss {
             pos.validate()?;
         }
-        if let Some(pos) = &self.stop_profit {
+        if let Some(pos) = &self.exit_profit {
             pos.validate()?;
         }
         Ok(self)

@@ -1,0 +1,154 @@
+---
+description: API server module coding guidelines
+globs: src/core/src/sys/**/*.rs,src/cmd/src/cmd/api_starter.rs
+alwaysApply: false
+---
+You are working on the API Server module (SigbotAPIServer). This microservice provides unified CRUD API capabilities for SigBot.
+
+**Architecture & Responsibilities**:
+- **2.1.1 API Server**: Provides unified API CRUD capabilities for all SigBot resources
+- Serves as the main entry point for external clients (including sigbot-researcher)
+- Provides REST API for managing strategies, orders, wallets, backtests, etc.
+- Supports multi-tenant architecture
+
+**Key Responsibilities**:
+1. **REST API Endpoints**:
+   - Provide CRUD operations for all resources
+   - Support resource filtering, pagination, sorting
+   - Handle file uploads/downloads when needed
+   - Support batch operations
+
+2. **Multi-Tenant Support**:
+   - Extract tenant_id from requests (JWT, headers, path)
+   - Isolate data per tenant
+   - Validate tenant access permissions
+   - Support tenant-specific configurations
+
+3. **Authentication & Authorization**:
+   - Implement JWT-based authentication
+   - Support OAuth2/OpenID Connect
+   - Validate user permissions per endpoint
+   - Handle token refresh and expiration
+
+4. **Resource Management**:
+   - Strategies: CRUD, deployment, execution control
+   - Orders: Query order history, status
+   - Wallets: Query balances, positions, ledger
+   - Backtests: Create, query, manage backtest jobs
+   - Research Cases: For sigbot-researcher integration
+
+5. **API Documentation**:
+   - Generate OpenAPI/Swagger documentation
+   - Provide interactive API explorer
+   - Include request/response examples
+   - Document authentication requirements
+
+**Coding Guidelines**:
+
+1. **API Design**:
+   - Follow RESTful conventions strictly
+   - Use appropriate HTTP methods (GET, POST, PUT, DELETE, PATCH)
+   - Return proper HTTP status codes (200, 201, 400, 401, 403, 404, 500)
+   - Version APIs (e.g., `/api/v1/strategies`, `/api/v2/...`)
+   - Use plural nouns for resources (`/strategies`, `/orders`)
+   - Support nested resources when appropriate (`/strategies/{id}/backtests`)
+
+2. **Request/Response Handling**:
+   - Use serde for request/response serialization
+   - Validate request payloads before processing
+   - Return consistent response formats
+   - Support JSON and potentially other formats (MessagePack, etc.)
+
+3. **Error Handling**:
+   - Return consistent error response format:
+     ```json
+     {
+       "error": {
+         "code": "ERROR_CODE",
+         "message": "Human-readable message",
+         "details": {}
+       }
+     }
+     ```
+   - Use appropriate HTTP status codes
+   - Include error codes for programmatic handling
+   - Log API errors with full context (user_id, tenant_id, endpoint, error)
+   - Never expose internal error details to clients
+
+4. **Authentication**:
+   - Implement authentication middleware (tower middleware)
+   - Extract JWT tokens from Authorization header
+   - Validate token signature and expiration
+   - Extract user_id and tenant_id from token claims
+   - Support token refresh mechanism
+   - Handle token expiration gracefully (return 401)
+
+5. **Authorization**:
+   - Implement authorization middleware
+   - Check user permissions for each endpoint
+   - Support role-based access control (RBAC)
+   - Validate tenant access (users can only access their tenant's data)
+   - Log authorization failures
+
+6. **Validation**:
+   - Validate all input parameters (path, query, body)
+   - Use validator crate or custom validation
+   - Return validation errors clearly (400 Bad Request)
+   - Sanitize user inputs to prevent injection attacks
+   - Validate data types and ranges
+
+7. **Multi-Tenancy**:
+   - Extract tenant_id from JWT token or request context
+   - Filter all queries by tenant_id
+   - Prevent cross-tenant data access
+   - Support tenant-specific rate limiting
+   - Log tenant_id in all operations
+
+8. **Pagination & Filtering**:
+   - Support pagination (limit, offset or cursor-based)
+   - Support filtering by multiple fields
+   - Support sorting by multiple fields
+   - Return pagination metadata in responses
+   - Limit maximum page size
+
+9. **Performance**:
+   - Use async handlers for all endpoints (Axum)
+   - Implement request rate limiting per user/tenant
+   - Cache responses when appropriate (strategies, configurations)
+   - Optimize database queries (use indexes, avoid N+1)
+   - Use connection pooling for database
+   - Monitor API latency and throughput
+
+10. **Documentation**:
+    - Use utoipa for OpenAPI documentation
+    - Document all endpoints with descriptions
+    - Include request/response schemas
+    - Provide example requests and responses
+    - Document authentication requirements
+    - Keep API docs synchronized with code
+    - Generate interactive Swagger UI
+
+11. **Security**:
+    - Validate and sanitize all inputs
+    - Prevent SQL injection (use parameterized queries)
+    - Prevent XSS attacks
+    - Use HTTPS in production
+    - Implement CORS policies
+    - Rate limit to prevent abuse
+    - Log security-related events
+
+12. **Testing**:
+    - Write integration tests for all endpoints
+    - Test authentication and authorization
+    - Test multi-tenant isolation
+    - Test error scenarios (invalid input, unauthorized access)
+    - Test pagination and filtering
+    - Use test fixtures for consistent testing
+    - Mock external dependencies (database, message broker)
+
+13. **Configuration**:
+    - Support environment-based configuration
+    - Configure API server port and host
+    - Configure CORS settings
+    - Configure rate limiting rules
+    - Support feature flags for API endpoints

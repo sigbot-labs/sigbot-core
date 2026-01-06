@@ -47,7 +47,7 @@ use sigbot_types::{
     modules::exchange::exchange::{ExchangeInfo, ExchangeProvider},
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
+        trade_position::{ExitTradePosition, PlaceTradeSignal, TradeResult},
     },
 };
 use std::collections::HashMap;
@@ -417,24 +417,24 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
         info!("Closed Binance operator with {}", self.config);
     }
 
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
 
-        let order_type_str = signal.open_pos.order_type.to_str();
+        let order_type_str = signal.enter_pos.order_type.to_str();
         //let order_type = match order_type_str {
         //    "MARKET" => NewOrderTypeEnum::Market,
         //    "LIMITED" | "LIMIT" => NewOrderTypeEnum::Limit,
         //    _ => return Err(Error::msg(format!("Unsupported order type: {}", order_type_str))),
         //};
-        let side = RestNewOrderSideEnum::from_str(signal.open_pos.side.to_side_str())
+        let side = RestNewOrderSideEnum::from_str(signal.enter_pos.side.to_side_str())
             .map_err(|e| Error::msg(format!("Invalid order side: {:?}", e)))?;
 
-        let mut builder = NewOrderParams::builder(signal.open_pos.symbol.to_string(), side, order_type_str.to_owned())
+        let mut builder = NewOrderParams::builder(signal.enter_pos.symbol.to_string(), side, order_type_str.to_owned())
             .quantity(Some(
-                Decimal::from_str_exact(&signal.open_pos.quantity.to_string())
+                Decimal::from_str_exact(&signal.enter_pos.quantity.to_string())
                     .map_err(|e| Error::msg(format!("Invalid quantity value: {}", e)))?,
             ));
-        if let Some(price) = signal.open_pos.price {
+        if let Some(price) = signal.enter_pos.price {
             let price_str = price.to_string();
             builder = builder.price(Some(
                 Decimal::from_str_exact(&price_str).map_err(|e| Error::msg(format!("Invalid price value: {}", e)))?,
@@ -449,9 +449,9 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
 
         info!(
             "[OPEN_POS] Opening position - symbol={}, side={}, quantity={}",
-            signal.open_pos.symbol,
-            signal.open_pos.side.to_side_str(),
-            signal.open_pos.quantity
+            signal.enter_pos.symbol,
+            signal.enter_pos.side.to_side_str(),
+            signal.enter_pos.quantity
         );
         let response = rest_client.new_order(params).await.context("Failed to New order")?;
         let data = response.data().await?;

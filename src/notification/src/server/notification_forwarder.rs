@@ -25,10 +25,7 @@ use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
 use sigbot_types::modules::messager::TOPIC_NOTIFICATION_MESSAGES;
 use std::{future::Future, pin::Pin, sync::Arc};
 
-pub struct SigbotNotificationForwarder {
-    // TODO: email client.
-    // TODO: telegram client.
-}
+pub struct SigbotNotificationForwarder {}
 
 impl SigbotNotificationForwarder {
     pub async fn new() -> Arc<Self> {
@@ -80,13 +77,13 @@ impl SigbotNotificationForwarder {
     }
 
     pub async fn shutdown() {
-        info!("Shutting down Notification clients.");
-        SigbotNotificationClientFactory::close().await;
-        info!("Shutting down Notification clients.");
-
         info!("Shutting down Messager client.");
         SigbotMessagerClientFactory::close().await;
         info!("Shutting down Messager client.");
+
+        info!("Shutting down Notification clients.");
+        SigbotNotificationClientFactory::close().await;
+        info!("Shutting down Notification clients.");
     }
 }
 

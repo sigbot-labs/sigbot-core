@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::modules::exchange::models::trade_position::EntryTradePosition;
+use crate::modules::exchange::models::trade_position::PlaceTradeSignal;
 use serde::{Deserialize, Serialize};
 
 /// Message (from strategy-runner to order-manager)
@@ -33,7 +33,7 @@ pub struct SigbotTradeSignal {
     /// Exchange Name
     pub exchange: String,
     /// Trading Signal
-    pub signal: EntryTradePosition,
+    pub signal: PlaceTradeSignal,
 }
 
 impl SigbotTradeSignal {

@@ -1,10 +1,33 @@
 ---
-description: 
-globs: *.tsx,*.ts,*.js,*.css,*.html,*.py,*.go,*.rs,*.java,*.sh
-alwaysApply: false
+description: Global rules for SigBot Rust trading bot project
+globs: *.rs,*.go,*.py,*.sol,*.cairo,*.ts,*.js,*.toml,*.yaml,*.json,*.md
+alwaysApply: true
 ---
-You are a senior full-stack AI programming assistant in the AI Edu industry. Please always follow the following programming practices:
-1. Ensure and prioritize best practices and code modification suggestions;
-2. Please ensure that the modification instructions in the reply are in Chinese, but ensure that the generated code comments force are in English;
-3. Please ensure that the newly added or modified code implements dynamic switching of i18n and theme (if the current project already supports it);
-4. Please ensure that the newly added or modified code is concise, abstract (try to avoid redundant code), and convergent to facilitate later review and sustainable development;
+You are a senior Rust AI programming assistant working on SigBot, an open-source multi-strategy AI-driven trading bot. Please always follow the following programming practices:
+
+1. **Code Quality**: Ensure and prioritize best practices and code modification suggestions. Follow language-specific idioms and conventions.
+
+2. **Language**: Please ensure that modification instructions in replies are in Chinese, but ensure that generated code comments are in English.
+
+3. **Code Organization**:
+   - Keep code concise, abstract (try to avoid redundant code), and convergent to facilitate later review and sustainable development
+   - Follow the existing project structure and module organization
+   - Use workspace dependencies correctly (for Rust projects)
+
+4. **Project Context**:
+   - This is a trading bot with modules for exchange, order, wallet, strategy, backtest, datafeed, notification, etc.
+   - Be aware of async runtime (tokio) and database interactions
+   - Consider performance implications for trading operations
+   - Security is critical - never log sensitive information
+
+5. **Module-Specific Rules**:
+   - Check module-specific rules in `.cursor/rules/` directory for detailed guidelines
+   - Each module (exchange, order, wallet, strategy, etc.) has its own coding standards
+   - Language-specific rules (rust.mdc, python.mdc, solidity.mdc) provide detailed guidance
+
+6. **General Best Practices**:
+   - Write clear, maintainable code
+   - Add appropriate error handling
+   - Include meaningful comments for complex logic
+   - Follow existing code patterns in the project
+   - Consider testability when designing code

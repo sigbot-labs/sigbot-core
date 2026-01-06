@@ -30,7 +30,7 @@ use sigbot_types::{
     modules::exchange::exchange::{ExchangeInfo, ExchangeProvider},
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{EntryTradePosition, ExitTradePosition, TradeResult},
+        trade_position::{PlaceTradeSignal, ExitTradePosition, TradeResult},
     },
 };
 use std::sync::Arc;
@@ -216,23 +216,23 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         // IBKR HTTP client doesn't need explicit cleanup
     }
 
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
 
         // Convert order type to IBKR format
-        let order_type = match signal.open_pos.order_type {
+        let order_type = match signal.enter_pos.order_type {
             sigbot_types::modules::exchange::models::trade_position::OrderType::MARKET => "MKT",
             sigbot_types::modules::exchange::models::trade_position::OrderType::LIMITED => "LMT",
         };
-        let side = signal.open_pos.side.to_side_str();
+        let side = signal.enter_pos.side.to_side_str();
 
         // TODO: Convert symbol to conid (contract ID)
         // This requires calling IBKR's contract search API first
         // For now, we'll assume the symbol is already a conid (as u64)
-        let conid = signal.open_pos.symbol.parse::<u64>().map_err(|_| {
+        let conid = signal.enter_pos.symbol.parse::<u64>().map_err(|_| {
             Error::msg(format!(
                 "Symbol '{}' must be a valid IBKR conid (contract ID). Please convert symbol to conid first.",
-                signal.open_pos.symbol
+                signal.enter_pos.symbol
             ))
         })?;
 
@@ -244,8 +244,8 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
             order_type: order_type.to_string(),
             side: side.to_string(),
             time_in_force: tif,
-            quantity: signal.open_pos.quantity,
-            price: signal.open_pos.price,
+            quantity: signal.enter_pos.quantity,
+            price: signal.enter_pos.price,
         };
 
         // IBKR requires the request body to be a JSON array
@@ -259,7 +259,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
 
         info!(
             "[OPEN_POS] Opening position - conid={}, side={}, quantity={}, order_type={}",
-            conid, side, signal.open_pos.quantity, order_type
+            conid, side, signal.enter_pos.quantity, order_type
         );
 
         let response = self

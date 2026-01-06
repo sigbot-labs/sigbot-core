@@ -63,7 +63,7 @@ impl RiskManager {
 
     /// Execute risk check.
     async fn check_risk(&self, signal: &SigbotTradeSignal) -> Result<(), Error> {
-        let order_value = signal.signal.open_pos.price.unwrap_or(0.0) * signal.signal.open_pos.quantity;
+        let order_value = signal.signal.enter_pos.price.unwrap_or(0.0) * signal.signal.enter_pos.quantity;
 
         // Check order size.
         if order_value > self.config.max_order_size {
@@ -129,7 +129,7 @@ impl SigbotDefaultOrderManager {
         let mut retries = 3;
         let mut delay = Duration::from_secs(1);
         let trade_result = loop {
-            match exchange_client.entry_position(signal.signal.to_owned()).await {
+            match exchange_client.enter_position(signal.signal.to_owned()).await {
                 Ok(result) => break result,
                 Err(e) => {
                     retries -= 1;
@@ -151,10 +151,10 @@ impl SigbotDefaultOrderManager {
             tenant_id: signal.tenant_id.clone(),
             wallet_id: signal.wallet_id,
             exchange: signal.exchange.clone(),
-            symbol: signal.signal.open_pos.symbol.clone(),
-            side: signal.signal.open_pos.side.to_side_str().to_string(),
-            price: signal.signal.open_pos.price.unwrap_or(0.0),
-            qty: signal.signal.open_pos.quantity,
+            symbol: signal.signal.enter_pos.symbol.clone(),
+            side: signal.signal.enter_pos.side.to_side_str().to_string(),
+            price: signal.signal.enter_pos.price.unwrap_or(0.0),
+            qty: signal.signal.enter_pos.quantity,
             fee: 0.0, // TODO: 从交易所回调获取
             fee_asset: None,
             exchange_order_id: Some(trade_result.order_id.to_string()),

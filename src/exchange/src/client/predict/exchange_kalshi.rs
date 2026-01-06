@@ -33,7 +33,7 @@ use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{EntryTradePosition, ExitTradePosition},
+        trade_position::{ExitTradePosition, PlaceTradeSignal},
     },
 };
 use std::{sync::Arc, time::Duration};
@@ -348,7 +348,7 @@ impl ISigbotExchangeClient for SigbotKalshiClient {
     }
 
     // see: https://trading-api.readme.io/reference/placeorder
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
         info!("Entry position request for Kalshi: {:?}", signal);
 
@@ -356,16 +356,16 @@ impl ISigbotExchangeClient for SigbotKalshiClient {
         // POST /portfolio/orders requires: ticker, side (yes/no), action (buy/sell), type (market/limit), count, price (optional for market)
         // See: https://trading-api.readme.io/reference/placeorder
 
-        let side_str = signal.open_pos.side.to_side_str();
+        let side_str = signal.enter_pos.side.to_side_str();
         // Kalshi uses "yes" or "no" for side, convert from BUY/SELL
         let side = if side_str == "BUY" { "yes" } else { "no" };
         let action = "buy"; // Always buy for entry position
-        let price = signal.open_pos.price;
-        let size = signal.open_pos.quantity as i32; // Kalshi uses integer count
-        let ticker = &signal.open_pos.symbol;
+        let price = signal.enter_pos.price;
+        let size = signal.enter_pos.quantity as i32; // Kalshi uses integer count
+        let ticker = &signal.enter_pos.symbol;
 
         // Determine order type from signal (default to limit if price is provided, otherwise market)
-        let order_type = match signal.open_pos.order_type {
+        let order_type = match signal.enter_pos.order_type {
             sigbot_types::modules::exchange::models::trade_position::OrderType::MARKET => "market",
             sigbot_types::modules::exchange::models::trade_position::OrderType::LIMITED => "limit",
         };

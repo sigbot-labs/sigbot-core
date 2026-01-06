@@ -24,7 +24,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
 use pyo3::types::{PyDict, PyModule};
 use sigbot_strategy_sdk::sdk::core::models::trade_signal::TradingSignal;
-use sigbot_types::modules::exchange::models::trade_position::EntryTradePosition;
+use sigbot_types::modules::exchange::models::trade_position::PlaceTradeSignal;
 use sigbot_types::modules::strategy::models::strategy_execution::{StrategyExecutionInput, StrategyExecutionResult};
 use sigbot_types::modules::strategy::strategy::StrategyInfo;
 use sigbot_types::modules::strategy::SigbotStrategyArgument;
@@ -83,7 +83,7 @@ impl StreamingStrategyExecutor {
     pub fn process(
         &self,
         input: &StrategyExecutionInput,
-    ) -> Result<(StrategyExecutionResult, Option<EntryTradePosition>), Error> {
+    ) -> Result<(StrategyExecutionResult, Option<PlaceTradeSignal>), Error> {
         let start_time = Instant::now();
 
         // Check if we need to initialize (only once, shared across all symbol+timeframe)
@@ -252,7 +252,7 @@ has_on_process = callable(globals().get('on_process', None))
     /// Note: module_py.bind(py) returns a Bound reference to the SAME Python module object
     /// that was created in call_init(). The module's globals dictionary persists because
     /// Python::with_gil() doesn't create a new interpreter - it only acquires the GIL.
-    fn call_on_process(&self, py: Python<'_>, input: &StrategyExecutionInput) -> Result<Option<EntryTradePosition>> {
+    fn call_on_process(&self, py: Python<'_>, input: &StrategyExecutionInput) -> Result<Option<PlaceTradeSignal>> {
         // Get compiled module reference
         let module_guard = self.pymodule.lock().unwrap();
         let module_py = module_guard.as_ref().ok_or_else(|| {
@@ -512,23 +512,23 @@ def on_process(context):
         );
         assert!(result.1.is_some());
         let entry_position = result.1.as_ref().unwrap();
-        assert!(entry_position.open_pos.symbol == "BTCUSDC");
-        assert!(entry_position.open_pos.side == TradeSide::LONG);
-        assert!(entry_position.open_pos.order_type == OrderType::LIMITED);
-        assert!(entry_position.open_pos.quantity == 0.1);
-        assert!(entry_position.open_pos.price.is_some());
-        assert!(entry_position.open_pos.price.unwrap() == 99000.0);
-        assert!(entry_position.stop_loss.as_ref().unwrap().symbol == "BTCUSDC");
-        assert!(entry_position.stop_loss.as_ref().unwrap().quantity_percent == 1.0);
-        assert!(entry_position.stop_loss.as_ref().unwrap().price.is_some());
-        assert!(entry_position.stop_loss.as_ref().unwrap().price.unwrap() == 98000.0);
-        assert!(entry_position.stop_profit.as_ref().unwrap().symbol == "BTCUSDC");
-        assert!(entry_position.stop_profit.as_ref().unwrap().quantity_percent == 1.0);
-        assert!(entry_position.stop_profit.as_ref().unwrap().price.is_some());
-        assert!(entry_position.stop_profit.as_ref().unwrap().price.unwrap() == 105000.0);
+        assert!(entry_position.enter_pos.symbol == "BTCUSDC");
+        assert!(entry_position.enter_pos.side == TradeSide::LONG);
+        assert!(entry_position.enter_pos.order_type == OrderType::LIMITED);
+        assert!(entry_position.enter_pos.quantity == 0.1);
+        assert!(entry_position.enter_pos.price.is_some());
+        assert!(entry_position.enter_pos.price.unwrap() == 99000.0);
+        assert!(entry_position.exit_loss.as_ref().unwrap().symbol == "BTCUSDC");
+        assert!(entry_position.exit_loss.as_ref().unwrap().quantity_percent == 1.0);
+        assert!(entry_position.exit_loss.as_ref().unwrap().price.is_some());
+        assert!(entry_position.exit_loss.as_ref().unwrap().price.unwrap() == 98000.0);
+        assert!(entry_position.exit_profit.as_ref().unwrap().symbol == "BTCUSDC");
+        assert!(entry_position.exit_profit.as_ref().unwrap().quantity_percent == 1.0);
+        assert!(entry_position.exit_profit.as_ref().unwrap().price.is_some());
+        assert!(entry_position.exit_profit.as_ref().unwrap().price.unwrap() == 105000.0);
         assert!(entry_position.description == "Mock Long signal");
-        assert!(entry_position.stop_loss.is_some());
-        assert!(entry_position.stop_profit.is_some());
+        assert!(entry_position.exit_loss.is_some());
+        assert!(entry_position.exit_profit.is_some());
     }
 
     #[test]

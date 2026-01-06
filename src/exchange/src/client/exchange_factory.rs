@@ -26,7 +26,7 @@ use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::exchange::exchange::{ExchangeInfo, ExchangeProvider};
 use sigbot_types::modules::exchange::models::trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo};
-use sigbot_types::modules::exchange::models::trade_position::{EntryTradePosition, ExitTradePosition, TradeResult};
+use sigbot_types::modules::exchange::models::trade_position::{PlaceTradeSignal, ExitTradePosition, TradeResult};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -37,7 +37,7 @@ pub trait ISigbotExchangeClient: Send + Sync {
     fn provider(&self) -> ExchangeProvider;
     async fn init(&self);
     async fn close(&self);
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error>;
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error>;
     async fn exit_loss_position(
         &self,
         original_order_id: u64,

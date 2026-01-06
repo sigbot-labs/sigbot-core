@@ -1,0 +1,47 @@
+---
+description: Rust-specific coding standards and best practices
+globs: **/*.rs
+alwaysApply: false
+---
+You are working with Rust code in the This project. Follow these Rust-specific guidelines:
+
+1. **Error Handling**:
+   - Use `Result<T, E>` for fallible operations
+   - Prefer `thiserror` for library errors, `anyhow` for application errors
+   - Always handle errors explicitly, avoid unwrap() in production code
+
+2. **Async Programming**:
+   - Use `tokio` runtime for async operations
+   - Prefer `async fn` over manual Future implementations
+   - Use `tokio::spawn` for concurrent tasks
+   - Be mindful of `Send + Sync` bounds for shared state
+
+3. **Ownership and Borrowing**:
+   - Prefer borrowing (`&T`) over cloning when possible
+   - Use `Arc<T>` for shared ownership across threads
+   - Use `Mutex<T>` or `RwLock<T>` for interior mutability
+   - Consider `Arc<Mutex<T>>` for shared mutable state
+
+4. **Module Organization**:
+   - Follow workspace structure: `src/{module}/src/`
+   - Use `pub mod` for public modules
+   - Keep module files focused and cohesive
+   - Use `mod.rs` or `{module}.rs` for module declarations
+
+5. **Type Safety**:
+   - Use newtype patterns for type safety (e.g., `UserId`, `OrderId`)
+   - Prefer enums over string constants
+   - Use `Option<T>` for nullable values
+   - Leverage Rust's type system for compile-time guarantees
+
+6. **Performance**:
+   - Use `Vec` for dynamic arrays, `[T; N]` for fixed-size arrays
+   - Prefer `HashMap` for key-value lookups
+   - Use `Cow<'a, T>` for borrowed or owned data
+   - Consider `SmallVec` for small collections
+
+7. **Testing**:
+   - Write unit tests in `#[cfg(test)]` modules
+   - Use `#[tokio::test]` for async tests
+   - Mock external dependencies appropriately
+   - Test error cases and edge conditions

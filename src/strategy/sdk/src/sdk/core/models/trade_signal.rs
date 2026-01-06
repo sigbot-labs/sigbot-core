@@ -20,7 +20,7 @@
 
 use pyo3::prelude::*;
 use sigbot_types::modules::exchange::models::trade_position::{
-    EntryPosition, EntryTradePosition, ExitTradePosition, OrderType, TradeSide,
+    EntryPosition, PlaceTradeSignal, ExitTradePosition, OrderType, TradeSide,
 };
 
 /// Trade side enumeration for Python
@@ -443,11 +443,11 @@ impl TradingSignal {
 
 impl TradingSignal {
     /// Convert to Rust EntryTradePosition (internal use only)
-    pub fn to_entry_trade_position(&self) -> EntryTradePosition {
-        EntryTradePosition {
-            open_pos: self.open_pos.clone().into(),
-            stop_loss: self.stop_loss.as_ref().map(|sl| sl.clone().into()),
-            stop_profit: self.stop_profit.as_ref().map(|sp| sp.clone().into()),
+    pub fn to_entry_trade_position(&self) -> PlaceTradeSignal {
+        PlaceTradeSignal {
+            enter_pos: self.open_pos.clone().into(),
+            exit_loss: self.stop_loss.as_ref().map(|sl| sl.clone().into()),
+            exit_profit: self.stop_profit.as_ref().map(|sp| sp.clone().into()),
             description: self.description.clone(),
         }
     }

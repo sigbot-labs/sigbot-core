@@ -110,7 +110,7 @@ impl SigbotPythonStrategyExecutor {
                                     info!("Received trading signal: {:?}", signal);
                                     // Get exchange client (assuming BINANCE for now, can be made configurable)
                                     match SigbotExchangeClientFactory::get_implementation("BINANCE").await {
-                                        Ok(exchange_client) => match exchange_client.entry_position(signal).await {
+                                        Ok(exchange_client) => match exchange_client.enter_position(signal).await {
                                             Ok(trade_result) => {
                                                 info!(
                                                     "Trade executed successfully: order_id={}, success={}",

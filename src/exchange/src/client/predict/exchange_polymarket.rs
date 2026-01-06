@@ -32,7 +32,7 @@ use sigbot_types::{
     modules::exchange::exchange::ExchangeInfo,
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{EntryTradePosition, ExitTradePosition},
+        trade_position::{ExitTradePosition, PlaceTradeSignal},
     },
 };
 use std::{sync::Arc, time::Duration};
@@ -440,7 +440,7 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
     }
 
     // see:https://docs.polymarket.com/developers/CLOB/orders/create-order
-    async fn entry_position(&self, signal: EntryTradePosition) -> Result<TradeResult, Error> {
+    async fn enter_position(&self, signal: PlaceTradeSignal) -> Result<TradeResult, Error> {
         signal.validate().map_err(|e| Error::msg(e))?;
         info!("Entry position request for Polymarket: {:?}", signal);
 
@@ -448,16 +448,16 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
         // POST /order requires: order (signed object), owner (api key), orderType (FOK/GTC/GTD)
         // See: https://docs.polymarket.com/developers/CLOB/orders/create-order
 
-        let side = signal.open_pos.side.to_side_str();
+        let side = signal.enter_pos.side.to_side_str();
         let price = signal
-            .open_pos
+            .enter_pos
             .price
             .ok_or_else(|| Error::msg("Price is required for Polymarket orders"))?;
-        let size = signal.open_pos.quantity;
-        let token_id = &signal.open_pos.symbol;
+        let size = signal.enter_pos.quantity;
+        let token_id = &signal.enter_pos.symbol;
 
         // Determine order type from signal (default to GTC if not specified)
-        let order_type = match signal.open_pos.order_type {
+        let order_type = match signal.enter_pos.order_type {
             sigbot_types::modules::exchange::models::trade_position::OrderType::MARKET => "FOK", // Fill-Or-Kill for market orders
             sigbot_types::modules::exchange::models::trade_position::OrderType::LIMITED => "GTC", // Good-Till-Cancelled for limit orders
         };
