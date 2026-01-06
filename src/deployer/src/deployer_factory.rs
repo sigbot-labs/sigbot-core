@@ -19,21 +19,24 @@
 // This includes modifications and derived works.
 
 use crate::{
-    kubernetes::deployer_kubernetes::SigbotKubernetesDeployer, standalone::deployer_hosted::SigbotHostedDeployer,
+    docker::deployer_docker::SigbotDockerDeployer, kubernetes::deployer_kubernetes::SigbotKubernetesDeployer,
+    standalone::deployer_standalone::SigbotStandaloneDeployer,
 };
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
-use sigbot_core::sys::handler::tenant_handler::ITenantHandler;
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::sys::handler::{dlock_handler::IDLockHandler, tenant_handler::ITenantHandler};
 use sigbot_types::{
-    sys::tenant::{QueryTenantRequest, Tenant},
+    sys::tenant::{DeleteTenantRequest, QueryTenantRequest, SaveTenantRequest, Tenant},
     PageRequest, PageResponse,
 };
 use std::{
     collections::HashMap,
     future::Future,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 #[async_trait]
@@ -45,6 +48,46 @@ pub trait ISigbotDeployer: Send + Sync {
 
 lazy_static! {
     static ref SINGLE_INSTANCE: RwLock<SigbotDeployerFactory> = RwLock::new(SigbotDeployerFactory::new());
+}
+
+// Wrapper types to hold Arc<SigbotState> and implement traits with 'static lifetime
+struct ArcTenantHandler {
+    state: Arc<SigbotState>,
+}
+
+#[async_trait]
+impl ITenantHandler for ArcTenantHandler {
+    async fn find(&self, param: QueryTenantRequest, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
+        let handler = sigbot_core::sys::handler::tenant_handler::TenantHandler::new(&self.state);
+        handler.find(param, page).await
+    }
+
+    async fn save(&self, param: SaveTenantRequest) -> Result<i64, Error> {
+        let handler = sigbot_core::sys::handler::tenant_handler::TenantHandler::new(&self.state);
+        handler.save(param).await
+    }
+
+    async fn delete(&self, param: DeleteTenantRequest) -> Result<u64, Error> {
+        let handler = sigbot_core::sys::handler::tenant_handler::TenantHandler::new(&self.state);
+        handler.delete(param).await
+    }
+}
+
+struct ArcDLockHandler {
+    state: Arc<SigbotState>,
+}
+
+#[async_trait]
+impl IDLockHandler for ArcDLockHandler {
+    async fn acquire(&self, name: String, timeout: Duration) -> Result<bool, Error> {
+        let handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
+        handler.acquire(name, timeout).await
+    }
+
+    async fn release(&self, name: String) -> Result<bool, Error> {
+        let handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
+        handler.release(name).await
+    }
 }
 
 pub struct SigbotDeployerFactory {
@@ -66,38 +109,70 @@ impl SigbotDeployerFactory {
 
     #[allow(unused_variables)]
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
-        // e.g '--deploy=kubernetes'
+        // Initialize SigbotState
+        let config = sigbot_core::config::config::get_config();
+        let app_state = Arc::new(SigbotState::new(&config).await);
+
+        // Create handlers with Arc wrapper to satisfy 'static lifetime requirement
+        let tenant_handler: Arc<dyn ITenantHandler + Send + Sync> = Arc::new(ArcTenantHandler {
+            state: app_state.clone(),
+        });
+        let dlock_handler: Arc<dyn IDLockHandler + Send + Sync> = Arc::new(ArcDLockHandler {
+            state: app_state.clone(),
+        });
+
+        // Parse provider from command line arguments
+        // Support both '--runtime-mode' and '--deploy' for backward compatibility
         let provider = matches
-            .try_get_one::<String>("deploy")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| SigbotKubernetesDeployer::NAME.to_owned())
-            })
-            .expect("Failed to parse the deployer provider from the command line arguments.")
+            .try_get_one::<String>("runtime-mode")
+            .or_else(|_| matches.try_get_one::<String>("deploy"))
+            .ok()
+            .flatten()
+            .map(|s| s.to_owned())
+            .unwrap_or_else(|| SigbotKubernetesDeployer::NAME.to_owned())
             .to_uppercase();
 
         debug!("Registering Deployer: {}", &provider);
 
+        // Create deployer instance based on provider
         match provider.as_str() {
             SigbotKubernetesDeployer::NAME => {
+                let deployer = SigbotKubernetesDeployer::new(
+                    None,
+                    None,
+                    Some(tenant_handler.clone()),
+                    Some(dlock_handler.clone()),
+                )
+                .await;
                 Self::get()
                     .write()
                     .unwrap()
-                    .register0(
-                        &SigbotKubernetesDeployer::NAME.to_owned(),
-                        SigbotKubernetesDeployer::new(None, None).await,
-                    )
+                    .register0(&SigbotKubernetesDeployer::NAME.to_owned(), deployer)
                     .expect("Failed to register the Kubernetes deployer.");
             }
-            SigbotHostedDeployer::NAME => {
+            SigbotDockerDeployer::NAME => {
+                let deployer =
+                    SigbotDockerDeployer::new(None, None, Some(tenant_handler.clone()), Some(dlock_handler.clone()))
+                        .await;
                 Self::get()
                     .write()
                     .unwrap()
-                    .register0(
-                        &SigbotHostedDeployer::NAME.to_owned(),
-                        SigbotHostedDeployer::new(None, None).await,
-                    )
-                    .expect("Failed to register the Hosted deployer.");
+                    .register0(&SigbotDockerDeployer::NAME.to_owned(), deployer)
+                    .expect("Failed to register the Docker deployer.");
+            }
+            SigbotStandaloneDeployer::NAME => {
+                let deployer = SigbotStandaloneDeployer::new(
+                    None,
+                    None,
+                    Some(tenant_handler.clone()),
+                    Some(dlock_handler.clone()),
+                )
+                .await;
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(&SigbotStandaloneDeployer::NAME.to_owned(), deployer)
+                    .expect("Failed to register the Standalone deployer.");
             }
             _ => panic!("Unsupported sigbot deployer provider : '{}'.", provider),
         };
@@ -116,16 +191,16 @@ impl SigbotDeployerFactory {
         startup_handler: F,
         shutdown_handler: G,
     ) where
-        F: Fn(Arc<Tenant>) -> FutF + Send + Sync,
-        FutF: Future<Output = ()> + Send + Sync,
-        G: Fn(Arc<Tenant>) -> FutG + Send + Sync,
-        FutG: Future<Output = ()> + Send + Sync,
+        F: Fn(Arc<Tenant>) -> FutF + Send,
+        FutF: Future<Output = ()> + Send,
+        G: Fn(Arc<Tenant>) -> FutG + Send,
+        FutG: Future<Output = ()> + Send,
     {
         info!("Scanning Tenants components lifecycle process ...");
 
         let mut gatekeeper_counter = 0 as u16;
         let mut last_page = PageResponse::new(None, None, None);
-        while gatekeeper_counter > Self::DEFAULT_SAFETY_THRESHOLD
+        while gatekeeper_counter < Self::DEFAULT_SAFETY_THRESHOLD
             && (last_page.total.is_none() || last_page.total.unwrap_or(0) > 0)
         {
             gatekeeper_counter += 1;

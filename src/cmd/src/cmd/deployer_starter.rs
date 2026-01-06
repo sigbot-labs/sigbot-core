@@ -25,8 +25,9 @@ use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION};
 use sigbot_core::mgmt::apm;
 use sigbot_deployer::deployer_factory::SigbotDeployerFactory;
+use sigbot_deployer::docker::deployer_docker::SigbotDockerDeployer;
 use sigbot_deployer::kubernetes::deployer_kubernetes::SigbotKubernetesDeployer;
-use sigbot_deployer::standalone::deployer_hosted::SigbotHostedDeployer;
+use sigbot_deployer::standalone::deployer_standalone::SigbotStandaloneDeployer;
 use sigbot_utils::panics::PanicHelper;
 use std::env;
 use tokio::sync::oneshot;
@@ -47,9 +48,10 @@ impl SigbotDeployerManagerStarter {
                     .value_parser(clap::value_parser!(String))
                     .display_order(1)
                     .help(format!(
-                        "The deployer provider to use. (supported are: {}, {})",
+                        "The deployer provider to use. (supported are: {}, {}, {})",
                         SigbotKubernetesDeployer::NAME,
-                        SigbotHostedDeployer::NAME
+                        SigbotDockerDeployer::NAME,
+                        SigbotStandaloneDeployer::NAME,
                     ))
                     .default_value(SigbotKubernetesDeployer::NAME),
             )
@@ -91,7 +93,7 @@ impl SigbotDeployerManagerStarter {
     \/___/  \/____/ \ \ \/ \/____/\/___/  `/___/> \/____/ \/_/ 
                      \ \_\                   /\___/            
                       \/_/                   \/__/             
-                                                (Sigbot Deployer Manager)
+                                                (Sigbot Deployer)
  "#;
         eprintln!("");
         eprintln!("{}", ascii_name);

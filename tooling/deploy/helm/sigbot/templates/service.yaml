@@ -1,0 +1,84 @@
+{{- if .Values.server.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-server
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: server
+spec:
+  type: {{ .Values.server.service.type }}
+  ports:
+    - port: {{ .Values.server.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    component: server
+---
+{{- end }}
+
+{{- if .Values.systemdb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-systemdb
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: systemdb
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    component: systemdb
+---
+{{- end }}
+
+{{- if .Values.pgvector.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-pgvector
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: pgvector
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    component: pgvector
+---
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-redis
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    component: redis
+---
+{{- end }}
+

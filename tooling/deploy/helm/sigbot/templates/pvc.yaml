@@ -1,0 +1,85 @@
+{{- if .Values.persistence.storageClass }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-storage
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .Values.systemdb.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-systemdb
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: systemdb
+spec:
+  accessModes:
+    - {{ .Values.systemdb.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.systemdb.persistence.size }}
+  {{- if .Values.systemdb.persistence.storageClass }}
+  storageClassName: {{ .Values.systemdb.persistence.storageClass }}
+  {{- else if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .Values.pgvector.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-pgvector
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: pgvector
+spec:
+  accessModes:
+    - {{ .Values.pgvector.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.pgvector.persistence.size }}
+  {{- if .Values.pgvector.persistence.storageClass }}
+  storageClassName: {{ .Values.pgvector.persistence.storageClass }}
+  {{- else if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-redis
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: redis
+spec:
+  accessModes:
+    - {{ .Values.redis.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+  {{- if .Values.redis.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.persistence.storageClass }}
+  {{- else if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+---
+{{- end }}
+

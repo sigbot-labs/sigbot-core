@@ -19,8 +19,16 @@
 // This includes modifications and derived works.
 
 use crate::deployer_factory::{ISigbotDeployer, SigbotDeployerFactory};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use common_telemetry::info;
+use common_telemetry::{error, info, warn};
+use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use kube::{
+    api::{Api, DeleteParams, PostParams},
+    Client, Config,
+};
 use sigbot_core::sys::handler::{dlock_handler::IDLockHandler, tenant_handler::ITenantHandler};
 use sigbot_types::{
     modules::{
@@ -30,7 +38,7 @@ use sigbot_types::{
     sys::tenant::Tenant,
     EntityBase,
 };
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -39,8 +47,9 @@ pub struct SigbotKubernetesDeployer {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    tenant_handler: Option<Arc<dyn ITenantHandler + Send + Sync>>,
-    dlock_handler: Option<Arc<dyn IDLockHandler + Send + Sync>>,
+    tenant_handler: Arc<dyn ITenantHandler + Send + Sync>,
+    dlock_handler: Arc<dyn IDLockHandler + Send + Sync>,
+    kube_client: Arc<Mutex<Option<Client>>>,
 }
 
 impl SigbotKubernetesDeployer {
@@ -49,25 +58,50 @@ impl SigbotKubernetesDeployer {
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
 
-    pub async fn new(schedule_cron: Option<String>, schedule_channels: Option<usize>) -> Arc<Self> {
+    pub async fn new(
+        schedule_cron: Option<String>,
+        schedule_channels: Option<usize>,
+        tenant_handler: Option<Arc<dyn ITenantHandler + Send + Sync>>,
+        dlock_handler: Option<Arc<dyn IDLockHandler + Send + Sync>>,
+    ) -> Arc<Self> {
+        // Initialize Kubernetes client
+        let kube_client = match Config::infer().await {
+            Ok(config) => match Client::try_from(config) {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    warn!(
+                        "Failed to create Kubernetes client: {}. Deployer will run in limited mode.",
+                        e
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "Failed to infer Kubernetes config: {}. Deployer will run in limited mode.",
+                    e
+                );
+                None
+            }
+        };
+
         Arc::new(Self {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            tenant_handler: None, // TODO: Inject the tenant handler.
-            dlock_handler: None,  // TODO: Inject the dlock handler.
+            tenant_handler: tenant_handler.expect("Tenant handler is required"),
+            dlock_handler: dlock_handler.expect("Dlock handler is required"),
+            kube_client: Arc::new(Mutex::new(kube_client)),
         })
     }
 
     pub(super) async fn execute(&self) {
         info!("Executing Kubernetes deployer ...");
 
-        // Acquire to distrbuted lock.
+        // Acquire distributed lock.
         let dlock_name = "KUBERNETES_DEPLOYER";
         let acquired = self
             .dlock_handler
-            .clone()
-            .expect("Dlock handler is not injected.")
             .acquire(dlock_name.to_string(), Duration::from_secs(10))
             .await;
         match acquired {
@@ -92,107 +126,711 @@ impl SigbotKubernetesDeployer {
     /// 3. If the tenant is deactivated, then to undeploy the middleware(e.g EMQX, PostgreSQL, TimescaleDB) components
     ///    and such as datafeed ingestor, strategy runner, notification forwarder, backtest runner, etc.
     async fn process(&self) {
+        let this_startup = self.clone();
+        let this_shutdown = self.clone();
         SigbotDeployerFactory::do_scan_process(
-            self.tenant_handler.to_owned().expect("Tenant handler is not injected."),
-            |tenant| async move {
-                self.startup_middleware_components(tenant.to_owned()).await;
-                self.startup_datafeed_runner(tenant.to_owned()).await;
-                self.startup_strategy_runner(tenant.to_owned()).await;
-                self.startup_notification_forwarder(tenant.to_owned()).await;
-                self.startup_backtest_runner(tenant.to_owned()).await;
+            self.tenant_handler.clone(),
+            move |tenant| {
+                let this = this_startup.clone();
+                async move {
+                    this.startup_middleware_components(tenant.to_owned()).await;
+                    this.startup_datafeed_runner(tenant.to_owned()).await;
+                    this.startup_strategy_runner(tenant.to_owned()).await;
+                    this.startup_notification_forwarder(tenant.to_owned()).await;
+                    this.startup_backtest_runner(tenant.to_owned()).await;
+                }
             },
-            |tenant| async move {
-                self.shutdown_middleware_components(tenant.to_owned()).await;
-                self.shutdown_datafeed_runner(tenant.to_owned()).await;
-                self.shutdown_strategy_runner(tenant.to_owned()).await;
-                self.shutdown_notification_forwarder(tenant.to_owned()).await;
-                self.shutdown_backtest_runner(tenant.to_owned()).await;
+            move |tenant| {
+                let this = this_shutdown.clone();
+                async move {
+                    this.shutdown_middleware_components(tenant.to_owned()).await;
+                    this.shutdown_datafeed_runner(tenant.to_owned()).await;
+                    this.shutdown_strategy_runner(tenant.to_owned()).await;
+                    this.shutdown_notification_forwarder(tenant.to_owned()).await;
+                    this.shutdown_backtest_runner(tenant.to_owned()).await;
+                }
             },
         )
         .await;
     }
 
     async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
-        // let messager = Arc::new(MessagerInfo {
-        //     base: EntityBase::new_with_id(Some(1)),
-        //     name: tenant.name.clone(),
-        //     provider: Some(MessagerProvider::MQTT),
-        //     configuration: None,
-        //     secrets: None,
-        //     description: Some(format!(
-        //         "Datafeed Runner for tenant {}",
-        //         tenant.name.clone().unwrap_or_default()
-        //     )),
-        // });
-        // TODO Generate to K8S deployment yaml file with EMQX container runtime args.
-        // (e.g: emqx operator - deployment mainfest yaml)
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
 
-        // TODO Generate to K8S deployment yaml file with PostgreSQL container runtime args.
-        // (e.g: postgresql - deployment mainfest yaml)
+        info!(
+            "Starting middleware components for tenant {} ({})",
+            tenant_id, tenant_name
+        );
 
-        // TODO Generate to K8S deployment yaml file with TimescaleDB container runtime args.
-        // (e.g: timescale - deployment mainfest yaml)
+        // Check if Kubernetes client is available
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping middleware deployment for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        // Create namespace
+        if let Err(e) = self.create_namespace(kube_client, &namespace_name).await {
+            error!("Failed to create namespace {}: {}", namespace_name, e);
+            return;
+        }
+
+        // Deploy EMQX
+        if let Err(e) = self
+            .deploy_emqx(kube_client, &namespace_name, tenant_id, tenant_name)
+            .await
+        {
+            error!("Failed to deploy EMQX for tenant {}: {}", tenant_id, e);
+        }
+
+        // Deploy PostgreSQL
+        if let Err(e) = self
+            .deploy_postgresql(kube_client, &namespace_name, tenant_id, tenant_name)
+            .await
+        {
+            error!("Failed to deploy PostgreSQL for tenant {}: {}", tenant_id, e);
+        }
+
+        // Deploy TimescaleDB
+        if let Err(e) = self
+            .deploy_timescaledb(kube_client, &namespace_name, tenant_id, tenant_name)
+            .await
+        {
+            error!("Failed to deploy TimescaleDB for tenant {}: {}", tenant_id, e);
+        }
+
+        info!("Completed middleware components startup for tenant {}", tenant_id);
     }
 
     async fn shutdown_middleware_components(&self, tenant: Arc<Tenant>) {
-        // TODO Obtain the EMQX dpeloyment name from tenant properties statistics and call k8s client delete deployment.
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+
+        info!("Shutting down middleware components for tenant {}", tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping middleware shutdown for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        // Delete namespace (this will cascade delete all resources)
+        let namespaces: Api<Namespace> = Api::all(kube_client.clone());
+        if let Err(e) = namespaces.delete(&namespace_name, &DeleteParams::default()).await {
+            warn!("Failed to delete namespace {}: {}", namespace_name, e);
+        } else {
+            info!("Deleted namespace {} for tenant {}", namespace_name, tenant_id);
+        }
+    }
+
+    async fn create_namespace(&self, client: &Client, name: &str) -> Result<()> {
+        let namespaces: Api<Namespace> = Api::all(client.clone());
+
+        // Check if namespace already exists
+        if namespaces.get(name).await.is_ok() {
+            info!("Namespace {} already exists", name);
+            return Ok(());
+        }
+
+        let namespace = Namespace {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        namespaces
+            .create(&PostParams::default(), &namespace)
+            .await
+            .context("Failed to create namespace")?;
+
+        info!("Created namespace {}", name);
+        Ok(())
+    }
+
+    async fn deploy_emqx(&self, client: &Client, namespace: &str, tenant_id: i64, tenant_name: &str) -> Result<()> {
+        let deployments: Api<Deployment> = Api::namespaced(client.clone(), namespace);
+        let deployment_name = format!("emqx-{}", tenant_id);
+
+        // Check if deployment already exists
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("EMQX deployment {} already exists", deployment_name);
+            return Ok(());
+        }
+
+        // Create EMQX deployment manifest
+        let deployment = self.create_emqx_deployment(&deployment_name, tenant_id, tenant_name);
+
+        deployments
+            .create(&PostParams::default(), &deployment)
+            .await
+            .context("Failed to create EMQX deployment")?;
+
+        info!("Created EMQX deployment {}", deployment_name);
+        Ok(())
+    }
+
+    async fn deploy_postgresql(
+        &self,
+        client: &Client,
+        namespace: &str,
+        tenant_id: i64,
+        tenant_name: &str,
+    ) -> Result<()> {
+        let deployments: Api<Deployment> = Api::namespaced(client.clone(), namespace);
+        let deployment_name = format!("postgresql-{}", tenant_id);
+
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("PostgreSQL deployment {} already exists", deployment_name);
+            return Ok(());
+        }
+
+        let deployment = self.create_postgresql_deployment(&deployment_name, tenant_id, tenant_name);
+
+        deployments
+            .create(&PostParams::default(), &deployment)
+            .await
+            .context("Failed to create PostgreSQL deployment")?;
+
+        info!("Created PostgreSQL deployment {}", deployment_name);
+        Ok(())
+    }
+
+    async fn deploy_timescaledb(
+        &self,
+        client: &Client,
+        namespace: &str,
+        tenant_id: i64,
+        tenant_name: &str,
+    ) -> Result<()> {
+        let deployments: Api<Deployment> = Api::namespaced(client.clone(), namespace);
+        let deployment_name = format!("timescaledb-{}", tenant_id);
+
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("TimescaleDB deployment {} already exists", deployment_name);
+            return Ok(());
+        }
+
+        let deployment = self.create_timescaledb_deployment(&deployment_name, tenant_id, tenant_name);
+
+        deployments
+            .create(&PostParams::default(), &deployment)
+            .await
+            .context("Failed to create TimescaleDB deployment")?;
+
+        info!("Created TimescaleDB deployment {}", deployment_name);
+        Ok(())
+    }
+
+    fn create_emqx_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        // Simplified EMQX deployment - in production, use Helm charts or more complete manifests
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), "emqx".to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(1),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), "emqx".to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), "emqx".to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: "emqx".to_string(),
+                            image: Some("emqx/emqx:latest".to_string()),
+                            ports: Some(vec![
+                                k8s_openapi::api::core::v1::ContainerPort {
+                                    container_port: 1883,
+                                    name: Some("mqtt".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::ContainerPort {
+                                    container_port: 8083,
+                                    name: Some("http".to_string()),
+                                    ..Default::default()
+                                },
+                            ]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn create_postgresql_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), "postgresql".to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(1),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), "postgresql".to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), "postgresql".to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: "postgresql".to_string(),
+                            image: Some("postgres:16".to_string()),
+                            env: Some(vec![
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_DB".to_string(),
+                                    value: Some(format!("sigbot_{}", tenant_id)),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_USER".to_string(),
+                                    value: Some("postgres".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                            ]),
+                            ports: Some(vec![k8s_openapi::api::core::v1::ContainerPort {
+                                container_port: 5432,
+                                name: Some("postgresql".to_string()),
+                                ..Default::default()
+                            }]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn create_timescaledb_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        // TimescaleDB is typically deployed as a PostgreSQL extension
+        // For simplicity, we'll use the timescaledb/postgres image
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), "timescaledb".to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(1),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), "timescaledb".to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), "timescaledb".to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: "timescaledb".to_string(),
+                            image: Some("timescale/timescaledb:latest-pg16".to_string()),
+                            env: Some(vec![
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_DB".to_string(),
+                                    value: Some(format!("sigbot_ts_{}", tenant_id)),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_USER".to_string(),
+                                    value: Some("postgres".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRES_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                            ]),
+                            ports: Some(vec![k8s_openapi::api::core::v1::ContainerPort {
+                                container_port: 5432,
+                                name: Some("postgresql".to_string()),
+                                ..Default::default()
+                            }]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
     }
 
     async fn startup_datafeed_runner(&self, tenant: Arc<Tenant>) {
-        let datafeed = Arc::new(DatafeedInfo {
-            base: EntityBase::new_with_id(Some(1)), // TODO: Get the datafeed id from the tenant.
-            name: tenant.name.clone(),              // TODO: Get the datafeed name from the tenant.
-            provider: Some(DatafeedProvider::BINANCE), // TODO: Get the provider from the tenant.
-            properties: None,
-            secrets: None,
-            description: Some(format!(
-                "Datafeed Runner for tenant {}",
-                tenant.name.clone().unwrap_or_default()
-            )),
-        });
-        // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot datafeed --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+        let deployment_name = format!("datafeed-{}", tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping datafeed deployment for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        let deployments: Api<Deployment> = Api::namespaced(kube_client.clone(), &namespace_name);
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("Datafeed deployment {} already exists", deployment_name);
+            return;
+        }
+
+        let deployment = self.create_microservice_deployment(
+            &deployment_name,
+            "datafeed",
+            tenant_id,
+            tenant.name.as_deref().unwrap_or("unknown"),
+            vec!["datafeed".to_string()],
+        );
+
+        if let Err(e) = deployments.create(&PostParams::default(), &deployment).await {
+            error!("Failed to create datafeed deployment for tenant {}: {}", tenant_id, e);
+        } else {
+            info!(
+                "Created datafeed deployment {} for tenant {}",
+                deployment_name, tenant_id
+            );
+        }
     }
 
     async fn shutdown_datafeed_runner(&self, tenant: Arc<Tenant>) {
-        // TODO Obtain the datafeed dpeloyment name from tenant properties statistics and call k8s client delete deployment.
+        self.delete_deployment(tenant.base.id.unwrap_or(0), "datafeed").await;
     }
 
     async fn startup_strategy_runner(&self, tenant: Arc<Tenant>) {
-        let strategy = Arc::new(StrategyInfo {
-            base: EntityBase::new_with_id(Some(1)), // TODO: Get the strategy id from the tenant.
-            name: tenant.name.clone(),              // TODO: Get the strategy name from the tenant.
-            provider: Some("MJMA20".to_string()),   // TODO: Get the strategy provider from the tenant.
-            parameters: None,
-            description: Some(format!(
-                "Strategy Runner for tenant {}",
-                tenant.name.clone().unwrap_or_default()
-            )),
-        });
-        // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot strategy --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+        let deployment_name = format!("strategy-{}", tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping strategy deployment for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        let deployments: Api<Deployment> = Api::namespaced(kube_client.clone(), &namespace_name);
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("Strategy deployment {} already exists", deployment_name);
+            return;
+        }
+
+        let deployment = self.create_microservice_deployment(
+            &deployment_name,
+            "strategy",
+            tenant_id,
+            tenant.name.as_deref().unwrap_or("unknown"),
+            vec!["strategy".to_string()],
+        );
+
+        if let Err(e) = deployments.create(&PostParams::default(), &deployment).await {
+            error!("Failed to create strategy deployment for tenant {}: {}", tenant_id, e);
+        } else {
+            info!(
+                "Created strategy deployment {} for tenant {}",
+                deployment_name, tenant_id
+            );
+        }
     }
 
     async fn shutdown_strategy_runner(&self, tenant: Arc<Tenant>) {
-        // TODO Obtain the strategy dpeloyment name from tenant properties statistics and call k8s client delete deployment.
+        self.delete_deployment(tenant.base.id.unwrap_or(0), "strategy").await;
     }
 
     async fn startup_notification_forwarder(&self, tenant: Arc<Tenant>) {
-        // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot notification --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+        let deployment_name = format!("notification-{}", tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping notification deployment for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        let deployments: Api<Deployment> = Api::namespaced(kube_client.clone(), &namespace_name);
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("Notification deployment {} already exists", deployment_name);
+            return;
+        }
+
+        let deployment = self.create_microservice_deployment(
+            &deployment_name,
+            "notification",
+            tenant_id,
+            tenant.name.as_deref().unwrap_or("unknown"),
+            vec!["notification".to_string()],
+        );
+
+        if let Err(e) = deployments.create(&PostParams::default(), &deployment).await {
+            error!(
+                "Failed to create notification deployment for tenant {}: {}",
+                tenant_id, e
+            );
+        } else {
+            info!(
+                "Created notification deployment {} for tenant {}",
+                deployment_name, tenant_id
+            );
+        }
     }
 
     async fn shutdown_notification_forwarder(&self, tenant: Arc<Tenant>) {
-        // TODO Obtain the notification dpeloyment name from tenant properties statistics and call k8s client delete deployment.
+        self.delete_deployment(tenant.base.id.unwrap_or(0), "notification")
+            .await;
     }
 
     async fn startup_backtest_runner(&self, tenant: Arc<Tenant>) {
-        // TODO Generate to K8S deployment yaml file with container runtime args.
-        // (e.g: sigbot backtest --id=1 --storage-type=postgres --storage-url=postgresql://host:5432/sigbot --messager-type=emqx --messager-url=emqx://host:18083)
+        let tenant_id = tenant.base.id.unwrap_or(0);
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+        let deployment_name = format!("backtest-{}", tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping backtest deployment for tenant {}",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        let deployments: Api<Deployment> = Api::namespaced(kube_client.clone(), &namespace_name);
+        if deployments.get(&deployment_name).await.is_ok() {
+            info!("Backtest deployment {} already exists", deployment_name);
+            return;
+        }
+
+        let deployment = self.create_microservice_deployment(
+            &deployment_name,
+            "backtest",
+            tenant_id,
+            tenant.name.as_deref().unwrap_or("unknown"),
+            vec!["backtest".to_string()],
+        );
+
+        if let Err(e) = deployments.create(&PostParams::default(), &deployment).await {
+            error!("Failed to create backtest deployment for tenant {}: {}", tenant_id, e);
+        } else {
+            info!(
+                "Created backtest deployment {} for tenant {}",
+                deployment_name, tenant_id
+            );
+        }
     }
 
     async fn shutdown_backtest_runner(&self, tenant: Arc<Tenant>) {
-        // TODO Obtain the backtest dpeloyment name from tenant properties statistics and call k8s client delete deployment.
+        self.delete_deployment(tenant.base.id.unwrap_or(0), "backtest").await;
+    }
+
+    fn create_microservice_deployment(
+        &self,
+        name: &str,
+        component: &str,
+        tenant_id: i64,
+        tenant_name: &str,
+        command: Vec<String>,
+    ) -> Deployment {
+        let image = std::env::var("SIGBOT_IMAGE").unwrap_or_else(|_| "sigbot:latest".to_string());
+
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), component.to_string());
+                    labels.insert("component".to_string(), component.to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(1),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), component.to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), component.to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: component.to_string(),
+                            image: Some(image),
+                            command: Some(command),
+                            env: Some(vec![k8s_openapi::api::core::v1::EnvVar {
+                                name: "TENANT_ID".to_string(),
+                                value: Some(tenant_id.to_string()),
+                                ..Default::default()
+                            }]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    async fn delete_deployment(&self, tenant_id: i64, component: &str) {
+        let namespace_name = format!("sigbot-tenant-{}", tenant_id);
+        let deployment_name = format!("{}-{}", component, tenant_id);
+
+        let guard = self.kube_client.lock().await;
+        let kube_client = match guard.as_ref() {
+            Some(client) => client,
+            None => {
+                warn!(
+                    "Kubernetes client not available. Skipping {} deployment deletion for tenant {}",
+                    component, tenant_id
+                );
+                return;
+            }
+        };
+
+        let deployments: Api<Deployment> = Api::namespaced(kube_client.clone(), &namespace_name);
+        if let Err(e) = deployments.delete(&deployment_name, &DeleteParams::default()).await {
+            warn!("Failed to delete {} deployment {}: {}", component, deployment_name, e);
+        } else {
+            info!(
+                "Deleted {} deployment {} for tenant {}",
+                component, deployment_name, tenant_id
+            );
+        }
     }
 }
 
@@ -221,46 +859,46 @@ impl ISigbotDeployer for SigbotKubernetesDeployer {
             }
         };
 
-        info!("Starting Datafeed controller with cron '{}'", cron);
+        info!("Starting Kubernetes deployer with cron '{}'", cron);
         let job = Job::new_async(cron, move |_uuid, _lock| {
             let that = this.clone();
             Box::pin(async move {
-                info!("{:?} Running Datafeed controller ...", chrono::Utc::now());
+                info!("{:?} Running Kubernetes deployer ...", chrono::Utc::now());
                 that.execute().await;
             })
         })
-        .expect("Failed to create Datafeed controller job");
+        .expect("Failed to create Kubernetes deployer job");
 
         let scheduler = JobScheduler::new_with_channel_size(channel_size)
             .await
-            .expect("Failed to create Datafeed controller scheduler");
-        scheduler.add(job).await.expect("Failed to add Datafeed controller job");
+            .expect("Failed to create Kubernetes deployer scheduler");
+        scheduler.add(job).await.expect("Failed to add Kubernetes deployer job");
         scheduler
             .start()
             .await
-            .expect("Failed to start Datafeed controller scheduler");
+            .expect("Failed to start Kubernetes deployer scheduler");
 
         *self.scheduler.lock().await = Some(scheduler);
 
         info!(
-            "Started Datafeed controller with cron '{}', channels '{}'",
+            "Started Kubernetes deployer with cron '{}', channels '{}'",
             cron, channel_size
         );
     }
 
     async fn shutdown(&self) {
         info!(
-            "Closing Datafeed controller with cron '{}'",
+            "Closing Kubernetes deployer with cron '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION)
         );
         if let Some(mut scheduler) = self.scheduler.lock().await.take() {
             scheduler
                 .shutdown()
                 .await
-                .expect("Failed to shutdown datafeed controller scheduler");
+                .expect("Failed to shutdown Kubernetes deployer scheduler");
         }
         info!(
-            "Closed Datafeed controller with cron '{}'",
+            "Closed Kubernetes deployer with cron '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION)
         );
     }

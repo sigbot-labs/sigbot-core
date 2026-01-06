@@ -1,0 +1,200 @@
+# Default values for sigbot
+# This is a YAML-formatted file.
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Image configuration
+image:
+  registry: registry.cn-shenzhen.aliyuncs.com/wl4g
+  repository: sigbot
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# System database configuration
+systemdb:
+  enabled: true
+  image:
+    registry: registry.cn-shenzhen.aliyuncs.com/wl4g
+    repository: pgvector_pgvector
+    tag: pg16
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  auth:
+    postgresUser: postgres
+    postgresPassword: changeit
+    postgresDatabase: sigbot_sysdb
+
+# Vector database configuration
+pgvector:
+  enabled: true
+  image:
+    registry: registry.cn-shenzhen.aliyuncs.com/wl4g
+    repository: pgvector_pgvector
+    tag: pg16
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  auth:
+    postgresUser: postgres
+    postgresPassword: changeit
+    postgresDatabase: sigbot_vecdb
+
+# Redis configuration
+redis:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: redis
+    tag: 7-alpine
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  auth:
+    password: ""
+
+# Deployer configuration
+deployer:
+  enabled: true
+  replicaCount: 1
+  image:
+    registry: registry.cn-shenzhen.aliyuncs.com/wl4g
+    repository: sigbot
+    tag: latest
+  mode: kubernetes  # kubernetes, docker, standalone
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+
+# API Server configuration
+server:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 9000
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: sigbot.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+# Executor configuration
+executor:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# Common environment variables
+env:
+  rustBacktrace: full
+  swaggerEnabled: true
+  loggingMode: JSON
+  loggingLevel: DEBUG
+  cacheProvider: Redis
+  redisNodes: redis://redis:6379
+  redisPassword: ""
+  databaseSystemdbHost: systemdb
+  databaseSystemdbPort: 5432
+  databaseSystemdbUser: postgres
+  databaseSystemdbPassword: changeit
+  databaseSystemdbDatabase: sigbot
+  databaseSystemdbMinConnection: 1
+  databaseSystemdbMaxConnection: 10
+  databasePgvectorHost: pgvector
+  databasePgvectorPort: 5432
+  databasePgvectorUser: postgres
+  databasePgvectorPassword: changeit
+  databasePgvectorDatabase: sigbot
+  databasePgvectorMinConnection: 1
+  databasePgvectorMaxConnection: 10
+
+# Storage configuration
+persistence:
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Annotations
+podAnnotations: {}
+
+# Labels
+podLabels: {}
+

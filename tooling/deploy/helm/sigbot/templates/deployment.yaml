@@ -1,0 +1,277 @@
+{{- if .Values.server.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-server
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      component: server
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        component: server
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sigbot", "server"]
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: RUST_BACKTRACE
+              value: {{ .Values.env.rustBacktrace | quote }}
+            - name: SWAGGER__ENABLED
+              value: {{ .Values.env.swaggerEnabled | quote }}
+            - name: LOGGING__MODE
+              value: {{ .Values.env.loggingMode | quote }}
+            - name: LOGGING__LEVEL
+              value: {{ .Values.env.loggingLevel | quote }}
+            - name: CACHE__PROVIDER
+              value: {{ .Values.env.cacheProvider | quote }}
+            - name: CACHE__REDIS__NODES
+              value: {{ .Values.env.redisNodes | quote }}
+            - name: CACHE__REDIS__PASSWORD
+              value: {{ .Values.env.redisPassword | quote }}
+            - name: DATABASE__SYSTEMDB__HOST
+              value: {{ .Values.env.databaseSystemdbHost | quote }}
+            - name: DATABASE__SYSTEMDB__PORT
+              value: {{ .Values.env.databaseSystemdbPort | quote }}
+            - name: DATABASE__SYSTEMDB__USER
+              value: {{ .Values.env.databaseSystemdbUser | quote }}
+            - name: DATABASE__SYSTEMDB__PASSWORD
+              value: {{ .Values.env.databaseSystemdbPassword | quote }}
+            - name: DATABASE__SYSTEMDB__DATABASE
+              value: {{ .Values.env.databaseSystemdbDatabase | quote }}
+            - name: DATABASE__SYSTEMDB__MIN_CONNECTION
+              value: {{ .Values.env.databaseSystemdbMinConnection | quote }}
+            - name: DATABASE__SYSTEMDB__MAX_CONNECTION
+              value: {{ .Values.env.databaseSystemdbMaxConnection | quote }}
+            - name: DATABASE__PGVECTOR__HOST
+              value: {{ .Values.env.databasePgvectorHost | quote }}
+            - name: DATABASE__PGVECTOR__PORT
+              value: {{ .Values.env.databasePgvectorPort | quote }}
+            - name: DATABASE__PGVECTOR__USER
+              value: {{ .Values.env.databasePgvectorUser | quote }}
+            - name: DATABASE__PGVECTOR__PASSWORD
+              value: {{ .Values.env.databasePgvectorPassword | quote }}
+            - name: DATABASE__PGVECTOR__DATABASE
+              value: {{ .Values.env.databasePgvectorDatabase | quote }}
+            - name: DATABASE__PGVECTOR__MIN_CONNECTION
+              value: {{ .Values.env.databasePgvectorMinConnection | quote }}
+            - name: DATABASE__PGVECTOR__MAX_CONNECTION
+              value: {{ .Values.env.databasePgvectorMaxConnection | quote }}
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/sigbot/storage
+      volumes:
+        - name: storage
+          {{- if .Values.persistence.storageClass }}
+          persistentVolumeClaim:
+            claimName: {{ include "sigbot.fullname" . }}-storage
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- end }}
+
+{{- if .Values.deployer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-deployer
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: deployer
+spec:
+  replicas: {{ .Values.deployer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      component: deployer
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        component: deployer
+    spec:
+      serviceAccountName: {{ include "sigbot.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: deployer
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sigbot", "deployer", "--runtime-mode={{ .Values.deployer.mode }}"]
+          env:
+            - name: RUST_BACKTRACE
+              value: {{ .Values.env.rustBacktrace | quote }}
+            - name: LOGGING__MODE
+              value: {{ .Values.env.loggingMode | quote }}
+            - name: LOGGING__LEVEL
+              value: {{ .Values.env.loggingLevel | quote }}
+            - name: DATABASE__SYSTEMDB__HOST
+              value: {{ .Values.env.databaseSystemdbHost | quote }}
+            - name: DATABASE__SYSTEMDB__PORT
+              value: {{ .Values.env.databaseSystemdbPort | quote }}
+            - name: DATABASE__SYSTEMDB__USER
+              value: {{ .Values.env.databaseSystemdbUser | quote }}
+            - name: DATABASE__SYSTEMDB__PASSWORD
+              value: {{ .Values.env.databaseSystemdbPassword | quote }}
+            - name: DATABASE__SYSTEMDB__DATABASE
+              value: {{ .Values.env.databaseSystemdbDatabase | quote }}
+          resources:
+            {{- toYaml .Values.deployer.resources | nindent 12 }}
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/sigbot/storage
+      volumes:
+        - name: storage
+          {{- if .Values.persistence.storageClass }}
+          persistentVolumeClaim:
+            claimName: {{ include "sigbot.fullname" . }}-storage
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- end }}
+
+{{- if .Values.executor.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-executor
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: executor
+spec:
+  replicas: {{ .Values.executor.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      component: executor
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        component: executor
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: executor
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sigbot", "executor"]
+          env:
+            - name: RUST_BACKTRACE
+              value: {{ .Values.env.rustBacktrace | quote }}
+            - name: LOGGING__MODE
+              value: {{ .Values.env.loggingMode | quote }}
+            - name: LOGGING__LEVEL
+              value: {{ .Values.env.loggingLevel | quote }}
+            - name: DATABASE__SYSTEMDB__HOST
+              value: {{ .Values.env.databaseSystemdbHost | quote }}
+            - name: DATABASE__SYSTEMDB__PORT
+              value: {{ .Values.env.databaseSystemdbPort | quote }}
+            - name: DATABASE__SYSTEMDB__USER
+              value: {{ .Values.env.databaseSystemdbUser | quote }}
+            - name: DATABASE__SYSTEMDB__PASSWORD
+              value: {{ .Values.env.databaseSystemdbPassword | quote }}
+            - name: DATABASE__SYSTEMDB__DATABASE
+              value: {{ .Values.env.databaseSystemdbDatabase | quote }}
+          resources:
+            {{- toYaml .Values.executor.resources | nindent 12 }}
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/sigbot/storage
+      volumes:
+        - name: storage
+          {{- if .Values.persistence.storageClass }}
+          persistentVolumeClaim:
+            claimName: {{ include "sigbot.fullname" . }}-storage
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- end }}
+

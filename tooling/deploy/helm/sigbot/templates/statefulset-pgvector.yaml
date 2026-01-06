@@ -1,0 +1,73 @@
+{{- if .Values.pgvector.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sigbot.fullname" . }}-pgvector
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    component: pgvector
+spec:
+  serviceName: {{ include "sigbot.fullname" . }}-pgvector
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      component: pgvector
+  template:
+    metadata:
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        component: pgvector
+    spec:
+      containers:
+        - name: postgresql
+          image: "{{ .Values.pgvector.image.registry }}/{{ .Values.pgvector.image.repository }}:{{ .Values.pgvector.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGUSER
+              value: {{ .Values.pgvector.auth.postgresUser | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.pgvector.auth.postgresPassword | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.pgvector.auth.postgresDatabase | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.pgvector.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.pgvector.auth.postgresUser }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.pgvector.auth.postgresUser }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        {{- if .Values.pgvector.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "sigbot.fullname" . }}-pgvector
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+---
+{{- end }}
+
