@@ -25,7 +25,8 @@ use bollard::container::{Config, CreateContainerOptions, StartContainerOptions};
 use bollard::network::CreateNetworkOptions;
 use bollard::Docker;
 use common_telemetry::{error, info, warn};
-use sigbot_core::sys::handler::{dlock_handler::IDLockHandler, tenant_handler::ITenantHandler};
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_types::sys::tenant::Tenant;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -36,8 +37,7 @@ pub struct SigbotDockerDeployer {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    tenant_handler: Arc<dyn ITenantHandler + Send + Sync>,
-    dlock_handler: Arc<dyn IDLockHandler + Send + Sync>,
+    state: Arc<SigbotState>,
     docker_client: Arc<Mutex<Option<Docker>>>,
 }
 
@@ -50,8 +50,7 @@ impl SigbotDockerDeployer {
     pub async fn new(
         schedule_cron: Option<String>,
         schedule_channels: Option<usize>,
-        tenant_handler: Option<Arc<dyn ITenantHandler + Send + Sync>>,
-        dlock_handler: Option<Arc<dyn IDLockHandler + Send + Sync>>,
+        state: Option<Arc<SigbotState>>,
     ) -> Arc<Self> {
         // Initialize Docker client
         let docker_url = std::env::var("DOCKER_HOST").unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
@@ -93,8 +92,7 @@ impl SigbotDockerDeployer {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            tenant_handler: tenant_handler.expect("Tenant handler is required"),
-            dlock_handler: dlock_handler.expect("Dlock handler is required"),
+            state: state.expect("SigbotState is required"),
             docker_client: Arc::new(Mutex::new(docker_client)),
         })
     }
@@ -102,10 +100,10 @@ impl SigbotDockerDeployer {
     pub(super) async fn execute(&self) {
         info!("Executing Docker deployer ...");
 
-        // Acquire distributed lock.
+        // Acquire distributed lock using core module handler
         let dlock_name = "DOCKER_DEPLOYER";
-        let acquired = self
-            .dlock_handler
+        let dlock_handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
+        let acquired = dlock_handler
             .acquire(dlock_name.to_string(), Duration::from_secs(10))
             .await;
         match acquired {
@@ -133,7 +131,7 @@ impl SigbotDockerDeployer {
         let this_startup = self.clone();
         let this_shutdown = self.clone();
         SigbotDeployerFactory::do_scan_process(
-            self.tenant_handler.clone(),
+            self.state.clone(),
             move |tenant| {
                 let this = this_startup.clone();
                 async move {

@@ -22,7 +22,7 @@
 #####################################################
 ### STAGE 1: Build Base with System Dependencies  ###
 #####################################################
-FROM registry.cn-shenzhen.aliyuncs.com/wl4g/rust:1.85 AS base
+FROM registry.cn-shenzhen.aliyuncs.com/wl4g/rust:1.91.1 AS base
 
 ARG BUILD_MIRROR_URL=http://mirrors.aliyun.com
 ARG DEBIAN_FRONTEND=noninteractive
@@ -107,7 +107,7 @@ FROM registry.cn-shenzhen.aliyuncs.com/wl4g/debian:bookworm
 
 # Build project metadata labels.
 ARG PROJECT_NAME=sigbot
-ARG PROJECT_REPO="https://github.com/wl4g/sigbot"
+ARG PROJECT_REPO="https://github.com/sigbot-projects/sigbot-core"
 ARG PROJECT_DESC="Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust."
 ARG PROJECT_MAINTAINER="James Wong<jameswong1376@gmail.com>"
 ARG BUILD_COMMIT_ID=""

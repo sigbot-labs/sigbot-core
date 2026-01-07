@@ -2,26 +2,30 @@ version: '3.8'
 
 x-shared-env: &shared-env
   RUST_BACKTRACE: full
-  SWAGGER__ENABLED: ${SWAGGER_ENABLED:-true}
-  LOGGING__MODE: ${LOGGING_MODE:-JSON}
-  LOGGING__LEVEL: ${LOGGING_LEVEL:-DEBUG}
-  CACHE__PROVIDER: ${CACHE_PROVIDER:-Redis}
-  CACHE__REDIS__NODES: ${REDIS_NODES:-redis://127.0.0.1:6379}
-  CACHE__REDIS__PASSWORD: ${REDIS_PASSWORD:-}
-  DATABASE__SYSTEMDB__HOST: ${POSTGRES_HOST:-systemdb}
-  DATABASE__SYSTEMDB__PORT: ${POSTGRES_PORT:-5432}
-  DATABASE__SYSTEMDB__USER: ${POSTGRES_USER:-postgres}
-  DATABASE__SYSTEMDB__PASSWORD: ${POSTGRES_PASSWORD:-changeit}
-  DATABASE__SYSTEMDB__DATABASE: ${POSTGRES_DATABASE:-sigbot}
-  DATABASE__SYSTEMDB__MIN_CONNECTION: ${POSTGRES_MIN_CONNECTION:-1}
-  DATABASE__SYSTEMDB__MAX_CONNECTION: ${POSTGRES_MAX_CONNECTION:-10}
-  DATABASE__PGVECTOR__HOST: ${POSTGRES_HOST:-pgvector}
-  DATABASE__PGVECTOR__PORT: ${POSTGRES_PORT:-5432}
-  DATABASE__PGVECTOR__USER: ${POSTGRES_USER:-postgres}
-  DATABASE__PGVECTOR__PASSWORD: ${POSTGRES_PASSWORD:-changeit}
-  DATABASE__PGVECTOR__DATABASE: ${POSTGRES_DATABASE:-sigbot}
-  DATABASE__PGVECTOR__MIN_CONNECTION: ${POSTGRES_MIN_CONNECTION:-1}
-  DATABASE__PGVECTOR__MAX_CONNECTION: ${POSTGRES_MAX_CONNECTION:-10}
+  SIGBOT__SWAGGER__ENABLED: ${SWAGGER_ENABLED:-true}
+  SIGBOT__LOGGING__MODE: ${LOGGING_MODE:-JSON}
+  SIGBOT__LOGGING__LEVEL: ${LOGGING_LEVEL:-DEBUG}
+  SIGBOT__CACHE__PROVIDER: ${CACHE_PROVIDER:-Redis}
+  SIGBOT__CACHE__REDIS__NODES: ${REDIS_NODES:-redis://127.0.0.1:6379}
+  SIGBOT__CACHE__REDIS__PASSWORD: ${REDIS_PASSWORD:-}
+  SIGBOT__APPDB__TYPE: ${APPDB_TYPE:-POSTGRESQL}
+  SIGBOT__APPDB__POSTGRES__HOST: ${POSTGRES_HOST:-appdb}
+  SIGBOT__APPDB__POSTGRES__PORT: ${POSTGRES_PORT:-5432}
+  SIGBOT__APPDB__POSTGRES__USERNAME: ${POSTGRES_USER:-postgres}
+  SIGBOT__APPDB__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:-changeit}
+  SIGBOT__APPDB__POSTGRES__DATABASE: ${POSTGRES_DATABASE:-postgres}
+  SIGBOT__APPDB__POSTGRES__SCHEMA: ${POSTGRES_SCHEMA:-public}
+  SIGBOT__APPDB__POSTGRES__MIN_CONNECTIONS: ${POSTGRES_MIN_CONNECTION:-1}
+  SIGBOT__APPDB__POSTGRES__MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTION:-10}
+  SIGBOT__LLM__VECDB__TYPE: ${VECDB_TYPE:-PGVECTOR}
+  SIGBOT__LLM__VECDB__PG_VECTOR__HOST: ${PGVECTOR_HOST:-pgvector}
+  SIGBOT__LLM__VECDB__PG_VECTOR__PORT: ${PGVECTOR_PORT:-5432}
+  SIGBOT__LLM__VECDB__PG_VECTOR__USERNAME: ${PGVECTOR_USER:-postgres}
+  SIGBOT__LLM__VECDB__PG_VECTOR__PASSWORD: ${PGVECTOR_PASSWORD:-changeit}
+  SIGBOT__LLM__VECDB__PG_VECTOR__DATABASE: ${PGVECTOR_DATABASE:-postgres}
+  SIGBOT__LLM__VECDB__PG_VECTOR__SCHEMA: ${PGVECTOR_SCHEMA:-public}
+  SIGBOT__LLM__VECDB__PG_VECTOR__MIN_CONNECTIONS: ${PGVECTOR_MIN_CONNECTION:-1}
+  SIGBOT__LLM__VECDB__PG_VECTOR__MAX_CONNECTIONS: ${PGVECTOR_MAX_CONNECTION:-10}
   SIGBOT__LLM__EMBEDDING__API_KEY: ${SIGBOT_LLM_EMBEDDING_API_KEY:-}
   SIGBOT__LLM__EMBEDDING__MODEL: ${SIGBOT_LLM_EMBEDDING_MODEL:-}
   SIGBOT__LLM__GENERATE__API_KEY: ${SIGBOT_LLM_GENERATE_API_KEY:-}
@@ -33,20 +37,20 @@ x-shared-env: &shared-env
 
 services:
   # System database for storing tenant and system configuration
-  systemdb:
+  appdb:
     image: registry.cn-shenzhen.aliyuncs.com/wl4g/pgvector_pgvector:pg16
     restart: unless-stopped
     environment:
-      PGUSER: ${DATABASE__SYSTEMDB__USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE__SYSTEMDB__PASSWORD:-changeit}
-      POSTGRES_DB: ${DATABASE__SYSTEMDB__DATABASE:-sigbot_sysdb}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeit}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-sigbot_sysdb}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - systemdb_data:/var/lib/postgresql/data
+      - appdb_data:/var/lib/postgresql/data
     networks:
       - sigbot
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__SYSTEMDB__USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,16 +60,16 @@ services:
     image: registry.cn-shenzhen.aliyuncs.com/wl4g/pgvector_pgvector:pg16
     restart: unless-stopped
     environment:
-      PGUSER: ${DATABASE__PGVECTOR__USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE__PGVECTOR__PASSWORD:-changeit}
-      POSTGRES_DB: ${DATABASE__PGVECTOR__DATABASE:-sigbot_vecdb}
+      PGUSER: ${PGVECTOR_USER:-postgres}
+      POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-changeit}
+      POSTGRES_DB: ${PGVECTOR_DATABASE:-sigbot_vecdb}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - pgvector_data:/var/lib/postgresql/data
     networks:
       - sigbot
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__PGVECTOR__USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PGVECTOR_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -87,7 +91,7 @@ services:
 
   # SigBot Deployer - manages tenant lifecycle and component deployment
   deployer:
-    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest}
+    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot-core:latest}
     restart: unless-stopped
     command: deployer --runtime-mode=${DEPLOYER_MODE:-docker}
     security_opt:
@@ -100,7 +104,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - sigbot_storage:/var/lib/sigbot/storage
     depends_on:
-      systemdb:
+      appdb:
         condition: service_healthy
       pgvector:
         condition: service_healthy
@@ -111,7 +115,7 @@ services:
 
   # API Server
   server:
-    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest}
+    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot-core:latest}
     restart: unless-stopped
     command: server
     security_opt:
@@ -121,7 +125,7 @@ services:
     ports:
       - "${SERVER_PORT:-9000}:9000"
     depends_on:
-      systemdb:
+      appdb:
         condition: service_healthy
       pgvector:
         condition: service_healthy
@@ -134,7 +138,7 @@ services:
 
   # Executor (for general task execution)
   executor:
-    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot:latest}
+    image: ${SIGBOT_IMAGE:-registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot-core:latest}
     restart: unless-stopped
     command: executor
     security_opt:
@@ -142,7 +146,7 @@ services:
     environment:
       <<: *shared-env
     depends_on:
-      systemdb:
+      appdb:
         condition: service_healthy
       pgvector:
         condition: service_healthy
@@ -154,7 +158,7 @@ services:
       - sigbot
 
 volumes:
-  systemdb_data:
+  appdb_data:
     driver: local
   pgvector_data:
     driver: local

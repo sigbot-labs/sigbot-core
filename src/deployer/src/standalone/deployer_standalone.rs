@@ -20,8 +20,9 @@
 
 use crate::deployer_factory::{ISigbotDeployer, SigbotDeployerFactory};
 use async_trait::async_trait;
-use common_telemetry::{info, warn};
-use sigbot_core::sys::handler::{dlock_handler::IDLockHandler, tenant_handler::ITenantHandler};
+use common_telemetry::info;
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_types::sys::tenant::Tenant;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -32,8 +33,7 @@ pub struct SigbotStandaloneDeployer {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    tenant_handler: Arc<dyn ITenantHandler + Send + Sync>,
-    dlock_handler: Arc<dyn IDLockHandler + Send + Sync>,
+    state: Arc<SigbotState>,
     // Track initialized tenants in standalone mode
     initialized_tenants: Arc<Mutex<HashMap<i64, bool>>>,
 }
@@ -47,15 +47,13 @@ impl SigbotStandaloneDeployer {
     pub async fn new(
         schedule_cron: Option<String>,
         schedule_channels: Option<usize>,
-        tenant_handler: Option<Arc<dyn ITenantHandler + Send + Sync>>,
-        dlock_handler: Option<Arc<dyn IDLockHandler + Send + Sync>>,
+        state: Option<Arc<SigbotState>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            tenant_handler: tenant_handler.expect("Tenant handler is required"),
-            dlock_handler: dlock_handler.expect("Dlock handler is required"),
+            state: state.expect("SigbotState is required"),
             initialized_tenants: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -63,10 +61,10 @@ impl SigbotStandaloneDeployer {
     pub(super) async fn execute(&self) {
         info!("Executing Host deployer ...");
 
-        // Acquire distributed lock.
+        // Acquire distributed lock using core module handler
         let dlock_name = "STANDALONE_DEPLOYER";
-        let acquired = self
-            .dlock_handler
+        let dlock_handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
+        let acquired = dlock_handler
             .acquire(dlock_name.to_string(), Duration::from_secs(10))
             .await;
         match acquired {
@@ -94,7 +92,7 @@ impl SigbotStandaloneDeployer {
         let this_startup = self.clone();
         let this_shutdown = self.clone();
         SigbotDeployerFactory::do_scan_process(
-            self.tenant_handler.clone(),
+            self.state.clone(),
             move |tenant| {
                 let this = this_startup.clone();
                 async move {

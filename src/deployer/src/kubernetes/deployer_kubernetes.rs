@@ -29,15 +29,9 @@ use kube::{
     api::{Api, DeleteParams, PostParams},
     Client, Config,
 };
-use sigbot_core::sys::handler::{dlock_handler::IDLockHandler, tenant_handler::ITenantHandler};
-use sigbot_types::{
-    modules::{
-        datafeed::datafeed::{DatafeedInfo, DatafeedProvider},
-        strategy::strategy::StrategyInfo,
-    },
-    sys::tenant::Tenant,
-    EntityBase,
-};
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use sigbot_types::sys::tenant::Tenant;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -47,8 +41,7 @@ pub struct SigbotKubernetesDeployer {
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    tenant_handler: Arc<dyn ITenantHandler + Send + Sync>,
-    dlock_handler: Arc<dyn IDLockHandler + Send + Sync>,
+    state: Arc<SigbotState>,
     kube_client: Arc<Mutex<Option<Client>>>,
 }
 
@@ -61,8 +54,7 @@ impl SigbotKubernetesDeployer {
     pub async fn new(
         schedule_cron: Option<String>,
         schedule_channels: Option<usize>,
-        tenant_handler: Option<Arc<dyn ITenantHandler + Send + Sync>>,
-        dlock_handler: Option<Arc<dyn IDLockHandler + Send + Sync>>,
+        state: Option<Arc<SigbotState>>,
     ) -> Arc<Self> {
         // Initialize Kubernetes client
         let kube_client = match Config::infer().await {
@@ -89,8 +81,7 @@ impl SigbotKubernetesDeployer {
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            tenant_handler: tenant_handler.expect("Tenant handler is required"),
-            dlock_handler: dlock_handler.expect("Dlock handler is required"),
+            state: state.expect("SigbotState is required"),
             kube_client: Arc::new(Mutex::new(kube_client)),
         })
     }
@@ -98,10 +89,10 @@ impl SigbotKubernetesDeployer {
     pub(super) async fn execute(&self) {
         info!("Executing Kubernetes deployer ...");
 
-        // Acquire distributed lock.
+        // Acquire distributed lock using core module handler
         let dlock_name = "KUBERNETES_DEPLOYER";
-        let acquired = self
-            .dlock_handler
+        let dlock_handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
+        let acquired = dlock_handler
             .acquire(dlock_name.to_string(), Duration::from_secs(10))
             .await;
         match acquired {
@@ -129,7 +120,7 @@ impl SigbotKubernetesDeployer {
         let this_startup = self.clone();
         let this_shutdown = self.clone();
         SigbotDeployerFactory::do_scan_process(
-            self.tenant_handler.clone(),
+            self.state.clone(),
             move |tenant| {
                 let this = this_startup.clone();
                 async move {
