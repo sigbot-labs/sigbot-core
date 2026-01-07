@@ -21,7 +21,7 @@
 use crate::apm;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
-use common_telemetry::{debug, info};
+use common_telemetry::debug;
 use prometheus::{Encoder, TextEncoder};
 use sigbot_core::config::config::get_config;
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_handler;

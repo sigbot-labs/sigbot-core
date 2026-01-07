@@ -243,9 +243,31 @@ services:
       coin-market-api-mainnet-endpoint: https://dapi.binance.com/dapi/v1
       coin-market-ws-mainnet-endpoint: wss://ws-dapi.binance.com/ws-dapi/v1
   # The backtest components super parameters and default configuration.
-  backtests:
-    - name: "defaultVerifier"
-      kind: "SIMPLE_EXECUTE"
-      enabled: true
-      cron: "0 * * * * *"
-      channel-size: 200
+  backtest:
+    name: "defaultVerifier"
+    enabled: true
+    cron: "0 * * * * *"
+    channel-size: 200
+  # Deploy configuration for tenant-level component deployment
+  deployer:
+    images:
+      postgresql: "postgres:16"
+      emqx: "emqx/emqx:latest"
+      timescaledb: "timescale/timescaledb:latest-pg16"
+      redis: "redis:7-alpine"
+      sigbot: "sigbot:latest"
+    network:
+      tenant-network-prefix: "sigbot-t"
+    middleware:
+      postgresql:
+        mode: "standalone" # Options: standalone|cluster
+        replicas: 1
+      emqx:
+        mode: "standalone" # Options: standalone|cluster
+        replicas: 1
+      redis:
+        mode: "standalone" # Options: standalone|cluster
+        replicas: 1
+      timescaledb:
+        mode: "standalone" # Options: standalone|cluster
+        replicas: 1

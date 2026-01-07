@@ -446,6 +446,89 @@ pub struct GenerateLLMProperties {
     pub system_prompt: String,
 }
 
+// Deploy Properties.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeployerProperties {
+    #[serde(default = "DeployImagesProperties::default")]
+    pub images: DeployImagesProperties,
+    #[serde(default = "DeployNetworkProperties::default")]
+    pub network: DeployNetworkProperties,
+    #[serde(default = "DeployMiddlewareProperties::default")]
+    pub middleware: DeployMiddlewareProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeployImagesProperties {
+    #[serde(rename = "postgresql")]
+    pub postgresql: String,
+    #[serde(rename = "emqx")]
+    pub emqx: String,
+    #[serde(rename = "redis")]
+    pub redis: String,
+    #[serde(rename = "timescaledb")]
+    pub timescaledb: String,
+    #[serde(rename = "sigbot")]
+    pub sigbot: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeployNetworkProperties {
+    #[serde(rename = "tenant-network-prefix")]
+    pub tenant_network_prefix: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeployMiddlewareProperties {
+    #[serde(default = "PostgresqlDeployProperties::default")]
+    pub postgresql: PostgresqlDeployProperties,
+    #[serde(default = "EmqxDeployProperties::default")]
+    pub emqx: EmqxDeployProperties,
+    #[serde(default = "RedisDeployProperties::default")]
+    pub redis: RedisDeployProperties,
+    #[serde(default = "TimescaledbDeployProperties::default")]
+    pub timescaledb: TimescaledbDeployProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmqxDeployProperties {
+    #[serde(rename = "mode")]
+    pub mode: DeployMode,
+    #[serde(rename = "replicas")]
+    pub replicas: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PostgresqlDeployProperties {
+    #[serde(rename = "mode")]
+    pub mode: DeployMode,
+    #[serde(rename = "replicas")]
+    pub replicas: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TimescaledbDeployProperties {
+    #[serde(rename = "mode")]
+    pub mode: DeployMode,
+    #[serde(rename = "replicas")]
+    pub replicas: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RedisDeployProperties {
+    #[serde(rename = "mode")]
+    pub mode: DeployMode,
+    #[serde(rename = "replicas")]
+    pub replicas: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum DeployMode {
+    Standalone,
+    Cluster,
+}
+
 // Services Properties.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -456,6 +539,8 @@ pub struct ServicesProperties {
     pub controllers: ControllerProperties,
     #[serde(rename = "backtest")]
     pub backtest: BacktestProperties,
+    #[serde(default = "DeployerProperties::default")]
+    pub deployer: DeployerProperties,
 }
 
 // Exchange Properties.
@@ -893,6 +978,7 @@ impl Default for ServicesProperties {
             exchanges: ExchangeProperties::default(),
             controllers: ControllerProperties::default(),
             backtest: BacktestProperties::default(),
+            deployer: DeployerProperties::default(),
         }
     }
 }
@@ -998,6 +1084,85 @@ impl Default for BacktestProperties {
     fn default() -> Self {
         BacktestProperties {
             inner: ScheduledPropertiesBase::default(),
+        }
+    }
+}
+
+// Deploy Properties impls.
+
+impl Default for DeployerProperties {
+    fn default() -> Self {
+        DeployerProperties {
+            images: DeployImagesProperties::default(),
+            network: DeployNetworkProperties::default(),
+            middleware: DeployMiddlewareProperties::default(),
+        }
+    }
+}
+
+impl Default for DeployImagesProperties {
+    fn default() -> Self {
+        DeployImagesProperties {
+            sigbot: "sigbot:latest".to_string(),
+            emqx: "emqx/emqx:latest".to_string(),
+            postgresql: "postgres:16".to_string(),
+            timescaledb: "timescale/timescaledb:latest-pg16".to_string(),
+            redis: "redis:7-alpine".to_string(),
+        }
+    }
+}
+
+impl Default for DeployNetworkProperties {
+    fn default() -> Self {
+        DeployNetworkProperties {
+            tenant_network_prefix: "sigbot-t".to_string(),
+        }
+    }
+}
+
+impl Default for DeployMiddlewareProperties {
+    fn default() -> Self {
+        DeployMiddlewareProperties {
+            emqx: EmqxDeployProperties::default(),
+            postgresql: PostgresqlDeployProperties::default(),
+            timescaledb: TimescaledbDeployProperties::default(),
+            redis: RedisDeployProperties::default(),
+        }
+    }
+}
+
+impl Default for EmqxDeployProperties {
+    fn default() -> Self {
+        EmqxDeployProperties {
+            mode: DeployMode::Standalone,
+            replicas: Some(1),
+        }
+    }
+}
+
+impl Default for PostgresqlDeployProperties {
+    fn default() -> Self {
+        PostgresqlDeployProperties {
+            mode: DeployMode::Standalone,
+            replicas: Some(1),
+        }
+    }
+}
+
+impl Default for TimescaledbDeployProperties {
+    fn default() -> Self {
+        TimescaledbDeployProperties {
+            mode: DeployMode::Standalone,
+            replicas: Some(1),
+        }
+    }
+}
+
+impl Default for RedisDeployProperties {
+    fn default() -> Self {
+        RedisDeployProperties {
+            mode: DeployMode::Standalone,
+            replicas: Some(1),
         }
     }
 }

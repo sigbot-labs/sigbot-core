@@ -93,9 +93,8 @@ impl DLockPostgresRepository {
         UPDATE sys_dlock SET status = 1, updated_at = CURRENT_TIMESTAMP(13), holder = ?
         WHERE del_flag = 0 AND (
             ((id = ? OR name = ?) AND status = 0)
-            OR (updated_at < ? - INTERVAL '? milliseconds')
-            )
-            "#;
+            OR (updated_at < NOW() - INTERVAL '? milliseconds'))
+        "#;
         let mut tx = self.inner.get_pool().begin().await?;
         let update_result = sqlx::query(&acquire_sql)
             .bind(&holder)

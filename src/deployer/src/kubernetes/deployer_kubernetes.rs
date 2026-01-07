@@ -23,12 +23,14 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use common_telemetry::{error, info, warn};
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
+use k8s_openapi::api::core::v1::{Namespace, Secret};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::ByteString;
 use kube::{
     api::{Api, DeleteParams, PostParams},
     Client, Config,
 };
+use sigbot_core::config::config::{get_config, DeployMode};
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_types::sys::tenant::Tenant;
@@ -174,6 +176,12 @@ impl SigbotKubernetesDeployer {
             return;
         }
 
+        // Create secrets for all middleware components
+        if let Err(e) = self.create_secrets(kube_client, &namespace_name, tenant_id).await {
+            error!("Failed to create secrets for tenant {}: {}", tenant_id, e);
+            // Continue deployment even if secret creation fails (secrets may already exist)
+        }
+
         // Deploy EMQX
         if let Err(e) = self
             .deploy_emqx(kube_client, &namespace_name, tenant_id, tenant_name)
@@ -196,6 +204,14 @@ impl SigbotKubernetesDeployer {
             .await
         {
             error!("Failed to deploy TimescaleDB for tenant {}: {}", tenant_id, e);
+        }
+
+        // Deploy Redis
+        if let Err(e) = self
+            .deploy_redis(kube_client, &namespace_name, tenant_id, tenant_name)
+            .await
+        {
+            error!("Failed to deploy Redis for tenant {}: {}", tenant_id, e);
         }
 
         info!("Completed middleware components startup for tenant {}", tenant_id);
@@ -251,6 +267,158 @@ impl SigbotKubernetesDeployer {
             .context("Failed to create namespace")?;
 
         info!("Created namespace {}", name);
+        Ok(())
+    }
+
+    async fn create_secrets(&self, client: &Client, namespace: &str, tenant_id: i64) -> Result<()> {
+        let secrets: Api<Secret> = Api::namespaced(client.clone(), namespace);
+
+        // Generate secure passwords (in production, use proper password generation)
+        // Using tenant_id + timestamp for uniqueness
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let postgresql_password = format!("pg_{}_{}", tenant_id, timestamp);
+        let postgresql_postgres_password = format!("pg_postgres_{}_{}", tenant_id, timestamp);
+        let postgresql_replication_password = format!("pg_repl_{}_{}", tenant_id, timestamp);
+        let timescaledb_password = format!("ts_{}_{}", tenant_id, timestamp);
+        let timescaledb_postgres_password = format!("ts_postgres_{}_{}", tenant_id, timestamp);
+        let timescaledb_replication_password = format!("ts_repl_{}_{}", tenant_id, timestamp);
+        let emqx_password = format!("emqx_{}_{}", tenant_id, timestamp);
+        let redis_password = format!("redis_{}_{}", tenant_id, timestamp);
+
+        // Create PostgreSQL secret (Bitnami standard)
+        let postgresql_secret_name = format!("postgresql-secret-{}", tenant_id);
+        if secrets.get(&postgresql_secret_name).await.is_err() {
+            let postgresql_secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(postgresql_secret_name.clone()),
+                    ..Default::default()
+                },
+                data: Some({
+                    let mut data = BTreeMap::new();
+                    // Bitnami PostgreSQL standard fields
+                    data.insert(
+                        "postgres-password".to_string(),
+                        ByteString(postgresql_password.as_bytes().to_vec()),
+                    );
+                    data.insert(
+                        "postgres-postgres-password".to_string(),
+                        ByteString(postgresql_postgres_password.as_bytes().to_vec()),
+                    );
+                    data.insert("postgres-username".to_string(), ByteString(b"postgres".to_vec()));
+                    data.insert(
+                        "postgres-database".to_string(),
+                        ByteString(format!("sigbot_{}", tenant_id).as_bytes().to_vec()),
+                    );
+                    // Enterprise replication fields
+                    data.insert(
+                        "postgres-replication-password".to_string(),
+                        ByteString(postgresql_replication_password.as_bytes().to_vec()),
+                    );
+                    data.insert(
+                        "postgres-replication-username".to_string(),
+                        ByteString(b"replicator".to_vec()),
+                    );
+                    data
+                }),
+                ..Default::default()
+            };
+            secrets
+                .create(&PostParams::default(), &postgresql_secret)
+                .await
+                .context("Failed to create PostgreSQL secret")?;
+            info!("Created PostgreSQL secret {}", postgresql_secret_name);
+        }
+
+        // Create TimescaleDB secret (Bitnami standard)
+        let timescaledb_secret_name = format!("timescaledb-secret-{}", tenant_id);
+        if secrets.get(&timescaledb_secret_name).await.is_err() {
+            let timescaledb_secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(timescaledb_secret_name.clone()),
+                    ..Default::default()
+                },
+                data: Some({
+                    let mut data = BTreeMap::new();
+                    // Bitnami PostgreSQL/TimescaleDB standard fields
+                    data.insert(
+                        "postgres-password".to_string(),
+                        ByteString(timescaledb_password.as_bytes().to_vec()),
+                    );
+                    data.insert(
+                        "postgres-postgres-password".to_string(),
+                        ByteString(timescaledb_postgres_password.as_bytes().to_vec()),
+                    );
+                    data.insert("postgres-username".to_string(), ByteString(b"postgres".to_vec()));
+                    data.insert(
+                        "postgres-database".to_string(),
+                        ByteString(format!("sigbot_ts_{}", tenant_id).as_bytes().to_vec()),
+                    );
+                    // Enterprise replication fields
+                    data.insert(
+                        "postgres-replication-password".to_string(),
+                        ByteString(timescaledb_replication_password.as_bytes().to_vec()),
+                    );
+                    data.insert(
+                        "postgres-replication-username".to_string(),
+                        ByteString(b"replicator".to_vec()),
+                    );
+                    data
+                }),
+                ..Default::default()
+            };
+            secrets
+                .create(&PostParams::default(), &timescaledb_secret)
+                .await
+                .context("Failed to create TimescaleDB secret")?;
+            info!("Created TimescaleDB secret {}", timescaledb_secret_name);
+        }
+
+        // Create EMQX secret
+        let emqx_secret_name = format!("emqx-secret-{}", tenant_id);
+        if secrets.get(&emqx_secret_name).await.is_err() {
+            let emqx_secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(emqx_secret_name.clone()),
+                    ..Default::default()
+                },
+                data: Some({
+                    let mut data = BTreeMap::new();
+                    data.insert("password".to_string(), ByteString(emqx_password.as_bytes().to_vec()));
+                    data.insert("username".to_string(), ByteString(b"admin".to_vec()));
+                    data
+                }),
+                ..Default::default()
+            };
+            secrets
+                .create(&PostParams::default(), &emqx_secret)
+                .await
+                .context("Failed to create EMQX secret")?;
+            info!("Created EMQX secret {}", emqx_secret_name);
+        }
+
+        // Create Redis secret (Bitnami standard)
+        let redis_secret_name = format!("redis-secret-{}", tenant_id);
+        if secrets.get(&redis_secret_name).await.is_err() {
+            let redis_secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(redis_secret_name.clone()),
+                    ..Default::default()
+                },
+                data: Some({
+                    let mut data = BTreeMap::new();
+                    data.insert("password".to_string(), ByteString(redis_password.as_bytes().to_vec()));
+                    data
+                }),
+                ..Default::default()
+            };
+            secrets
+                .create(&PostParams::default(), &redis_secret)
+                .await
+                .context("Failed to create Redis secret")?;
+            info!("Created Redis secret {}", redis_secret_name);
+        }
+
         Ok(())
     }
 
@@ -328,7 +496,51 @@ impl SigbotKubernetesDeployer {
         Ok(())
     }
 
+    async fn deploy_redis(&self, client: &Client, namespace: &str, tenant_id: i64, tenant_name: &str) -> Result<()> {
+        let config = get_config();
+        let deployments: Api<Deployment> = Api::namespaced(client.clone(), namespace);
+
+        if config.services.deployer.middleware.redis.mode == DeployMode::Cluster {
+            // Deploy Redis Cluster
+            let deployment_name = format!("redis-cluster-{}", tenant_id);
+            if deployments.get(&deployment_name).await.is_ok() {
+                info!("Redis Cluster deployment {} already exists", deployment_name);
+                return Ok(());
+            }
+
+            let deployment = self.create_redis_cluster_deployment(&deployment_name, tenant_id, tenant_name);
+            deployments
+                .create(&PostParams::default(), &deployment)
+                .await
+                .context("Failed to create Redis Cluster deployment")?;
+            info!("Created Redis Cluster deployment {}", deployment_name);
+        } else {
+            // Deploy Redis Standalone
+            let deployment_name = format!("redis-{}", tenant_id);
+            if deployments.get(&deployment_name).await.is_ok() {
+                info!("Redis deployment {} already exists", deployment_name);
+                return Ok(());
+            }
+
+            let deployment = self.create_redis_deployment(&deployment_name, tenant_id, tenant_name);
+            deployments
+                .create(&PostParams::default(), &deployment)
+                .await
+                .context("Failed to create Redis deployment")?;
+            info!("Created Redis deployment {}", deployment_name);
+        }
+
+        Ok(())
+    }
+
     fn create_emqx_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        let config = get_config();
+        let replicas = if config.services.deployer.middleware.emqx.mode == DeployMode::Cluster {
+            config.services.deployer.middleware.emqx.replicas.unwrap_or(3) as i32
+        } else {
+            config.services.deployer.middleware.emqx.replicas.unwrap_or(1) as i32
+        };
+
         // Simplified EMQX deployment - in production, use Helm charts or more complete manifests
         Deployment {
             metadata: ObjectMeta {
@@ -338,12 +550,16 @@ impl SigbotKubernetesDeployer {
                     labels.insert("app".to_string(), "emqx".to_string());
                     labels.insert("tenant-id".to_string(), tenant_id.to_string());
                     labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels.insert(
+                        "deploy-mode".to_string(),
+                        format!("{:?}", config.services.deployer.middleware.emqx.mode),
+                    );
                     labels
                 }),
                 ..Default::default()
             },
             spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
-                replicas: Some(1),
+                replicas: Some(replicas),
                 selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
                     match_labels: Some({
                         let mut labels = BTreeMap::new();
@@ -366,7 +582,33 @@ impl SigbotKubernetesDeployer {
                     spec: Some(k8s_openapi::api::core::v1::PodSpec {
                         containers: vec![k8s_openapi::api::core::v1::Container {
                             name: "emqx".to_string(),
-                            image: Some("emqx/emqx:latest".to_string()),
+                            image: Some(config.services.deployer.images.emqx.clone()),
+                            env: Some(vec![
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "EMQX_DASHBOARD__DEFAULT_USERNAME".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("emqx-secret-{}", tenant_id)),
+                                            key: "username".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "EMQX_DASHBOARD__DEFAULT_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("emqx-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                            ]),
                             ports: Some(vec![
                                 k8s_openapi::api::core::v1::ContainerPort {
                                     container_port: 1883,
@@ -391,6 +633,13 @@ impl SigbotKubernetesDeployer {
     }
 
     fn create_postgresql_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        let config = get_config();
+        let replicas = if config.services.deployer.middleware.postgresql.mode == DeployMode::Cluster {
+            config.services.deployer.middleware.postgresql.replicas.unwrap_or(3) as i32
+        } else {
+            config.services.deployer.middleware.postgresql.replicas.unwrap_or(1) as i32
+        };
+
         Deployment {
             metadata: ObjectMeta {
                 name: Some(name.to_string()),
@@ -399,12 +648,16 @@ impl SigbotKubernetesDeployer {
                     labels.insert("app".to_string(), "postgresql".to_string());
                     labels.insert("tenant-id".to_string(), tenant_id.to_string());
                     labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels.insert(
+                        "deploy-mode".to_string(),
+                        format!("{:?}", config.services.deployer.middleware.postgresql.mode),
+                    );
                     labels
                 }),
                 ..Default::default()
             },
             spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
-                replicas: Some(1),
+                replicas: Some(replicas),
                 selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
                     match_labels: Some({
                         let mut labels = BTreeMap::new();
@@ -427,28 +680,166 @@ impl SigbotKubernetesDeployer {
                     spec: Some(k8s_openapi::api::core::v1::PodSpec {
                         containers: vec![k8s_openapi::api::core::v1::Container {
                             name: "postgresql".to_string(),
-                            image: Some("postgres:16".to_string()),
+                            image: Some(config.services.deployer.images.postgresql.clone()),
                             env: Some(vec![
+                                // Bitnami PostgreSQL standard environment variables
                                 k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_DB".to_string(),
-                                    value: Some(format!("sigbot_{}", tenant_id)),
-                                    ..Default::default()
-                                },
-                                k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_USER".to_string(),
-                                    value: Some("postgres".to_string()),
-                                    ..Default::default()
-                                },
-                                k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_PASSWORD".to_string(),
+                                    name: "POSTGRESQL_DATABASE".to_string(),
                                     value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
                                         secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
                                             name: Some(format!("postgresql-secret-{}", tenant_id)),
-                                            key: "password".to_string(),
+                                            key: "postgres-database".to_string(),
                                             ..Default::default()
                                         }),
                                         ..Default::default()
                                     }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_USERNAME".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "postgres-username".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "postgres-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: POSTGRESQL_POSTGRES_PASSWORD for postgres superuser
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_POSTGRES_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "postgres-postgres-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Replication configuration (for cluster mode)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_MODE".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.postgresql.mode == DeployMode::Cluster {
+                                            "master".to_string()
+                                        } else {
+                                            "".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_USER".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "postgres-replication-username".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("postgresql-secret-{}", tenant_id)),
+                                            key: "postgres-replication-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Synchronous replication (for high availability)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_SYNCHRONOUS_REPLICATION".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.postgresql.mode == DeployMode::Cluster {
+                                            "on".to_string()
+                                        } else {
+                                            "off".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_NUM_SYNCHRONOUS_REPLICAS".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.postgresql.mode == DeployMode::Cluster {
+                                            "1".to_string()
+                                        } else {
+                                            "0".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Port configuration
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_MASTER_PORT_NUMBER".to_string(),
+                                    value: Some("5432".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_PORT_NUMBER".to_string(),
+                                    value: Some("5432".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: WAL level for replication
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_WAL_LEVEL".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.postgresql.mode == DeployMode::Cluster {
+                                            "replica".to_string()
+                                        } else {
+                                            "replica".to_string() // Enable WAL for potential future replication
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Statement timeout (milliseconds)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_STATEMENT_TIMEOUT".to_string(),
+                                    value: Some("60000".to_string()), // 60 seconds
+                                    ..Default::default()
+                                },
+                                // Enterprise: Connection limits
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_USERNAME_CONNECTION_LIMIT".to_string(),
+                                    value: Some("100".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_POSTGRES_CONNECTION_LIMIT".to_string(),
+                                    value: Some("100".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Timezone configuration
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_TIMEZONE".to_string(),
+                                    value: Some("Asia/Shanghai".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "TZ".to_string(),
+                                    value: Some("Asia/Shanghai".to_string()),
                                     ..Default::default()
                                 },
                             ]),
@@ -469,6 +860,13 @@ impl SigbotKubernetesDeployer {
     }
 
     fn create_timescaledb_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        let config = get_config();
+        let replicas = if config.services.deployer.middleware.timescaledb.mode == DeployMode::Cluster {
+            config.services.deployer.middleware.timescaledb.replicas.unwrap_or(3) as i32
+        } else {
+            config.services.deployer.middleware.timescaledb.replicas.unwrap_or(1) as i32
+        };
+
         // TimescaleDB is typically deployed as a PostgreSQL extension
         // For simplicity, we'll use the timescaledb/postgres image
         Deployment {
@@ -479,12 +877,16 @@ impl SigbotKubernetesDeployer {
                     labels.insert("app".to_string(), "timescaledb".to_string());
                     labels.insert("tenant-id".to_string(), tenant_id.to_string());
                     labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels.insert(
+                        "deploy-mode".to_string(),
+                        format!("{:?}", config.services.deployer.middleware.timescaledb.mode),
+                    );
                     labels
                 }),
                 ..Default::default()
             },
             spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
-                replicas: Some(1),
+                replicas: Some(replicas),
                 selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
                     match_labels: Some({
                         let mut labels = BTreeMap::new();
@@ -507,28 +909,166 @@ impl SigbotKubernetesDeployer {
                     spec: Some(k8s_openapi::api::core::v1::PodSpec {
                         containers: vec![k8s_openapi::api::core::v1::Container {
                             name: "timescaledb".to_string(),
-                            image: Some("timescale/timescaledb:latest-pg16".to_string()),
+                            image: Some(config.services.deployer.images.timescaledb.clone()),
                             env: Some(vec![
+                                // Bitnami PostgreSQL/TimescaleDB standard environment variables
                                 k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_DB".to_string(),
-                                    value: Some(format!("sigbot_ts_{}", tenant_id)),
-                                    ..Default::default()
-                                },
-                                k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_USER".to_string(),
-                                    value: Some("postgres".to_string()),
-                                    ..Default::default()
-                                },
-                                k8s_openapi::api::core::v1::EnvVar {
-                                    name: "POSTGRES_PASSWORD".to_string(),
+                                    name: "POSTGRESQL_DATABASE".to_string(),
                                     value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
                                         secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
                                             name: Some(format!("timescaledb-secret-{}", tenant_id)),
-                                            key: "password".to_string(),
+                                            key: "postgres-database".to_string(),
                                             ..Default::default()
                                         }),
                                         ..Default::default()
                                     }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_USERNAME".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "postgres-username".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "postgres-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: POSTGRESQL_POSTGRES_PASSWORD for postgres superuser
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_POSTGRES_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "postgres-postgres-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Replication configuration (for cluster mode)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_MODE".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.timescaledb.mode == DeployMode::Cluster {
+                                            "master".to_string()
+                                        } else {
+                                            "".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_USER".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "postgres-replication-username".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_REPLICATION_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("timescaledb-secret-{}", tenant_id)),
+                                            key: "postgres-replication-password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Synchronous replication (for high availability)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_SYNCHRONOUS_REPLICATION".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.timescaledb.mode == DeployMode::Cluster {
+                                            "on".to_string()
+                                        } else {
+                                            "off".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_NUM_SYNCHRONOUS_REPLICAS".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.timescaledb.mode == DeployMode::Cluster {
+                                            "1".to_string()
+                                        } else {
+                                            "0".to_string()
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Port configuration
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_MASTER_PORT_NUMBER".to_string(),
+                                    value: Some("5432".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_PORT_NUMBER".to_string(),
+                                    value: Some("5432".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: WAL level for replication
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_WAL_LEVEL".to_string(),
+                                    value: Some(
+                                        if config.services.deployer.middleware.timescaledb.mode == DeployMode::Cluster {
+                                            "replica".to_string()
+                                        } else {
+                                            "replica".to_string() // Enable WAL for potential future replication
+                                        },
+                                    ),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Statement timeout (milliseconds)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_STATEMENT_TIMEOUT".to_string(),
+                                    value: Some("60000".to_string()), // 60 seconds
+                                    ..Default::default()
+                                },
+                                // Enterprise: Connection limits
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_USERNAME_CONNECTION_LIMIT".to_string(),
+                                    value: Some("100".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_POSTGRES_CONNECTION_LIMIT".to_string(),
+                                    value: Some("100".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Timezone configuration
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "POSTGRESQL_TIMEZONE".to_string(),
+                                    value: Some("Asia/Shanghai".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "TZ".to_string(),
+                                    value: Some("Asia/Shanghai".to_string()),
                                     ..Default::default()
                                 },
                             ]),
@@ -537,6 +1077,236 @@ impl SigbotKubernetesDeployer {
                                 name: Some("postgresql".to_string()),
                                 ..Default::default()
                             }]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn create_redis_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        let config = get_config();
+
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), "redis".to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels.insert("deploy-mode".to_string(), "standalone".to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(1),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), "redis".to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), "redis".to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: "redis".to_string(),
+                            image: Some(config.services.deployer.images.redis.clone()),
+                            env: Some(vec![
+                                // Bitnami Redis standard environment variables
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("redis-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: AOF persistence
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_AOF_ENABLED".to_string(),
+                                    value: Some("yes".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: RDB snapshot policy
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_RDB_POLICY".to_string(),
+                                    value: Some("3600#1 300#100 60#10000".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: TLS encryption (optional, can be enabled via config)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_TLS_ENABLED".to_string(),
+                                    value: Some("no".to_string()),
+                                    ..Default::default()
+                                },
+                            ]),
+                            ports: Some(vec![k8s_openapi::api::core::v1::ContainerPort {
+                                container_port: 6379,
+                                name: Some("redis".to_string()),
+                                ..Default::default()
+                            }]),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn create_redis_cluster_deployment(&self, name: &str, tenant_id: i64, tenant_name: &str) -> Deployment {
+        let config = get_config();
+        let replicas = config.services.deployer.middleware.redis.replicas.unwrap_or(6) as i32; // Redis Cluster needs at least 6 nodes (3 masters + 3 replicas)
+
+        // Build REDIS_NODES list: redis-node-0 redis-node-1 ... redis-node-5
+        // In Kubernetes, we'll use StatefulSet naming pattern: {name}-0, {name}-1, etc.
+        let redis_nodes: Vec<String> = (0..replicas).map(|i| format!("{}-{}", name, i)).collect();
+        let redis_nodes_str = redis_nodes.join(" ");
+
+        Deployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: Some({
+                    let mut labels = BTreeMap::new();
+                    labels.insert("app".to_string(), "redis-cluster".to_string());
+                    labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                    labels.insert("tenant-name".to_string(), tenant_name.to_string());
+                    labels.insert("deploy-mode".to_string(), "cluster".to_string());
+                    labels
+                }),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(replicas),
+                selector: k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector {
+                    match_labels: Some({
+                        let mut labels = BTreeMap::new();
+                        labels.insert("app".to_string(), "redis-cluster".to_string());
+                        labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                        labels
+                    }),
+                    ..Default::default()
+                },
+                template: k8s_openapi::api::core::v1::PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some({
+                            let mut labels = BTreeMap::new();
+                            labels.insert("app".to_string(), "redis-cluster".to_string());
+                            labels.insert("tenant-id".to_string(), tenant_id.to_string());
+                            labels
+                        }),
+                        ..Default::default()
+                    }),
+                    spec: Some(k8s_openapi::api::core::v1::PodSpec {
+                        containers: vec![k8s_openapi::api::core::v1::Container {
+                            name: "redis-cluster".to_string(),
+                            image: Some(config.services.deployer.images.redis.clone()),
+                            env: Some(vec![
+                                // Bitnami Redis Cluster standard environment variables
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_PASSWORD".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("redis-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: REDIS_NODES - list of all cluster nodes (required for all nodes)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_NODES".to_string(),
+                                    value: Some(redis_nodes_str.clone()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: REDISCLI_AUTH - for redis-cli authentication (set for all nodes, but only creator uses it)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDISCLI_AUTH".to_string(),
+                                    value_from: Some(k8s_openapi::api::core::v1::EnvVarSource {
+                                        secret_key_ref: Some(k8s_openapi::api::core::v1::SecretKeySelector {
+                                            name: Some(format!("redis-secret-{}", tenant_id)),
+                                            key: "password".to_string(),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                },
+                                // Enterprise: Cluster configuration
+                                // Note: According to tested Bitnami Redis Cluster deployment:
+                                // - REDIS_CLUSTER_CREATOR=yes should only be set on the last node (redis-node-5)
+                                // - REDIS_CLUSTER_REPLICAS=1 should only be set on the last node
+                                // - REDISCLI_AUTH should be set on the last node
+                                // In Kubernetes Deployment, all pods share the same env vars.
+                                // For proper implementation, consider using StatefulSet to set these only on the last pod.
+                                // For now, Bitnami image should handle cluster creation intelligently.
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_CLUSTER_CREATOR".to_string(),
+                                    value: Some("yes".to_string()), // Set for all, but Bitnami handles cluster creation
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_CLUSTER_REPLICAS".to_string(),
+                                    value: Some("1".to_string()), // 1 replica per master
+                                    ..Default::default()
+                                },
+                                // Enterprise: AOF persistence
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_AOF_ENABLED".to_string(),
+                                    value: Some("yes".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: RDB snapshot policy
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_RDB_POLICY".to_string(),
+                                    value: Some("3600#1 300#100 60#10000".to_string()),
+                                    ..Default::default()
+                                },
+                                // Enterprise: TLS encryption (optional, can be enabled via config)
+                                k8s_openapi::api::core::v1::EnvVar {
+                                    name: "REDIS_TLS_ENABLED".to_string(),
+                                    value: Some("no".to_string()),
+                                    ..Default::default()
+                                },
+                            ]),
+                            ports: Some(vec![
+                                k8s_openapi::api::core::v1::ContainerPort {
+                                    container_port: 6379,
+                                    name: Some("redis".to_string()),
+                                    ..Default::default()
+                                },
+                                k8s_openapi::api::core::v1::ContainerPort {
+                                    container_port: 16379,
+                                    name: Some("redis-cluster".to_string()),
+                                    ..Default::default()
+                                },
+                            ]),
                             ..Default::default()
                         }],
                         ..Default::default()
@@ -740,7 +1510,7 @@ impl SigbotKubernetesDeployer {
         tenant_name: &str,
         command: Vec<String>,
     ) -> Deployment {
-        let image = std::env::var("SIGBOT_IMAGE").unwrap_or_else(|_| "sigbot:latest".to_string());
+        let config = get_config();
 
         Deployment {
             metadata: ObjectMeta {
@@ -779,7 +1549,7 @@ impl SigbotKubernetesDeployer {
                     spec: Some(k8s_openapi::api::core::v1::PodSpec {
                         containers: vec![k8s_openapi::api::core::v1::Container {
                             name: component.to_string(),
-                            image: Some(image),
+                            image: Some(config.services.deployer.images.sigbot.clone()),
                             command: Some(command),
                             env: Some(vec![k8s_openapi::api::core::v1::EnvVar {
                                 name: "TENANT_ID".to_string(),

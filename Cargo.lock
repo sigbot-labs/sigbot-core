@@ -7924,6 +7924,7 @@ dependencies = [
  "url",
  "utoipa",
  "utoipa-swagger-ui",
+ "uuid 1.16.0",
  "validator",
  "zip 2.3.0",
 ]

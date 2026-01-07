@@ -25,6 +25,7 @@ use bollard::container::{Config, CreateContainerOptions, StartContainerOptions};
 use bollard::network::CreateNetworkOptions;
 use bollard::Docker;
 use common_telemetry::{error, info, warn};
+use sigbot_core::config::config::get_config;
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_types::sys::tenant::Tenant;
@@ -159,15 +160,19 @@ impl SigbotDockerDeployer {
     async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
-        let network_name = format!("sigbot-tenant-{}", tenant_id);
+        let config = get_config();
+        let network_name = format!(
+            "{}{}-network",
+            config.services.deployer.network.tenant_network_prefix, tenant_id
+        );
 
         info!(
             "Starting middleware components for tenant {} ({})",
             tenant_id, tenant_name
         );
 
-        let docker_client_guard = self.docker_client.lock().await;
-        let docker_client = match docker_client_guard.as_ref() {
+        let guard = self.docker_client.lock().await;
+        let docker_client = match guard.as_ref() {
             Some(client) => client,
             None => {
                 warn!(
@@ -213,7 +218,11 @@ impl SigbotDockerDeployer {
 
     async fn shutdown_middleware_components(&self, tenant: Arc<Tenant>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
-        let network_name = format!("sigbot-tenant-{}", tenant_id);
+        let config = get_config();
+        let network_name = format!(
+            "{}{}-network",
+            config.services.deployer.network.tenant_network_prefix, tenant_id
+        );
 
         info!("Shutting down middleware components for tenant {}", tenant_id);
 
@@ -316,6 +325,7 @@ impl SigbotDockerDeployer {
         tenant_name: &str,
     ) -> Result<()> {
         let container_name = format!("emqx-{}", tenant_id);
+        let config = get_config();
 
         use bollard::container::InspectContainerOptions;
         if docker
@@ -328,7 +338,7 @@ impl SigbotDockerDeployer {
         }
 
         let container_config = Config {
-            image: Some("emqx/emqx:latest".to_string()),
+            image: Some(config.services.deployer.images.emqx.clone()),
             env: Some(vec![
                 format!("TENANT_ID={}", tenant_id),
                 format!("TENANT_NAME={}", tenant_name),
@@ -338,6 +348,10 @@ impl SigbotDockerDeployer {
                 ports.insert("1883/tcp".to_string(), HashMap::new());
                 ports.insert("8083/tcp".to_string(), HashMap::new());
                 ports
+            }),
+            host_config: Some(bollard::models::HostConfig {
+                network_mode: Some(network.to_string()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -357,7 +371,10 @@ impl SigbotDockerDeployer {
             .await
             .context("Failed to start EMQX container")?;
 
-        info!("Created and started EMQX container {}", container_name);
+        info!(
+            "Created and started EMQX container {} on network {}",
+            container_name, network
+        );
         Ok(())
     }
 
@@ -369,6 +386,7 @@ impl SigbotDockerDeployer {
         tenant_name: &str,
     ) -> Result<()> {
         let container_name = format!("postgresql-{}", tenant_id);
+        let config = get_config();
 
         use bollard::container::InspectContainerOptions;
         if docker
@@ -381,7 +399,7 @@ impl SigbotDockerDeployer {
         }
 
         let container_config = Config {
-            image: Some("postgres:16".to_string()),
+            image: Some(config.services.deployer.images.postgresql.clone()),
             env: Some(vec![
                 format!("POSTGRES_DB=sigbot_{}", tenant_id),
                 "POSTGRES_USER=postgres".to_string(),
@@ -391,6 +409,10 @@ impl SigbotDockerDeployer {
                 let mut ports = HashMap::new();
                 ports.insert("5432/tcp".to_string(), HashMap::new());
                 ports
+            }),
+            host_config: Some(bollard::models::HostConfig {
+                network_mode: Some(network.to_string()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -410,7 +432,10 @@ impl SigbotDockerDeployer {
             .await
             .context("Failed to start PostgreSQL container")?;
 
-        info!("Created and started PostgreSQL container {}", container_name);
+        info!(
+            "Created and started PostgreSQL container {} on network {}",
+            container_name, network
+        );
         Ok(())
     }
 
@@ -422,6 +447,7 @@ impl SigbotDockerDeployer {
         tenant_name: &str,
     ) -> Result<()> {
         let container_name = format!("timescaledb-{}", tenant_id);
+        let config = get_config();
 
         use bollard::container::InspectContainerOptions;
         if docker
@@ -434,7 +460,7 @@ impl SigbotDockerDeployer {
         }
 
         let container_config = Config {
-            image: Some("timescale/timescaledb:latest-pg16".to_string()),
+            image: Some(config.services.deployer.images.timescaledb.clone()),
             env: Some(vec![
                 format!("POSTGRES_DB=sigbot_ts_{}", tenant_id),
                 "POSTGRES_USER=postgres".to_string(),
@@ -444,6 +470,10 @@ impl SigbotDockerDeployer {
                 let mut ports = HashMap::new();
                 ports.insert("5432/tcp".to_string(), HashMap::new());
                 ports
+            }),
+            host_config: Some(bollard::models::HostConfig {
+                network_mode: Some(network.to_string()),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -463,14 +493,21 @@ impl SigbotDockerDeployer {
             .await
             .context("Failed to start TimescaleDB container")?;
 
-        info!("Created and started TimescaleDB container {}", container_name);
+        info!(
+            "Created and started TimescaleDB container {} on network {}",
+            container_name, network
+        );
         Ok(())
     }
 
     async fn startup_microservice_container(&self, tenant: Arc<Tenant>, component: &str) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
-        let network_name = format!("sigbot-tenant-{}", tenant_id);
+        let config = get_config();
+        let network_name = format!(
+            "{}{}-network",
+            config.services.deployer.network.tenant_network_prefix, tenant_id
+        );
         let container_name = format!("{}-{}", component, tenant_id);
 
         let docker_client_guard = self.docker_client.lock().await;
@@ -485,20 +522,27 @@ impl SigbotDockerDeployer {
             }
         };
 
-        if docker_client.inspect_container(&container_name, None).await.is_ok() {
+        use bollard::container::InspectContainerOptions;
+        if docker_client
+            .inspect_container(&container_name, Some(InspectContainerOptions { size: false }))
+            .await
+            .is_ok()
+        {
             info!("{} container {} already exists", component, container_name);
             return;
         }
 
-        let image = std::env::var("SIGBOT_IMAGE").unwrap_or_else(|_| "sigbot:latest".to_string());
-
         let container_config = Config {
-            image: Some(image),
+            image: Some(config.services.deployer.images.sigbot.clone()),
             cmd: Some(vec![component.to_string()]),
             env: Some(vec![
                 format!("TENANT_ID={}", tenant_id),
                 format!("TENANT_NAME={}", tenant_name),
             ]),
+            host_config: Some(bollard::models::HostConfig {
+                network_mode: Some(network_name.clone()),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
@@ -527,8 +571,8 @@ impl SigbotDockerDeployer {
         }
 
         info!(
-            "Created and started {} container {} for tenant {}",
-            component, container_name, tenant_id
+            "Created and started {} container {} for tenant {} on network {}",
+            component, container_name, tenant_id, network_name
         );
     }
 

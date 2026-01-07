@@ -28,7 +28,8 @@ use sigbot_types::EntityBase;
 use std::time::Duration;
 
 lazy_static! {
-    pub static ref POD_ID: String = std::env::var("POD_NAME").unwrap_or(std::env::var("HOSTNAME").unwrap_or_default());
+    pub static ref PID: String =
+        std::env::var("POD_NAME").unwrap_or(std::env::var("HOSTNAME").unwrap_or(uuid::Uuid::new_v4().to_string()));
 }
 
 #[async_trait]
@@ -52,7 +53,7 @@ impl<'a> IDLockHandler for DLockHandler<'a> {
     #[audit_log("[DLock][ACQUIRE] name: {name}, timeout: {timeout.as_millis()}")]
     async fn acquire(&self, name: String, timeout: Duration) -> Result<bool, Error> {
         // Genearte the holder by current pod id and process id and tokio coroutine id.
-        let holder = format!("{}:{}:{}", POD_ID.as_str(), std::process::id(), tokio::task::id());
+        let holder = format!("{}:{}:{}", PID.as_str(), std::process::id(), tokio::task::id());
         let repo = self.state.lock_repo.lock().await;
         let result = repo
             .get(&self.state.config)
