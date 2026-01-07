@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::executor::strategy_python::SigbotPythonStrategyExecutor;
+use crate::executor::{strategy_llm::SigbotLLMStrategyExecutor, strategy_python::SigbotPythonStrategyExecutor};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -77,9 +77,8 @@ impl SigbotStrategyExecutorFactory {
         let provider = StrategyProvider::of(
             &matches
                 .get_one::<String>("STRATEGY_RUNNER_PROVIDER")
-                .unwrap_or(&StrategyProvider::PYTHON.as_str().to_owned()),
+                .unwrap_or(&StrategyProvider::PYCODE.as_str().to_owned()),
         )?;
-
         debug!("Registering Strategy Executor with provider: {}", &provider.as_str());
 
         // e.g '--strategy-runner-configuration=<base64_encoded_json_string>'
@@ -97,7 +96,7 @@ impl SigbotStrategyExecutorFactory {
         );
 
         match provider {
-            StrategyProvider::PYTHON => {
+            StrategyProvider::PYCODE => {
                 Self::get()
                     .write()
                     .unwrap()
@@ -113,14 +112,25 @@ impl SigbotStrategyExecutorFactory {
                         .as_str(),
                     );
             }
+            StrategyProvider::LLM => {
+                Self::get()
+                    .write()
+                    .unwrap()
+                    .register0(
+                        provider.as_str(),
+                        SigbotLLMStrategyExecutor::new(argument.to_owned()).await,
+                    )
+                    .expect(&format!(
+                        "Failed to register the Strategy Executor with provider: {}.",
+                        &provider.as_str()
+                    ));
+            }
         };
 
-        let registered = Self::get_implementation(provider.as_str().to_owned())
-            .await
-            .expect(&format!(
-                "Failed to get the registered Strategy Executor with provider: {}.",
-                &provider.as_str()
-            ));
+        let registered = Self::get_impl(provider.as_str().to_owned()).await.expect(&format!(
+            "Failed to get the registered Strategy Executor with provider: {}.",
+            &provider.as_str()
+        ));
         info!("Registered the Strategy Executor with provider: {}", &provider.as_str());
 
         Ok((registered, argument))
@@ -132,14 +142,14 @@ impl SigbotStrategyExecutorFactory {
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
         if self.implementations.contains_key(name) {
-            tracing::debug!("Already register the Strategy Executor '{}'", name);
+            debug!("Already register the Strategy Executor '{}'", name);
             return Ok(handler);
         }
         self.implementations.insert(name.to_owned(), handler.to_owned());
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotStrategyExecutor + Send + Sync>, Error> {
+    pub async fn get_impl(name: String) -> Result<Arc<dyn ISigbotStrategyExecutor + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotStrategyExecutorFactory::get().read().unwrap();
         if let Some(implementation) = this.implementations.get(&name) {
@@ -150,7 +160,7 @@ impl SigbotStrategyExecutorFactory {
         }
     }
 
-    pub async fn shutdown() {
+    pub async fn close() {
         let this = SigbotStrategyExecutorFactory::get().read().unwrap();
         for implementation in this.implementations.values() {
             implementation.shutdown().await;

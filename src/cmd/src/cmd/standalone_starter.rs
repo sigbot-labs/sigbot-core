@@ -93,9 +93,9 @@ impl SigbotStandaloneStarter {
                     .display_order(20)
                     .help(format!(
                         "The strategy runner provider to use. (supported are: {})",
-                        StrategyProvider::PYTHON.as_str(),
+                        StrategyProvider::PYCODE.as_str(),
                     ))
-                    .default_value(StrategyProvider::PYTHON.as_str()),
+                    .default_value(StrategyProvider::PYCODE.as_str()),
             )
             .arg(
                 Arg::new("STRATEGY_RUNNER_CONFIGURATION")

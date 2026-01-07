@@ -8199,9 +8199,11 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum 0.8.3",
+ "base64 0.22.1",
  "chrono",
  "common-makestruct",
  "hyper 1.6.0",
+ "openssl",
  "rust_decimal",
  "serde",
  "serde_json",

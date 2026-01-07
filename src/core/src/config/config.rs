@@ -446,6 +446,20 @@ pub struct GenerateLLMProperties {
     pub system_prompt: String,
 }
 
+// Services Properties.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServicesProperties {
+    #[serde(default = "DeployerProperties::default")]
+    pub deployer: DeployerProperties,
+    #[serde(rename = "exchanges")]
+    pub exchanges: ExchangeProperties,
+    #[serde(rename = "controllers")]
+    pub controllers: ControllerProperties,
+    #[serde(rename = "backtest")]
+    pub backtest: BacktestProperties,
+}
+
 // Deploy Properties.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -527,20 +541,6 @@ pub struct RedisDeployProperties {
 pub enum DeployMode {
     Standalone,
     Cluster,
-}
-
-// Services Properties.
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ServicesProperties {
-    #[serde(rename = "exchanges")]
-    pub exchanges: ExchangeProperties,
-    #[serde(rename = "controllers")]
-    pub controllers: ControllerProperties,
-    #[serde(rename = "backtest")]
-    pub backtest: BacktestProperties,
-    #[serde(default = "DeployerProperties::default")]
-    pub deployer: DeployerProperties,
 }
 
 // Exchange Properties.

@@ -50,7 +50,7 @@ impl SigbotStrategyRunner {
 
     pub async fn shutdown() {
         info!("Shutting down Strategy Executor.");
-        SigbotStrategyExecutorFactory::shutdown().await;
+        SigbotStrategyExecutorFactory::close().await;
         info!("Shutdown Strategy Executor.");
 
         info!("Shutting down Messager Client.");

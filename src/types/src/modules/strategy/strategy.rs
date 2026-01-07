@@ -42,20 +42,23 @@ pub struct StrategyInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum StrategyProvider {
-    PYTHON,
+    PYCODE,
+    LLM,
 }
 
 impl StrategyProvider {
     pub fn of(provider: &str) -> Result<StrategyProvider, anyhow::Error> {
         match provider.to_uppercase().as_str() {
-            "PYTHON" => Ok(StrategyProvider::PYTHON),
+            "PYCODE" => Ok(StrategyProvider::PYCODE),
+            "LLM" => Ok(StrategyProvider::LLM),
             _ => Err(anyhow::anyhow!("Unsupported the strategy provider: {}", provider)),
         }
     }
 
     pub const fn as_str(&self) -> &'static str {
         match self {
-            StrategyProvider::PYTHON => "PYTHON",
+            StrategyProvider::PYCODE => "PYCODE",
+            StrategyProvider::LLM => "LLM",
         }
     }
 }

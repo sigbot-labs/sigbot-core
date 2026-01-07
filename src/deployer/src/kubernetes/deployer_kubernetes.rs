@@ -21,6 +21,7 @@
 use crate::deployer_factory::{ISigbotDeployer, SigbotDeployerFactory};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chrono::Utc;
 use common_telemetry::{error, info, warn};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::{Namespace, Secret};
@@ -34,6 +35,9 @@ use sigbot_core::config::config::{get_config, DeployMode};
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::{
+    ComponentConnectionConfig, ComponentInstance, ComponentType, ComponentsConfig, TenantEncryptionKeys,
+};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -183,35 +187,87 @@ impl SigbotKubernetesDeployer {
         }
 
         // Deploy EMQX
-        if let Err(e) = self
+        let emqx_deployed = self
             .deploy_emqx(kube_client, &namespace_name, tenant_id, tenant_name)
             .await
-        {
-            error!("Failed to deploy EMQX for tenant {}: {}", tenant_id, e);
+            .is_ok();
+        if !emqx_deployed {
+            error!("Failed to deploy EMQX for tenant {}: {}", tenant_id, tenant_name);
+        } else {
+            self.save_component_config(
+                &tenant,
+                ComponentType::Emqx,
+                &format!("emqx-{}", tenant_id),
+                "emqx",
+                1883,
+                None, // EMQX doesn't use database
+                "admin",
+                None, // Password will be retrieved from secret
+            )
+            .await;
         }
 
         // Deploy PostgreSQL
-        if let Err(e) = self
+        let postgresql_deployed = self
             .deploy_postgresql(kube_client, &namespace_name, tenant_id, tenant_name)
             .await
-        {
-            error!("Failed to deploy PostgreSQL for tenant {}: {}", tenant_id, e);
+            .is_ok();
+        if !postgresql_deployed {
+            error!("Failed to deploy PostgreSQL for tenant {}: {}", tenant_id, tenant_name);
+        } else {
+            self.save_component_config(
+                &tenant,
+                ComponentType::Postgresql,
+                &format!("postgresql-{}", tenant_id),
+                "postgresql",
+                5432,
+                Some(format!("sigbot_{}", tenant_id)),
+                "postgres",
+                Some(format!("postgresql-secret-{}", tenant_id)),
+            )
+            .await;
         }
 
         // Deploy TimescaleDB
-        if let Err(e) = self
+        let timescaledb_deployed = self
             .deploy_timescaledb(kube_client, &namespace_name, tenant_id, tenant_name)
             .await
-        {
-            error!("Failed to deploy TimescaleDB for tenant {}: {}", tenant_id, e);
+            .is_ok();
+        if !timescaledb_deployed {
+            error!("Failed to deploy TimescaleDB for tenant {}: {}", tenant_id, tenant_name);
+        } else {
+            self.save_component_config(
+                &tenant,
+                ComponentType::Timescaledb,
+                &format!("timescaledb-{}", tenant_id),
+                "timescaledb",
+                5432,
+                Some(format!("sigbot_ts_{}", tenant_id)),
+                "postgres",
+                Some(format!("timescaledb-secret-{}", tenant_id)),
+            )
+            .await;
         }
 
         // Deploy Redis
-        if let Err(e) = self
+        let redis_deployed = self
             .deploy_redis(kube_client, &namespace_name, tenant_id, tenant_name)
             .await
-        {
-            error!("Failed to deploy Redis for tenant {}: {}", tenant_id, e);
+            .is_ok();
+        if !redis_deployed {
+            error!("Failed to deploy Redis for tenant {}: {}", tenant_id, tenant_name);
+        } else {
+            self.save_component_config(
+                &tenant,
+                ComponentType::Redis,
+                &format!("redis-{}", tenant_id),
+                "redis",
+                6379,
+                None, // Redis doesn't use database
+                "default",
+                Some(format!("redis-secret-{}", tenant_id)),
+            )
+            .await;
         }
 
         info!("Completed middleware components startup for tenant {}", tenant_id);
@@ -420,6 +476,165 @@ impl SigbotKubernetesDeployer {
         }
 
         Ok(())
+    }
+
+    /// Save component configuration to tenant.components field with encrypted password
+    async fn save_component_config(
+        &self,
+        tenant: &Tenant,
+        component_type: ComponentType,
+        instance_name: &str,
+        service_name: &str,
+        port: u16,
+        database: Option<String>,
+        username: &str,
+        secret_name: Option<String>,
+    ) {
+        let tenant_id = tenant.base.id.unwrap_or(0);
+
+        // Get tenant's public key for encryption
+        let public_key = match tenant.encryption_public_key.as_ref() {
+            Some(key) => key,
+            None => {
+                warn!(
+                    "Tenant {} does not have encryption public key. Skipping component config save.",
+                    tenant_id
+                );
+                return;
+            }
+        };
+
+        // Read password from Kubernetes secret if secret_name is provided
+        let encrypted_password = if let Some(ref secret_name_ref) = secret_name {
+            let guard = self.kube_client.lock().await;
+            if let Some(kube_client) = guard.as_ref() {
+                let secrets: Api<Secret> =
+                    Api::namespaced(kube_client.clone(), &format!("sigbot-tenant-{}", tenant_id));
+                match secrets.get(secret_name_ref.as_str()).await {
+                    Ok(secret) => {
+                        // Extract password from secret based on component type
+                        let password_key = match component_type {
+                            ComponentType::Postgresql | ComponentType::Timescaledb => "postgres-password",
+                            ComponentType::Redis => "password",
+                            ComponentType::Emqx => "password",
+                            _ => "password",
+                        };
+
+                        if let Some(data) = secret.data {
+                            if let Some(password_bytes) = data.get(password_key) {
+                                // Decode base64 to get plain password
+                                let password = match String::from_utf8(password_bytes.0.clone()) {
+                                    Ok(pwd) => pwd,
+                                    Err(e) => {
+                                        error!("Failed to decode password from secret {}: {}", secret_name_ref, e);
+                                        return;
+                                    }
+                                };
+
+                                // Encrypt password using tenant's public key
+                                match TenantEncryptionKeys::encrypt_password(public_key, &password) {
+                                    Ok(encrypted) => Some(encrypted),
+                                    Err(e) => {
+                                        error!("Failed to encrypt password for tenant {}: {}", tenant_id, e);
+                                        return;
+                                    }
+                                }
+                            } else {
+                                warn!(
+                                    "Password key '{}' not found in secret {}",
+                                    password_key, secret_name_ref
+                                );
+                                None
+                            }
+                        } else {
+                            warn!("Secret {} has no data", secret_name_ref);
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to read secret {}: {}", secret_name_ref, e);
+                        None
+                    }
+                }
+            } else {
+                warn!("Kubernetes client not available for reading secret");
+                None
+            }
+        } else {
+            None // No password to encrypt
+        };
+
+        // Build component instance configuration
+        use std::collections::HashMap;
+        let mut deployment_metadata = HashMap::new();
+        deployment_metadata.insert("namespace".to_string(), format!("sigbot-tenant-{}", tenant_id));
+        deployment_metadata.insert("service_name".to_string(), service_name.to_string());
+        if let Some(ref secret_name) = secret_name {
+            deployment_metadata.insert("secret_name".to_string(), secret_name.clone());
+        }
+
+        let config = get_config();
+        let mode = match component_type {
+            ComponentType::Emqx => config.services.deployer.middleware.emqx.mode,
+            ComponentType::Postgresql => config.services.deployer.middleware.postgresql.mode,
+            ComponentType::Timescaledb => config.services.deployer.middleware.timescaledb.mode,
+            ComponentType::Redis => config.services.deployer.middleware.redis.mode,
+            _ => DeployMode::Standalone,
+        };
+
+        let component_instance = ComponentInstance {
+            component_type: component_type.clone(),
+            name: instance_name.to_string(),
+            mode: Some(format!("{:?}", mode)),
+            replicas: match component_type {
+                ComponentType::Emqx => config.services.deployer.middleware.emqx.replicas,
+                ComponentType::Postgresql => config.services.deployer.middleware.postgresql.replicas,
+                ComponentType::Timescaledb => config.services.deployer.middleware.timescaledb.replicas,
+                ComponentType::Redis => config.services.deployer.middleware.redis.replicas,
+                _ => None,
+            },
+            connection: Some(ComponentConnectionConfig {
+                host: Some(format!(
+                    "{}.sigbot-tenant-{}.svc.cluster.local",
+                    service_name, tenant_id
+                )),
+                port: Some(port),
+                database,
+                username: Some(username.to_string()),
+                encrypted_password,
+                params: None,
+            }),
+            performance: None, // Can be extended with performance parameters
+            deployment_metadata: Some(deployment_metadata),
+            status: Some("running".to_string()),
+            deployed_at: Some(Utc::now().to_rfc3339()),
+            updated_at: Some(Utc::now().to_rfc3339()),
+        };
+
+        // Update tenant.components field
+        let mut components_config = if let Some(components_json) = tenant.components.as_ref() {
+            serde_json::from_value::<ComponentsConfig>(components_json.clone())
+                .unwrap_or_else(|_| ComponentsConfig::new())
+        } else {
+            ComponentsConfig::new()
+        };
+
+        components_config.upsert_component(component_instance);
+
+        // Save updated tenant with components
+        let mut updated_tenant = tenant.clone();
+        updated_tenant.components = Some(serde_json::to_value(&components_config).unwrap_or(serde_json::Value::Null));
+
+        // Update tenant in database
+        let repo = self.state.tenant_repo.lock().await;
+        if let Err(e) = repo.get(&self.state.config).update(updated_tenant).await {
+            error!("Failed to update tenant {} components: {}", tenant_id, e);
+        } else {
+            info!(
+                "Saved component configuration for tenant {} component {}",
+                tenant_id, instance_name
+            );
+        }
     }
 
     async fn deploy_emqx(&self, client: &Client, namespace: &str, tenant_id: i64, tenant_name: &str) -> Result<()> {

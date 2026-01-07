@@ -42,14 +42,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub struct SigbotPythonStrategyExecutor {
+pub struct SigbotLLMStrategyExecutor {
     argument: Arc<SigbotStrategyArgument>,
     #[allow(unused)]
     running_batch_executors: Arc<Mutex<HashMap<String, Arc<BatchStrategyExecutor>>>>,
     running_streaming_executors: Arc<Mutex<HashMap<String, Arc<StreamingStrategyExecutor>>>>,
 }
 
-impl SigbotPythonStrategyExecutor {
+impl SigbotLLMStrategyExecutor {
     pub async fn new(argument: Arc<SigbotStrategyArgument>) -> Arc<Self> {
         Arc::new(Self {
             argument,
@@ -177,9 +177,9 @@ impl SigbotPythonStrategyExecutor {
 }
 
 #[async_trait]
-impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
+impl ISigbotStrategyExecutor for SigbotLLMStrategyExecutor {
     fn provider(&self) -> StrategyProvider {
-        StrategyProvider::PYCODE
+        StrategyProvider::LLM
     }
 
     async fn startup(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>) {
@@ -250,24 +250,24 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                     };
 
                     if should_create {
-                        info!("Initializing Python Strategy Streaming Executor.");
+                        info!("Initializing LLM Strategy Streaming Executor.");
                         let executor = Arc::new(StreamingStrategyExecutor::new(
                             self_arc1.argument.to_owned(),
                             strategy.to_owned(),
                         ));
                         executor.init().expect("Failed to initializing streaming executor.");
-                        info!("Initialized Python Strategy Streaming Executor.");
+                        info!("Initialized LLM Strategy Streaming Executor.");
 
                         {
                             let mut executors = executors1.lock().unwrap();
                             executors.insert(strategy_id.to_owned(), executor.to_owned());
                         }
 
-                        info!("Starting Python Streaming Strategy Runner.");
+                        info!("Starting LLM Streaming Strategy Runner.");
                         self_arc1
                             .execute_streaming(messager1.to_owned(), executor.to_owned())
                             .await;
-                        info!("Started Python Streaming Strategy Runner.");
+                        info!("Started LLM Streaming Strategy Runner.");
 
                         // Metrics: strategy active count.
                         sigbot_core::mgmt::apm::metrics::STRATEGY_ACTIVE_COUNT
@@ -291,7 +291,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
     }
 
     async fn shutdown(&self) {
-        info!("Shutdown Python Strategy Runner.");
+        info!("Shutdown LLM Strategy Runner.");
         for (_, executor) in self.running_batch_executors.lock().unwrap().iter() {
             executor.shutdown().expect("Failed to shutdown batch executor.");
         }
@@ -306,7 +306,7 @@ impl ISigbotStrategyExecutor for SigbotPythonStrategyExecutor {
                 .with_label_values(&[strategy_id.as_str(), "inactive"])
                 .inc();
         }
-        info!("Shutdown Python Strategy Runner.");
+        info!("Shutdown LLM Strategy Runner.");
     }
 }
 

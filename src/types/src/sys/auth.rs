@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 // ----- Password login types. -----
@@ -137,11 +137,7 @@ pub struct GithubUserInfo {
 }
 
 impl GithubUserInfo {
-    pub fn default(
-        id: Option<i64>,
-        login: Option<String>,
-        email: Option<String>
-    ) -> GithubUserInfo {
+    pub fn default(id: Option<i64>, login: Option<String>, email: Option<String>) -> GithubUserInfo {
         GithubUserInfo {
             id,
             login,

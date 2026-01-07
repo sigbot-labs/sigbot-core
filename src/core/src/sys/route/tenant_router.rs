@@ -71,8 +71,11 @@ async fn handle_save_tenant(
     ValidatedJson(param): ValidatedJson<SaveTenantRequest>,
 ) -> impl IntoResponse {
     match get_tenant_handler(&state).save(param).await {
-        Ok(result) => Ok(Json(SaveTenantResponse::new(result))),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(result) => Ok(Json(result)),
+        Err(e) => {
+            common_telemetry::error!("Failed to save tenant: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
