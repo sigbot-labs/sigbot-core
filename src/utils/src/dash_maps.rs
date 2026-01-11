@@ -49,11 +49,11 @@ use std::hash::Hash;
 ///     }
 /// }).await;
 /// ```
-pub struct ConcurrentHashMap<K, V> {
+pub struct ConcurrentMap<K, V> {
     inner: DashMap<K, V>,
 }
 
-impl<K, V> ConcurrentHashMap<K, V>
+impl<K, V> ConcurrentMap<K, V>
 where
     K: std::hash::Hash + Eq + Clone,
     V: Clone,
@@ -236,7 +236,7 @@ where
     }
 }
 
-impl<K, V> Default for ConcurrentHashMap<K, V>
+impl<K, V> Default for ConcurrentMap<K, V>
 where
     K: std::hash::Hash + Eq + Clone,
     V: Clone,
@@ -246,7 +246,7 @@ where
     }
 }
 
-impl<K, V> Clone for ConcurrentHashMap<K, V>
+impl<K, V> Clone for ConcurrentMap<K, V>
 where
     K: std::hash::Hash + Eq + Clone,
     V: Clone,
@@ -266,7 +266,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_concurrent_hash_map() {
-        let map = ConcurrentHashMap::new();
+        let map = ConcurrentMap::new();
         assert_eq!(map.insert_async("key".to_string(), "value".to_string()).await, None);
         assert_eq!(map.get_async(&"key".to_string()).await.unwrap(), "value".to_string());
         assert_eq!(map.remove_async(&"key".to_string()).await.unwrap(), "value".to_string());
@@ -281,7 +281,7 @@ pub mod tests {
 
     #[test]
     fn test_sync_operations() {
-        let map = ConcurrentHashMap::new();
+        let map = ConcurrentMap::new();
         assert_eq!(map.insert("key".to_string(), "value".to_string()), None);
         assert_eq!(map.get(&"key".to_string()).unwrap(), "value".to_string());
         assert_eq!(map.contains_key(&"key".to_string()), true);

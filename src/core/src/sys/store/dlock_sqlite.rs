@@ -27,19 +27,19 @@ use async_trait::async_trait;
 use sigbot_types::sys::dlock::DLock;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
-use sigbot_utils::dash_maps::ConcurrentHashMap;
+use sigbot_utils::dash_maps::ConcurrentMap;
 use std::time::SystemTime;
 
 pub struct DLockSQLiteRepository {
     inner: SQLiteRepository<DLock>,
-    initializer: ConcurrentHashMap<String, u64>,
+    initializer: ConcurrentMap<String, u64>,
 }
 
 impl DLockSQLiteRepository {
     pub async fn new(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         Ok(DLockSQLiteRepository {
             inner: SQLiteRepository::get_or_init(config).await?,
-            initializer: ConcurrentHashMap::new(),
+            initializer: ConcurrentMap::new(),
         })
     }
 

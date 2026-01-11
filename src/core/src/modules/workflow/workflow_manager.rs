@@ -24,64 +24,74 @@ use crate::sys::handler::dlock_handler::{DLockHandler, IDLockHandler};
 use anyhow::Error;
 use common_telemetry::{debug, info, warn};
 use lazy_static::lazy_static;
-use sigbot_types::modules::workflow::workflow::{JobStatus, WorkflowInfo};
-use sigbot_utils::dash_maps::ConcurrentHashMap;
+use sigbot_types::modules::workflow::workflow::{JobStatus, WorkflowInfo, WorkflowNodeInfo, WorkflowStageType};
+use sigbot_utils::dash_maps::ConcurrentMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 lazy_static! {
-    static ref SINGLETON_INSTANCE: Arc<RwLock<Option<Arc<WorkflowManager>>>> = Arc::new(RwLock::new(None));
+    static ref SINGLETON_INSTANCE: Arc<RwLock<Option<Arc<SigbotWorkflowManager>>>> = Arc::new(RwLock::new(None));
 }
 
-/// Callback function type for starting a workflow
-/// The handler receives the workflow info and WorkflowManager, and should perform the actual start operation
-/// The async task spawning and status updates are handled by WorkflowManager
-pub type WorkflowStartHandler = Arc<dyn Fn(Arc<WorkflowInfo>, Arc<WorkflowManager>) -> Result<(), Error> + Send + Sync>;
+pub type SigbotWorkflowStartHandler =
+    Arc<dyn Fn(Arc<SigbotWorkflowNodeJob>) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send>> + Send + Sync>;
 
-/// Callback function type for stopping a workflow
-/// The handler receives the workflow id and WorkflowManager, and should perform the actual stop operation
-/// The async task spawning and status updates are handled by WorkflowManager
-pub type WorkflowStopHandler = Arc<dyn Fn(String, Arc<WorkflowManager>) -> Result<(), Error> + Send + Sync>;
+pub type SigbotWorkflowStopHandler =
+    Arc<dyn Fn(Arc<SigbotWorkflowNodeJob>) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send>> + Send + Sync>;
 
-/// Tuple of start and stop handlers, must be provided together
-pub type WorkflowCallHandlers = (WorkflowStartHandler, WorkflowStopHandler);
+pub type SigbotWorkflowHandlerWrapper = (SigbotWorkflowStartHandler, SigbotWorkflowStopHandler);
 
-/// WorkflowManager manages workflow lifecycle by scanning s_workflow table
-/// Similar to SigbotKlineBacktestManager in backtest_kline.rs
+/// WorkflowManager manages workflow lifecycle by scanning s_workflow table to start and stop flow node jobs.
 #[derive(Clone)]
-pub struct WorkflowManager {
+pub struct SigbotWorkflowManager {
     #[allow(unused)]
     state: Arc<SigbotState>,
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    call_handlers: Option<WorkflowCallHandlers>,
-    job_registry: Arc<ConcurrentHashMap<String, Arc<WorkflowNodeJob>>>,
+    call_handlers: Option<SigbotWorkflowHandlerWrapper>,
+    /// Job registry: workflow_id => map{node_id -> InternalWorkflowNodeJob}, Supports multiple nodes per workflow (e.g., multiple evaluators)
+    job_registry: Arc<ConcurrentMap<i64, Arc<ConcurrentMap<i64, Arc<SigbotWorkflowNodeJob>>>>>,
     dlock_handler: Arc<dyn IDLockHandler>,
     workflow_handler: Arc<dyn IWorkflowInfoHandler>,
     start_lock_timeout: Duration,
+    /// Supported stage type. e.g. EVALUATION for strategy runner, INPUT for datafeed ingestor.
+    supported_stage_type: WorkflowStageType,
 }
 
-impl WorkflowManager {
+impl SigbotWorkflowManager {
     pub const DEFAULT_CRON_EXPRESSION: &'static str = "0/30 * * * * *";
     pub const DEFAULT_CHANNELS: usize = 5;
     pub const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_millis(3);
     pub const DEFAULT_WF_NODE_START_TIMEOUT: Duration = Duration::from_secs(15);
 
-    /// Get the global singleton instance of WorkflowManager
-    pub fn get() -> &'static Arc<RwLock<Option<Arc<WorkflowManager>>>> {
+    pub fn get() -> &'static Arc<RwLock<Option<Arc<SigbotWorkflowManager>>>> {
         &SINGLETON_INSTANCE
     }
 
     /// Create a new WorkflowManager with start and stop handlers as a tuple
     /// The handlers must be provided together as a tuple
+    ///
+    /// # Arguments
+    /// * `state` - SigbotState instance
+    /// * `handlers` - Tuple of start and stop handlers
+    /// * `supported_stage_type` - The stage type this microservice supports
+    ///   - `WorkflowStageType::EVALUATION(vec![])` for strategy runner
+    ///   - `WorkflowStageType::INPUT(vec![])` for datafeed ingestor
+    ///   - `WorkflowStageType::POST(vec![])` for notification forwarder
+    ///   - etc.
+    /// * `schedule_cron` - Optional cron expression for scheduling
+    /// * `schedule_channels` - Optional number of channels for the scheduler
     pub fn new(
         state: Arc<SigbotState>,
-        handlers: WorkflowCallHandlers,
+        handlers: SigbotWorkflowHandlerWrapper,
         schedule_cron: Option<String>,
         schedule_channels: Option<usize>,
+        supported_stage_type: WorkflowStageType,
     ) -> Arc<Self> {
         let dlock_handler = Arc::new(DLockHandler::new(state.to_owned()));
         let workflow_handler = Arc::new(WorkflowInfoHandler::new(state.to_owned()));
@@ -91,10 +101,11 @@ impl WorkflowManager {
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
             call_handlers: Some(handlers),
-            job_registry: Arc::new(ConcurrentHashMap::new()),
+            job_registry: Arc::new(ConcurrentMap::new()),
             dlock_handler,
             workflow_handler,
             start_lock_timeout: Self::DEFAULT_WF_NODE_START_TIMEOUT,
+            supported_stage_type,
         })
     }
 
@@ -232,91 +243,71 @@ impl WorkflowManager {
             info!("Found {} workflows to stop", stop_workflows.len());
             for workflow in stop_workflows {
                 let workflow_id = workflow.base.id.unwrap_or(0);
-                let workflow_id_str = workflow_id.to_string();
 
-                // Get job before stopping
-                let job = self.get_node_job(&workflow_id_str).await;
-                if let Some(job) = job {
-                    info!("Stopping workflow {}", workflow_id_str);
-                    job.set_status(JobStatus::STOPPING).await;
+                // Get all node jobs for this workflow before stopping
+                let node_jobs = self.get_node_jobs(workflow_id).await;
+                if !node_jobs.is_empty() {
+                    info!("Stopping workflow {} with {} nodes", workflow_id, node_jobs.len());
+                    // Set all node jobs to STOPPING
+                    for job in &node_jobs {
+                        let node_id = job.node_id();
+                        job.set_status(JobStatus::STOPPING).await;
+                        if let Err(e) = self
+                            .workflow_handler
+                            .update_node_status(workflow_id, node_id, JobStatus::STOPPING)
+                            .await
+                        {
+                            warn!("Failed to update node {} status to Stopping: {}", node_id, e);
+                        }
+                    }
 
                     if let Err(err) = self
                         .workflow_handler
                         .update_status(workflow_id, JobStatus::STOPPING)
                         .await
                     {
-                        warn!(
-                            "Failed to update workflow {} status to Stopping: {}",
-                            workflow_id_str, err
-                        );
+                        warn!("Failed to update workflow {} status to Stopping: {}", workflow_id, err);
                     }
 
                     let manager0 = Arc::new(self.to_owned());
-                    let stop_result = stop_handler(workflow_id_str.to_owned(), manager0.to_owned());
-                    let workflow_id0 = workflow_id_str.to_owned();
 
-                    // Find nodes that need to be stopped (AI_EVALUATOR or PY_EVALUATOR)
-                    let node_ids_to_stop: Vec<String> = if let Some(ref flow_info) = workflow.flow_info {
-                        flow_info
-                            .nodes
-                            .iter()
-                            .filter_map(|node| {
-                                if node.r#type == "AI_EVALUATOR" || node.r#type == "PY_EVALUATOR" {
-                                    Some(node.id.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
+                    // Spawn async task to handle the actual async stop operation
+                    tokio::spawn(async move {
+                        for job in &node_jobs {
+                            let node_id = job.node_id();
+                            match job.stop().await {
+                                Ok(_) => {
+                                    // Update job status to STOPPED immediately
+                                    job.set_status(JobStatus::STOPPED).await;
 
-                    match stop_result {
-                        Ok(_) => {
-                            let manager1 = manager0.to_owned();
-                            let node_ids = node_ids_to_stop.clone();
-                            tokio::spawn(async move {
-                                info!("Successfully stopped workflow: {}", workflow_id0);
-                                if let Err(e) = &manager1
-                                    .workflow_handler
-                                    .update_status(workflow_id, JobStatus::STOPPED)
-                                    .await
-                                {
-                                    warn!("Failed to update workflow {} status to Stopped: {}", workflow_id0, e);
-                                }
-                                // Update node statuses to STOPPED
-                                for node_id in node_ids {
-                                    if let Err(e) = manager1
+                                    // Update node status to STOPPED immediately
+                                    if let Err(e) = manager0
                                         .workflow_handler
-                                        .update_node_status(workflow_id, &node_id, "stopped")
+                                        .update_node_status(workflow_id, node_id, JobStatus::STOPPED)
                                         .await
                                     {
                                         warn!("Failed to update node {} status to stopped: {}", node_id, e);
+                                    } else {
+                                        info!("Successfully stopped workflow {} node {}", workflow_id, node_id);
                                     }
                                 }
-                                if let Some(unregistered_job) = manager1.unregister_job(&workflow_id0).await {
-                                    unregistered_job.set_status(JobStatus::STOPPED).await;
+                                Err(e) => {
+                                    // Update job status to FAILED immediately
+                                    job.set_status(JobStatus::FAILED).await;
+
+                                    // Update node status to FAILED immediately
+                                    if let Err(update_err) = manager0
+                                        .workflow_handler
+                                        .update_node_status(workflow_id, node_id, JobStatus::FAILED)
+                                        .await
+                                    {
+                                        warn!("Failed to update node {} status to failed: {}", node_id, update_err);
+                                    }
+                                    warn!("Failed to stop workflow {} node {}: {}", workflow_id, node_id, e);
                                 }
-                            });
-                        }
-                        Err(e) => {
-                            warn!("Failed to stop workflow {}: {}", workflow_id_str, e);
-                            if let Err(update_err) = self
-                                .workflow_handler
-                                .update_status(workflow_id, JobStatus::FAILED)
-                                .await
-                            {
-                                warn!(
-                                    "Failed to update workflow {} status to Failed: {}",
-                                    workflow_id_str, update_err
-                                );
-                            }
-                            if let Some(unregistered_job) = manager0.unregister_job(&workflow_id_str).await {
-                                unregistered_job.set_status(JobStatus::FAILED).await;
                             }
                         }
-                    }
+                    });
                 }
             }
         }
@@ -329,16 +320,15 @@ impl WorkflowManager {
             for workflow in start_workflows {
                 let workflow0 = Arc::new(workflow);
                 let workflow_id = workflow0.base.id.unwrap_or(0);
-                let workflow_id_str = workflow_id.to_string();
 
-                // Check if job already exists
-                if self.get_node_job(&workflow_id_str).await.is_some() {
-                    debug!("Workflow {} is already running, skipping", workflow_id_str);
+                // Check if workflow already has registered jobs
+                if self.has_node_jobs(workflow_id).await {
+                    debug!("Workflow {} is already running, skipping", workflow_id);
                     continue;
                 }
 
                 // Acquire distributed lock for this workflow to prevent duplicate starts
-                let dlock_name = format!("WORKFLOW_START_{}", workflow_id_str);
+                let dlock_name = format!("WORKFLOW_START_{}", workflow_id);
                 let lock_acquired = match &self
                     .dlock_handler
                     .acquire(dlock_name.to_owned(), self.start_lock_timeout)
@@ -348,137 +338,319 @@ impl WorkflowManager {
                     Ok(false) => {
                         debug!(
                             "Unable to acquire distributed lock for workflow {}, another instance may be starting it",
-                            workflow_id_str
+                            workflow_id
                         );
                         continue;
                     }
                     Err(e) => {
-                        warn!(
-                            "Failed to acquire distributed lock for workflow {}: {}",
-                            workflow_id_str, e
-                        );
+                        warn!("Failed to acquire distributed lock for workflow {}: {}", workflow_id, e);
                         continue;
                     }
                 };
-
                 if !lock_acquired {
                     continue;
                 }
 
-                // Create and register job before calling handler
-                let job = Arc::new(WorkflowNodeJob::new(workflow0.to_owned()));
-                let job_id = job.workflow_id();
-                job.set_status(JobStatus::STARTING).await;
-                self.register_job(job.to_owned()).await;
+                // Find all nodes matching the supported stage type
+                let node_ids_to_start = workflow0.get_stage_nodes(self.supported_stage_type.clone());
 
-                // Call start handler synchronously (handler should return immediately)
+                if let Err(err) = self
+                    .workflow_handler
+                    .update_status(workflow_id, JobStatus::STARTING)
+                    .await
+                {
+                    warn!(
+                        "Failed to update workflow {} status to Starting before start: {}",
+                        workflow_id, err
+                    );
+                }
+
+                // Create and register jobs for all nodes before calling handler
+                let mut registered_jobs = Vec::new();
                 let manager0 = Arc::new(self.to_owned());
-                let start_result = start_handler(workflow0.to_owned(), manager0.to_owned());
+                for node_id in &node_ids_to_start {
+                    // Get node info from workflow
+                    let node_info = match workflow0
+                        .flow_info
+                        .as_ref()
+                        .and_then(|flow_info| flow_info.nodes.iter().find(|n| n.id == *node_id))
+                    {
+                        Some(node) => Arc::new(node.clone()),
+                        None => {
+                            warn!("Node {} not found in workflow {}", node_id, workflow_id);
+                            continue;
+                        }
+                    };
 
-                // Release the distributed lock after job is registered and handler is called
-                // The lock is only needed to prevent concurrent starts, once the job is registered,
+                    let job = Arc::new(SigbotWorkflowNodeJob::new(
+                        workflow0.to_owned(),
+                        node_info.clone(),
+                        Some(start_handler.to_owned()),
+                        Some(stop_handler.to_owned()),
+                    ));
+                    // Set node status to STARTING before starting
+                    job.set_status(JobStatus::STARTING).await;
+                    if let Err(e) = manager0
+                        .workflow_handler
+                        .update_node_status(workflow_id, *node_id, JobStatus::STARTING)
+                        .await
+                    {
+                        warn!(
+                            "Failed to update node {} status to Starting before start: {}",
+                            node_id, e
+                        );
+                    }
+                    self.register_job(job.to_owned()).await;
+                    registered_jobs.push((*node_id, job));
+                }
+
+                // Release the distributed lock after jobs are registered
+                // The lock is only needed to prevent concurrent starts, once the jobs are registered,
                 // the job registry will prevent duplicate starts
                 if let Err(release_err) = self.dlock_handler.release(dlock_name.to_owned()).await {
                     warn!(
                         "Failed to release distributed lock for workflow {}: {}",
-                        workflow_id_str, release_err
+                        workflow_id, release_err
                     );
                 }
 
                 // Spawn async task to handle the actual async start operation
-                let workflow_id0 = workflow_id_str.to_owned();
-                let job0 = job.to_owned();
+                // Call start handler for each node job and handle results
+                tokio::spawn(async move {
+                    // Call start handler asynchronously for each node job
+                    // Each node job (e.g., LLM, PYCODE) needs to be started separately
+                    // Update status immediately after each node job starts
+                    let mut success_count = 0;
+                    let mut failure_count = 0;
+                    let mut first_error: Option<Error> = None;
+                    let mut successful_jobs = Vec::new();
 
-                // Find nodes that need to be started (AI_EVALUATOR or PY_EVALUATOR)
-                let node_ids_to_start: Vec<String> = if let Some(ref flow_info) = workflow0.flow_info {
-                    flow_info
-                        .nodes
-                        .iter()
-                        .filter_map(|node| {
-                            if node.r#type == "AI_EVALUATOR" || node.r#type == "PY_EVALUATOR" {
-                                Some(node.id.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                };
+                    for (node_id, job) in &registered_jobs {
+                        match job.start().await {
+                            Ok(_) => {
+                                // Update job status to RUNNING immediately
+                                job.set_status(JobStatus::RUNNING).await;
 
-                match start_result {
-                    Ok(_) => {
-                        let node_ids = node_ids_to_start.clone();
-                        tokio::spawn(async move {
-                            job0.set_status(JobStatus::RUNNING).await;
-                            info!("Successfully started workflow: {}", workflow_id0);
-                            if let Err(e) = &manager0
-                                .workflow_handler
-                                .update_status(workflow_id, JobStatus::RUNNING)
-                                .await
-                            {
-                                warn!("Failed to update workflow {} status to Running: {}", workflow_id0, e);
-                            }
-                            // Update node statuses to RUNNING
-                            for node_id in node_ids {
+                                // Update node status to RUNNING immediately
                                 if let Err(e) = manager0
                                     .workflow_handler
-                                    .update_node_status(workflow_id, &node_id, "running")
+                                    .update_node_status(workflow_id, *node_id, JobStatus::RUNNING)
                                     .await
                                 {
                                     warn!("Failed to update node {} status to running: {}", node_id, e);
+                                } else {
+                                    info!("Successfully started workflow {} node {}", workflow_id, node_id);
+                                }
+
+                                success_count += 1;
+                                successful_jobs.push((*node_id, job.clone()));
+                            }
+                            Err(e) => {
+                                // Update job status to FAILED immediately
+                                job.set_status(JobStatus::FAILED).await;
+
+                                // Update node status to FAILED immediately
+                                if let Err(update_err) = manager0
+                                    .workflow_handler
+                                    .update_node_status(workflow_id, *node_id, JobStatus::FAILED)
+                                    .await
+                                {
+                                    warn!("Failed to update node {} status to failed: {}", node_id, update_err);
+                                }
+
+                                warn!("Failed to start workflow {} node {}: {}", workflow_id, node_id, e);
+                                if first_error.is_none() {
+                                    first_error = Some(e);
+                                }
+                                failure_count += 1;
+                            }
+                        }
+                    }
+
+                    // If any node job failed to start, stop all successfully started node jobs
+                    if failure_count > 0 && !successful_jobs.is_empty() {
+                        warn!(
+                            "Some nodes failed to start for workflow {}, stopping {} successfully started nodes",
+                            workflow_id,
+                            successful_jobs.len()
+                        );
+                        for (node_id, job) in &successful_jobs {
+                            // Set status to STOPPING before stopping
+                            job.set_status(JobStatus::STOPPING).await;
+                            if let Err(e) = manager0
+                                .workflow_handler
+                                .update_node_status(workflow_id, *node_id, JobStatus::STOPPING)
+                                .await
+                            {
+                                warn!("Failed to update node {} status to Stopping: {}", node_id, e);
+                            }
+
+                            match job.stop().await {
+                                Ok(_) => {
+                                    job.set_status(JobStatus::STOPPED).await;
+                                    if let Err(e) = manager0
+                                        .workflow_handler
+                                        .update_node_status(workflow_id, *node_id, JobStatus::STOPPED)
+                                        .await
+                                    {
+                                        warn!("Failed to update node {} status to stopped: {}", node_id, e);
+                                    } else {
+                                        info!(
+                                            "Successfully stopped workflow {} node {} after start failure",
+                                            workflow_id, node_id
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to stop workflow {} node {} after start failure: {}",
+                                        workflow_id, node_id, e
+                                    );
+                                    job.set_status(JobStatus::FAILED).await;
+                                    if let Err(update_err) = manager0
+                                        .workflow_handler
+                                        .update_node_status(workflow_id, *node_id, JobStatus::FAILED)
+                                        .await
+                                    {
+                                        warn!("Failed to update node {} status to failed: {}", node_id, update_err);
+                                    }
                                 }
                             }
-                        });
+                        }
                     }
-                    Err(e) => {
-                        warn!("Failed to start workflow {}: {}", workflow_id_str, e);
-                        if let Err(update_err) = self
+
+                    // Update workflow status based on overall results
+                    if failure_count == 0 {
+                        // All nodes started successfully
+                        if let Err(e) = manager0
+                            .workflow_handler
+                            .update_status(workflow_id, JobStatus::RUNNING)
+                            .await
+                        {
+                            warn!("Failed to update workflow {} status to Running: {}", workflow_id, e);
+                        } else {
+                            info!(
+                                "Successfully started workflow: {} with {} nodes",
+                                workflow_id, success_count
+                            );
+                        }
+                    } else {
+                        // Some nodes failed to start
+                        if let Err(update_err) = manager0
                             .workflow_handler
                             .update_status(workflow_id, JobStatus::FAILED)
                             .await
                         {
                             warn!(
-                                "Failed to update workflow {} status to Error: {}",
-                                workflow_id_str, update_err
+                                "Failed to update workflow {} status to Failed: {}",
+                                workflow_id, update_err
                             );
                         }
-                        if let Some(failed_job) = manager0.unregister_job(&job_id).await {
-                            failed_job.set_status(JobStatus::FAILED).await;
+
+                        // Unregister all failed jobs
+                        let unregistered_jobs = manager0.unregister_workflow_jobs(workflow_id).await;
+                        for job in unregistered_jobs {
+                            job.set_status(JobStatus::FAILED).await;
+                        }
+
+                        if let Some(err) = first_error {
+                            warn!(
+                                "Failed to start workflow {}: {} nodes succeeded, {} nodes failed. First error: {}",
+                                workflow_id, success_count, failure_count, err
+                            );
                         }
                     }
-                }
+                });
             }
         }
     }
 
-    /// Register a workflow job in the registry
-    pub async fn register_job(&self, job: Arc<WorkflowNodeJob>) {
+    /// Register a workflow node job in the registry
+    pub async fn register_job(&self, job: Arc<SigbotWorkflowNodeJob>) {
         let workflow_id = job.workflow_id();
-        if self.job_registry.contains_key(&workflow_id) {
-            debug!("Workflow {} is already registered", workflow_id);
+        let node_id = job.node_id();
+
+        // Get or create the inner map for this workflow
+        let node_map = if let Some(existing_map) = self.job_registry.get(&workflow_id) {
+            existing_map
+        } else {
+            let new_map = Arc::new(ConcurrentMap::new());
+            self.job_registry.insert(workflow_id, new_map.clone());
+            new_map
+        };
+
+        if node_map.contains_key(&node_id) {
+            debug!("Workflow {} node {} is already registered", workflow_id, node_id);
             return;
         }
-        self.job_registry.insert(workflow_id.clone(), job);
-        debug!("Registered workflow {} job", workflow_id);
+
+        node_map.insert(node_id, job);
+        debug!("Registered workflow {} node {} job", workflow_id, node_id);
     }
 
-    /// Unregister a workflow job from the registry
-    pub async fn unregister_job(&self, workflow_id: &str) -> Option<Arc<WorkflowNodeJob>> {
-        self.job_registry.remove(workflow_id)
+    /// Unregister all node jobs for a workflow
+    pub async fn unregister_workflow_jobs(&self, workflow_id: i64) -> Vec<Arc<SigbotWorkflowNodeJob>> {
+        if let Some(node_map) = self.job_registry.remove(&workflow_id) {
+            let mut jobs = Vec::new();
+            for job in node_map.iter() {
+                jobs.push(job);
+            }
+            jobs
+        } else {
+            Vec::new()
+        }
     }
 
-    /// Get a workflow job by ID
-    pub async fn get_node_job(&self, workflow_id: &str) -> Option<Arc<WorkflowNodeJob>> {
-        self.job_registry.get(workflow_id)
+    /// Unregister a specific workflow node job from the registry
+    pub async fn unregister_node_job(&self, workflow_id: i64, node_id: i64) -> Option<Arc<SigbotWorkflowNodeJob>> {
+        if let Some(node_map) = self.job_registry.get(&workflow_id) {
+            if let Some(job) = node_map.remove(&node_id) {
+                // If the node map is empty, remove the workflow entry
+                if node_map.is_empty() {
+                    self.job_registry.remove(&workflow_id);
+                }
+                Some(job)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
-    /// Get workflow jobs by status
-    pub async fn get_node_jobs(&self, status: JobStatus) -> Vec<Arc<WorkflowNodeJob>> {
+    /// Check if a workflow has any registered jobs
+    pub async fn has_node_jobs(&self, workflow_id: i64) -> bool {
+        self.job_registry.contains_key(&workflow_id)
+    }
+
+    /// Get a specific workflow node job by workflow ID and node ID
+    pub async fn get_node_job(&self, workflow_id: i64, node_id: i64) -> Option<Arc<SigbotWorkflowNodeJob>> {
+        self.job_registry
+            .get(&workflow_id)
+            .and_then(|node_map| node_map.get(&node_id))
+    }
+
+    /// Get all node jobs for a workflow
+    pub async fn get_node_jobs(&self, workflow_id: i64) -> Vec<Arc<SigbotWorkflowNodeJob>> {
+        if let Some(node_map) = self.job_registry.get(&workflow_id) {
+            let mut jobs = Vec::new();
+            for job in node_map.iter() {
+                jobs.push(job);
+            }
+            jobs
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get all node jobs by status across all workflows
+    pub async fn get_node_jobs_by_status(&self, status: JobStatus) -> Vec<Arc<SigbotWorkflowNodeJob>> {
         let mut result = Vec::new();
-        for job in self.job_registry.iter() {
-            if job.get_status().await == status {
-                result.push(job);
+        for node_map in self.job_registry.iter() {
+            for job in node_map.iter() {
+                if job.get_status().await == status {
+                    result.push(job);
+                }
             }
         }
         result
@@ -500,9 +672,11 @@ impl WorkflowManager {
                 .expect("Failed to shutdown workflow manager scheduler");
         }
 
-        // Then, stop all running workflow jobs
-        for job in self.job_registry.iter() {
-            job.stop().await;
+        // Then, stop all running workflow node jobs
+        for node_map in self.job_registry.iter() {
+            for job in node_map.iter() {
+                let _ = job.stop().await;
+            }
         }
         self.job_registry.clear();
         info!("Stopped all workflow jobs.");
@@ -523,35 +697,46 @@ impl WorkflowManager {
     }
 }
 
-pub struct WorkflowNodeJob {
+/// Workflow node job manages the lifecycle of a workflow node
+#[derive(Clone)]
+pub struct SigbotWorkflowNodeJob {
     workflow_info: Arc<WorkflowInfo>,
-    cancel: Option<Arc<dyn Fn() + Send + Sync>>,
+    node_info: Arc<WorkflowNodeInfo>,
     status: Arc<RwLock<JobStatus>>,
+    start_handler: Option<SigbotWorkflowStartHandler>,
+    stop_handler: Option<SigbotWorkflowStopHandler>,
 }
 
-impl WorkflowNodeJob {
-    pub fn new(workflow_info: Arc<WorkflowInfo>) -> Self {
+impl SigbotWorkflowNodeJob {
+    pub fn new(
+        workflow_info: Arc<WorkflowInfo>,
+        node_info: Arc<WorkflowNodeInfo>,
+        start_handler: Option<SigbotWorkflowStartHandler>,
+        stop_handler: Option<SigbotWorkflowStopHandler>,
+    ) -> Self {
         Self {
             workflow_info,
-            cancel: None,
+            node_info,
             status: Arc::new(RwLock::new(JobStatus::PENDING)),
+            start_handler,
+            stop_handler,
         }
     }
 
-    pub fn workflow_id(&self) -> String {
-        self.workflow_info
-            .base
-            .id
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| "unknown".to_string())
+    pub fn node_id(&self) -> i64 {
+        self.node_info.id
+    }
+
+    pub fn node_info(&self) -> &Arc<WorkflowNodeInfo> {
+        &self.node_info
+    }
+
+    pub fn workflow_id(&self) -> i64 {
+        self.workflow_info.base.id.unwrap_or(0)
     }
 
     pub fn workflow_info(&self) -> &Arc<WorkflowInfo> {
         &self.workflow_info
-    }
-
-    pub fn set_cancel(&mut self, cancel: Arc<dyn Fn() + Send + Sync>) {
-        self.cancel = Some(cancel);
     }
 
     pub async fn set_status(&self, status: JobStatus) {
@@ -563,22 +748,20 @@ impl WorkflowNodeJob {
     }
 
     pub async fn start(&self) -> Result<(), Error> {
-        let workflow_id = self.workflow_id();
-        info!("Starting workflow job: {}", workflow_id);
-        self.set_status(JobStatus::STARTING).await;
-        // The actual execution logic is handled by the callback in WorkflowManager
-        self.set_status(JobStatus::RUNNING).await;
+        if let Some(start_handler) = &self.start_handler {
+            let job = Arc::new(self.clone());
+            start_handler(job).await?;
+        }
         Ok(())
     }
 
-    pub async fn stop(&self) {
-        let workflow_id = self.workflow_id();
-        info!("Stopping workflow job: {}", workflow_id);
-        self.set_status(JobStatus::STOPPING).await;
-        if let Some(cancel) = &self.cancel {
-            cancel();
+    pub async fn stop(&self) -> Result<(), Error> {
+        if let Some(stop_handler) = &self.stop_handler {
+            let job = Arc::new(self.clone());
+            stop_handler(job).await?;
         }
-        self.set_status(JobStatus::STOPPED).await;
+
+        Ok(())
     }
 }
 

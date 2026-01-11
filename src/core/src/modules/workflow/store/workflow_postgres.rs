@@ -86,13 +86,12 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
         workflow.base.pre_insert(insert_by).await;
 
         let inserted_id = sqlx::query_scalar::<_, i64>(
-            "INSERT INTO s_workflow (name, provider, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+            "INSERT INTO s_workflow (name, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
              ON CONFLICT (id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP 
              RETURNING id"
         )
         .bind(&workflow.name)
-        .bind(workflow.provider.as_ref().map(|p| p.as_str()))
         .bind(workflow.status.as_ref().map(|s| s.as_str()))
         .bind(flow_json_str.as_deref())
         .bind(&workflow.description)
@@ -125,11 +124,10 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
 
         sqlx::query(
             "UPDATE s_workflow 
-             SET name = $1, provider = $2, status = $3, flow_json = $4, description = $5, updated_at = $6, updated_by = $7 
-             WHERE id = $8 AND del_flag = FALSE"
+             SET name = $1, status = $2, flow_json = $3, description = $4, updated_at = $5, updated_by = $6 
+             WHERE id = $7 AND del_flag = FALSE",
         )
         .bind(&workflow.name)
-        .bind(workflow.provider.as_ref().map(|p| p.as_str()))
         .bind(workflow.status.as_ref().map(|s| s.as_str()))
         .bind(flow_json_str.as_deref())
         .bind(&workflow.description)

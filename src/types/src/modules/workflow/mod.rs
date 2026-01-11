@@ -21,8 +21,8 @@
 pub mod workflow;
 
 pub use workflow::{
-    DeleteWorkflowRequest, DeleteWorkflowResponse, QueryWorkflowRequest, QueryWorkflowResponse,
-    SaveWorkflowRequest, SaveWorkflowResponse, WorkflowInfo, WorkflowProvider, JobStatus,
+    DeleteWorkflowRequest, DeleteWorkflowResponse, JobStatus, QueryWorkflowRequest, QueryWorkflowResponse,
+    SaveWorkflowRequest, SaveWorkflowResponse, WorkflowInfo, WorkflowStageType,
 };
 
 #[cfg(test)]

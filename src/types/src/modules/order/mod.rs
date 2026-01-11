@@ -38,7 +38,7 @@ impl SigbotOrderManagerArgument {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum OrderMgrProvider {
     DEFAULT,
 }

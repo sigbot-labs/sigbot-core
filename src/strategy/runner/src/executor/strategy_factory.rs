@@ -81,7 +81,7 @@ impl SigbotStrategyExecutorFactory {
                 Self::get()
                     .write()
                     .unwrap()
-                    .register(executor_id.clone(), py_executor.clone())
+                    .register0(executor_id.clone(), py_executor.clone())
                     .map_err(|e| Error::msg(format!("Failed to register PYCODE executor: {}", e)))?;
                 py_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
             }
@@ -90,7 +90,7 @@ impl SigbotStrategyExecutorFactory {
                 Self::get()
                     .write()
                     .unwrap()
-                    .register(executor_id.clone(), llm_executor.clone())
+                    .register0(executor_id.clone(), llm_executor.clone())
                     .map_err(|e| Error::msg(format!("Failed to register LLM executor: {}", e)))?;
                 llm_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
             }
@@ -106,7 +106,7 @@ impl SigbotStrategyExecutorFactory {
 
     /// Register a strategy executor with a unique id
     /// Same provider can be registered multiple times with different ids
-    fn register<T: ISigbotStrategyExecutor + Send + Sync + 'static>(
+    fn register0<T: ISigbotStrategyExecutor + Send + Sync + 'static>(
         &mut self,
         id: String,
         handler: Arc<T>,
@@ -133,12 +133,11 @@ impl SigbotStrategyExecutorFactory {
     }
 
     /// Unregister and shutdown a strategy executor by id
-    pub async fn unregister(id: String) -> Result<(), Error> {
+    pub async fn close(id: String) -> Result<(), Error> {
         let executor = {
             let mut this = SigbotStrategyExecutorFactory::get().write().unwrap();
             this.implementations.remove(&id)
         };
-
         if let Some(executor) = executor {
             executor.shutdown().await;
             info!("Unregistered and shutdown Strategy Executor with id: {}", id);
@@ -149,7 +148,7 @@ impl SigbotStrategyExecutorFactory {
     }
 
     /// Close all registered strategy executors
-    pub async fn close() {
+    pub async fn shutdown() {
         let executors: Vec<_> = {
             let this = SigbotStrategyExecutorFactory::get().read().unwrap();
             this.implementations.values().cloned().collect()

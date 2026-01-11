@@ -86,11 +86,10 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
                 .await;
             workflow.base.pre_insert(insert_by).await;
 
-            let query = "INSERT OR IGNORE INTO s_workflow (id, name, provider, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            let query = "INSERT OR IGNORE INTO s_workflow (id, name, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             sqlx::query(query)
                 .bind(workflow_id)
                 .bind(&workflow.name)
-                .bind(workflow.provider.as_ref().map(|p| p.as_str()))
                 .bind(workflow.status.as_ref().map(|s| s.as_str()))
                 .bind(&flow_json_str)
                 .bind(&workflow.description)
@@ -129,10 +128,9 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
                 .await;
             workflow.base.pre_update(update_by).await;
 
-            let query = "UPDATE s_workflow SET name = ?, provider = ?, status = ?, flow_json = ?, description = ?, updated_at = ?, updated_by = ? WHERE id = ? AND del_flag = 0";
+            let query = "UPDATE s_workflow SET name = ?, status = ?, flow_json = ?, description = ?, updated_at = ?, updated_by = ? WHERE id = ? AND del_flag = 0";
             sqlx::query(query)
                 .bind(&workflow.name)
-                .bind(workflow.provider.as_ref().map(|p| p.as_str()))
                 .bind(workflow.status.as_ref().map(|s| s.as_str()))
                 .bind(&flow_json_str)
                 .bind(&workflow.description)

@@ -50,7 +50,7 @@ pub trait IWorkflowInfoHandler: Send + Sync {
 
     async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64, Error>;
 
-    async fn update_node_status(&self, workflow_id: i64, node_id: &str, status: &str) -> Result<u64, Error>;
+    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64, Error>;
 }
 
 pub struct WorkflowInfoHandler {
@@ -69,7 +69,6 @@ impl IWorkflowInfoHandler for WorkflowInfoHandler {
         let param = WorkflowInfo {
             base: EntityBase::new_with_id(id),
             name: None,
-            provider: None,
             status: None,
             flow_info: None,
             properties: None,
@@ -161,7 +160,6 @@ impl IWorkflowInfoHandler for WorkflowInfoHandler {
         let param = WorkflowInfo {
             base: EntityBase::new_with_id(Some(workflow_id)),
             name: None,
-            provider: None,
             status: None,
             flow_info: None,
             properties: None,
@@ -187,13 +185,12 @@ impl IWorkflowInfoHandler for WorkflowInfoHandler {
     }
 
     // TODO: using dynamic_postgres_query! macro to update jsonb node status with transaction.
-    #[audit_log("[WORKFLOW][UPDATE_NODE_STATUS] id: {workflow_id}, node_id: {node_id}, status: {status}")]
-    async fn update_node_status(&self, workflow_id: i64, node_id: &str, status: &str) -> Result<u64, Error> {
+    #[audit_log("[WORKFLOW][UPDATE_NODE_STATUS] id: {workflow_id}, node_id: {node_id}, status: {status.as_str()}")]
+    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64, Error> {
         let repo = self.state.workflow_repo.lock().await;
         let param = WorkflowInfo {
             base: EntityBase::new_with_id(Some(workflow_id)),
             name: None,
-            provider: None,
             status: None,
             flow_info: None,
             properties: None,
@@ -215,7 +212,7 @@ impl IWorkflowInfoHandler for WorkflowInfoHandler {
         if let Some(ref mut flow_info) = updated.flow_info {
             for node in flow_info.nodes.iter_mut() {
                 if node.id == node_id {
-                    node.status = Some(status.to_string());
+                    node.status = Some(status);
                     break;
                 }
             }

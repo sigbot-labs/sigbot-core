@@ -24,11 +24,11 @@ use sigbot_core::{
     config::config,
     context::state::SigbotState,
     modules::workflow::{
-        WorkflowCallHandlers, WorkflowJobStatus, WorkflowManager, WorkflowStartHandler, WorkflowStopHandler,
+        SigbotWorkflowHandlerWrapper, SigbotWorkflowManager, SigbotWorkflowStartHandler, SigbotWorkflowStopHandler,
     },
 };
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::workflow::workflow::WorkflowInfo;
+use sigbot_types::modules::workflow::workflow::{WorkflowStageType, WorkflowStageWrapper};
 use std::sync::Arc;
 
 pub struct SigbotStrategyRunner {}
@@ -66,182 +66,126 @@ impl SigbotStrategyRunner {
         let state = Arc::new(SigbotState::new(&config::get_config()).await);
 
         // Create start handler callback
-        // This handler receives WorkflowManager and should spawn async task to start the strategy executor
-        // The async operation and status updates are handled here, not in WorkflowManager.process
-        let messager_for_start = messager.to_owned();
-        let argument_for_start = argument.to_owned();
-        let call_start_handler: WorkflowStartHandler =
-            Arc::new(move |workflow: Arc<WorkflowInfo>, manager: Arc<WorkflowManager>| {
-                let workflow_id = workflow
-                    .base
-                    .id
-                    .map(|id| id.to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
+        // This handler receives NodeJob, and should start the strategy executor asynchronously
+        // The async operation and status updates are handled here
+        let messager0 = messager.to_owned();
+        let argument0 = argument.to_owned();
+        let call_start_handler: SigbotWorkflowStartHandler = Arc::new(move |node_job| {
+            let workflow = node_job.workflow_info();
+            let workflow_id = workflow
+                .base
+                .id
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
 
-                // Validate workflow has required fields
-                if workflow.provider.is_none() {
-                    return Err(anyhow::Error::msg(format!(
-                        "Workflow {} has no provider specified",
-                        workflow_id
-                    )));
-                }
+            let workflow_id0 = workflow_id.clone();
+            let node_info = node_job.node_info().clone();
+            let node_id = node_job.node_id();
+            let messager1 = messager0.clone();
+            let argument1 = argument0.clone();
 
-                // Get the job to update status
-                let manager_clone = manager.clone();
-                let workflow_id_clone = workflow_id.clone();
-                let workflow_clone = workflow.clone();
-                let messager_clone = messager_for_start.clone();
-                let argument_clone = argument_for_start.clone();
-
-                // Spawn async task to start strategy executor
-                tokio::spawn(async move {
-                    info!("Starting strategy executor for workflow: {}", workflow_id_clone);
-
-                    // Extract provider from workflow
-                    let provider_str = workflow_clone.provider.as_ref().map(|p| p.as_str()).unwrap_or("PYCODE");
-
-                    // Map WorkflowProvider to StrategyProvider
-                    use sigbot_types::modules::strategy::strategy::StrategyProvider;
-                    let strategy_provider = match provider_str {
-                        "PYCODE" => StrategyProvider::PYCODE,
-                        "LLM" => StrategyProvider::LLM,
+            Box::pin(async move {
+                info!(
+                    "Starting strategy executor for workflow: {} node: {}",
+                    workflow_id0, node_id
+                );
+                // Extract StrategyProvider from node stage
+                // Strategy runner only handles EVALUATION stage with Strategy provider
+                let strategy_provider = match &node_info.stage {
+                    WorkflowStageType::EVALUATION(providers) => match providers.as_ref().and_then(|v| v.first()) {
+                        Some(WorkflowStageWrapper::Strategy(provider)) => provider.clone(),
                         _ => {
-                            warn!("Unknown workflow provider: {}, defaulting to PYCODE", provider_str);
-                            StrategyProvider::PYCODE
-                        }
-                    };
-
-                    // Extract node_id from flow_info
-                    let node_id = if let Some(ref flow_info) = workflow_clone.flow_info {
-                        flow_info
-                            .nodes
-                            .iter()
-                            .find_map(|node| {
-                                if node.r#type == "AI_EVALUATOR" || node.r#type == "PY_EVALUATOR" {
-                                    Some(node.id.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(|| "default".to_string())
-                    } else {
-                        "default".to_string()
-                    };
-
-                    let provider0 = strategy_provider.as_str();
-
-                    // Initialize and start strategy executor for this workflow node
-                    match SigbotStrategyExecutorFactory::init(
-                        workflow_id_clone.clone(),
-                        node_id.clone(),
-                        strategy_provider,
-                        argument_clone,
-                    )
-                    .await
-                    {
-                        Ok(executor) => {
-                            // Start the executor with messager
-                            executor.startup(messager_clone).await;
-                            info!(
-                                "Started strategy executor {} for workflow {} node {}",
-                                provider0, workflow_id_clone, node_id
-                            );
-
-                            // Update job status to RUNNING on success
-                            if let Some(job) = manager_clone.get_node_job(&workflow_id_clone).await {
-                                job.set_status(WorkflowJobStatus::RUNNING).await;
-                            }
-                        }
-                        Err(e) => {
                             warn!(
-                                "Failed to initialize strategy executor {} for workflow {} node {}: {}",
-                                provider0, workflow_id_clone, node_id, e
-                            );
-
-                            // Update job status to STOPPED on failure and unregister
-                            if let Some(failed_job) = manager_clone.unregister_job(&workflow_id_clone).await {
-                                failed_job.set_status(WorkflowJobStatus::STOPPED).await;
-                            }
+                                    "Workflow {} node {} is not a Strategy provider node (stage: EVALUATION but provider is not Strategy), skipping start",
+                                    workflow_id0, node_id
+                                );
+                            return Err(anyhow::Error::msg(format!(
+                                "Node {} is not a Strategy provider node, cannot start strategy executor",
+                                node_id
+                            )));
                         }
+                    },
+                    _ => {
+                        warn!(
+                            "Workflow {} node {} is not an EVALUATION stage node (stage: {:?}), skipping start as it's not the responsibility of strategy runner",
+                            workflow_id0, node_id, node_info.stage
+                        );
+                        return Err(anyhow::Error::msg(format!(
+                            "Node {} is not an EVALUATION stage node, cannot start strategy executor",
+                            node_id
+                        )));
                     }
-                });
+                };
+                let provider_str = strategy_provider.as_str();
 
-                // Return Ok immediately since actual work is done in spawned task
-                Ok(())
-            });
+                // Initialize and start strategy executor for this workflow node
+                match SigbotStrategyExecutorFactory::init(
+                    workflow_id0.clone(),
+                    node_id.to_string(),
+                    strategy_provider,
+                    argument1,
+                )
+                .await
+                {
+                    Ok(executor) => {
+                        // Start the executor with messager
+                        executor.startup(messager1).await;
+                        info!(
+                            "Started strategy executor {} for workflow {} node {}",
+                            provider_str, workflow_id0, node_id
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to initialize strategy executor {} for workflow {} node {}: {}",
+                            provider_str, workflow_id0, node_id, e
+                        );
+                        Err(e)
+                    }
+                }
+            })
+        });
 
         // Create stop handler callback
-        // This handler receives WorkflowManager and should spawn async task to stop the strategy executor
-        // The async operation and status updates are handled here, not in WorkflowManager.process
-        let call_stop_handler: WorkflowStopHandler =
-            Arc::new(move |workflow_id: String, manager: Arc<WorkflowManager>| {
-                if workflow_id.is_empty() {
-                    return Err(anyhow::Error::msg("Workflow ID is empty"));
-                }
+        // This handler receives NodeJob, and should stop the strategy executor asynchronously
+        // The async operation and status updates are handled here
+        let call_stop_handler: SigbotWorkflowStopHandler = Arc::new(move |node_job| {
+            let workflow_id = node_job.workflow_id();
+            let node_id = node_job.node_id();
 
-                let manager_clone = manager.clone();
-                let workflow_id_clone = workflow_id.clone();
+            Box::pin(async move {
+                info!(
+                    "Stopping strategy executor for workflow: {} node: {}",
+                    workflow_id, node_id
+                );
+                // Build executor_id: "{workflow_id}:{node_id}"
+                let executor_id = format!("{}:{}", workflow_id, node_id);
 
-                // Spawn async task to stop strategy executor
-                tokio::spawn(async move {
-                    info!("Stopping strategy executor for workflow: {}", workflow_id_clone);
-
-                    // Get the workflow job to determine which executor to stop
-                    if let Some(job) = manager_clone.get_node_job(&workflow_id_clone).await {
-                        // Extract node_id from workflow info
-                        let node_id = if let Some(ref flow_info) = job.workflow_info().flow_info {
-                            flow_info
-                                .nodes
-                                .iter()
-                                .find_map(|node| {
-                                    if node.r#type == "AI_EVALUATOR" || node.r#type == "PY_EVALUATOR" {
-                                        Some(node.id.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or_else(|| "default".to_string())
-                        } else {
-                            "default".to_string()
-                        };
-
-                        // Build executor_id: "{workflow_id}:{node_id}"
-                        let executor_id = format!("{}:{}", workflow_id_clone, node_id);
-
-                        // Unregister and shutdown strategy executor
-                        match SigbotStrategyExecutorFactory::unregister(executor_id.to_owned()).await {
-                            Ok(_) => {
-                                info!(
-                                    "Stopped strategy executor for workflow {} node {}",
-                                    workflow_id_clone, node_id
-                                );
-                            }
-                            Err(e) => {
-                                warn!("Failed to unregister strategy executor {}: {}", executor_id, e);
-                            }
-                        }
-
-                        // Unregister job and update status to STOPPED
-                        if let Some(unregistered_job) = manager_clone.unregister_job(&workflow_id_clone).await {
-                            unregistered_job.set_status(WorkflowJobStatus::STOPPED).await;
-                        }
-                    } else {
-                        debug!("Workflow {} is not running", workflow_id_clone);
+                // Unregister and shutdown strategy executor
+                match SigbotStrategyExecutorFactory::close(executor_id.to_owned()).await {
+                    Ok(_) => {
+                        info!(
+                            "Stopped strategy executor for workflow {} node {}",
+                            workflow_id, node_id
+                        );
                     }
-                });
-
-                // Return Ok immediately since actual work is done in spawned task
+                    Err(e) => {
+                        warn!("Failed to unregister strategy executor {}: {}", executor_id, e);
+                        return Err(e);
+                    }
+                }
                 Ok(())
-            });
+            })
+        });
 
         // Create handlers tuple (must be provided together)
-        let handlers: WorkflowCallHandlers = (call_start_handler, call_stop_handler);
+        let handlers: SigbotWorkflowHandlerWrapper = (call_start_handler, call_stop_handler);
 
         // Create, initialize and start WorkflowManager using the global singleton
-        let workflow_manager = WorkflowManager::new(
-            state, handlers, None, // Use default cron expression
-            None, // Use default channel size
-        );
+        // Strategy runner supports EVALUATION stage type
+        let workflow_manager =
+            SigbotWorkflowManager::new(state, handlers, None, None, WorkflowStageType::EVALUATION(None));
 
         workflow_manager
             .startup(None, None)
@@ -253,7 +197,7 @@ impl SigbotStrategyRunner {
 
     pub async fn shutdown() {
         info!("Shutting down Strategy Executor.");
-        SigbotStrategyExecutorFactory::close().await;
+        SigbotStrategyExecutorFactory::shutdown().await;
         info!("Shutdown Strategy Executor.");
 
         info!("Shutting down Messager Client.");
@@ -261,7 +205,7 @@ impl SigbotStrategyRunner {
         info!("Shutdown Messager Client.");
 
         // Shutdown WorkflowManager (uses global singleton)
-        WorkflowManager::shutdown_global().await;
+        SigbotWorkflowManager::shutdown_global().await;
     }
 }
 

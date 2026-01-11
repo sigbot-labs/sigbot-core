@@ -24,5 +24,6 @@ pub mod workflow_manager;
 
 pub use sigbot_types::modules::workflow::workflow::JobStatus as WorkflowJobStatus;
 pub use workflow_manager::{
-    WorkflowCallHandlers, WorkflowManager, WorkflowNodeJob, WorkflowStartHandler, WorkflowStopHandler,
+    SigbotWorkflowHandlerWrapper, SigbotWorkflowManager, SigbotWorkflowNodeJob, SigbotWorkflowStartHandler,
+    SigbotWorkflowStopHandler,
 };
