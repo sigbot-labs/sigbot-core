@@ -15,6 +15,7 @@ You are working with Rust code in the This project. Follow these Rust-specific g
    - Prefer `async fn` over manual Future implementations
    - Use `tokio::spawn` for concurrent tasks
    - Be mindful of `Send + Sync` bounds for shared state
+   - When passing an Arc type variable to a child thread, you should use `to_owned` for cloning, and the name should end with a number (0, 1, 2...) instead of `_clone` or `_for_clone`. e.g: if it's initially named `workflow_id`, it should be named `workflow_id0` inside the `tokio::spawn` function. If there are other asynchronous operations within it, then it should be named `workflow_id1` after `to_owned`.
 
 3. **Ownership and Borrowing**:
    - Prefer borrowing (`&T`) over cloning when possible

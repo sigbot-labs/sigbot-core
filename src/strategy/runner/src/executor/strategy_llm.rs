@@ -28,7 +28,7 @@ use common_telemetry::{debug, info, warn};
 use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::{
-    messager::{TOPIC_CONFIG_STRATEGY, TOPIC_MARKET_STREAMS},
+    messager::{TOPIC_CONFIG_WORKFLOW, TOPIC_WF_MARKET_STREAM},
     strategy::{
         models::strategy_execution::StrategyExecutionInput,
         strategy::{StrategyInfo, StrategyProvider},
@@ -167,12 +167,12 @@ impl SigbotLLMStrategyExecutor {
             })
         });
 
-        let topic = TOPIC_MARKET_STREAMS.replace("{tenant_id}", "+"); // MQTT single level wildcard
+        let topic = TOPIC_WF_MARKET_STREAM.replace("{tenant_id}", "+"); // MQTT single level wildcard
         let _ = messager
             .subscribe(&topic, market_data_handler) // TODO: configuable
             .await
             .expect("Failed to subscribe to market data topic.");
-        info!("Subscribed to market data topic: {:?}.", TOPIC_MARKET_STREAMS);
+        info!("Subscribed to market data topic: {:?}.", TOPIC_WF_MARKET_STREAM);
     }
 }
 
@@ -281,10 +281,10 @@ impl ISigbotStrategyExecutor for SigbotLLMStrategyExecutor {
 
             let _ = messager
                 .to_owned()
-                .subscribe(TOPIC_CONFIG_STRATEGY, dynamic_strategy_update_handler.to_owned())
+                .subscribe(TOPIC_CONFIG_WORKFLOW, dynamic_strategy_update_handler.to_owned())
                 .await
                 .expect("Failed to subscribe to strategy config topic.");
-            info!("Subscribed to strategy config topic: {:?}.", TOPIC_CONFIG_STRATEGY);
+            info!("Subscribed to strategy config topic: {:?}.", TOPIC_CONFIG_WORKFLOW);
         } else {
             panic!("Unsupported run mode: {}", self.argument.run_mode);
         }

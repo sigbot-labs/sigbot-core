@@ -18,11 +18,11 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest;
-pub mod datafeed;
-pub mod exchange;
-pub mod notification;
-pub mod order;
-pub mod strategy;
-pub mod wallet;
-pub mod workflow;
+pub mod handler;
+pub mod store;
+pub mod workflow_manager;
+
+pub use sigbot_types::modules::workflow::workflow::JobStatus as WorkflowJobStatus;
+pub use workflow_manager::{
+    WorkflowCallHandlers, WorkflowManager, WorkflowNodeJob, WorkflowStartHandler, WorkflowStopHandler,
+};

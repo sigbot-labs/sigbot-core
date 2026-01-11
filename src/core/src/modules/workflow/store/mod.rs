@@ -18,11 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest;
-pub mod datafeed;
-pub mod exchange;
-pub mod notification;
-pub mod order;
-pub mod strategy;
-pub mod wallet;
-pub mod workflow;
+pub mod workflow_mongo;
+pub mod workflow_postgres;
+pub mod workflow_sqlite;

@@ -22,7 +22,7 @@ use crate::manager::order_factory::SigbotOrderManagerFactory;
 use anyhow::Error;
 use common_telemetry::{debug, error, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::{messager::TOPIC_TRADING_SIGNALS, order::events::SigbotTradeSignal};
+use sigbot_types::modules::{messager::TOPIC_WF_TRADING_SIGNAL, order::events::SigbotTradeSignal};
 use std::sync::Arc;
 
 pub struct SigbotOrderServer {}
@@ -51,7 +51,7 @@ impl SigbotOrderServer {
 
         // Subscribe to all tenant's signal topics (using wildcard).
         // Should subscribe to specific tenant's topics based on configuration.
-        let topic = TOPIC_TRADING_SIGNALS.replace("{tenant_id}", "+"); // +: MQTT single-level wildcard
+        let topic = TOPIC_WF_TRADING_SIGNAL.replace("{tenant_id}", "+"); // +: MQTT single-level wildcard
 
         let handler: Arc<
             dyn Fn(Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, Error>> + Send>>

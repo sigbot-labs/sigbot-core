@@ -21,8 +21,8 @@
 use crate::deployer_factory::{ISigbotDeployer, SigbotDeployerFactory};
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
+use sigbot_core::{context::state::SigbotState, sys::handler::dlock_handler::DLockHandler};
 use sigbot_types::sys::tenant::Tenant;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -30,11 +30,11 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[derive(Clone)]
 pub struct SigbotStandaloneDeployer {
+    state: Arc<SigbotState>,
     schedule_cron: Option<String>,
     schedule_channels: Option<usize>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
-    state: Arc<SigbotState>,
-    // Track initialized tenants in standalone mode
+    dlock_handler: Arc<dyn IDLockHandler>,
     initialized_tenants: Arc<Mutex<HashMap<i64, bool>>>,
 }
 
@@ -50,10 +50,11 @@ impl SigbotStandaloneDeployer {
         state: Option<Arc<SigbotState>>,
     ) -> Arc<Self> {
         Arc::new(Self {
+            state: state.to_owned().expect("SigbotState is required"),
             schedule_cron,
             schedule_channels,
             scheduler: Arc::new(Mutex::new(None)),
-            state: state.expect("SigbotState is required"),
+            dlock_handler: Arc::new(DLockHandler::new(state.to_owned().expect("SigbotState is required"))),
             initialized_tenants: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -63,8 +64,8 @@ impl SigbotStandaloneDeployer {
 
         // Acquire distributed lock using core module handler
         let dlock_name = "STANDALONE_DEPLOYER";
-        let dlock_handler = sigbot_core::sys::handler::dlock_handler::DLockHandler::new(&self.state);
-        let acquired = dlock_handler
+        let acquired = self
+            .dlock_handler
             .acquire(dlock_name.to_string(), Duration::from_secs(10))
             .await;
         match acquired {

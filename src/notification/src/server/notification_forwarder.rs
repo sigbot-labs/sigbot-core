@@ -22,7 +22,7 @@ use crate::client::notification_factory::SigbotNotificationClientFactory;
 use anyhow::{Context, Error};
 use common_telemetry::{debug, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::messager::TOPIC_NOTIFICATION_MESSAGES;
+use sigbot_types::modules::messager::TOPIC_WF_NOTIFY_MESSAGE;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub struct SigbotNotificationForwarder {}
@@ -68,7 +68,7 @@ impl SigbotNotificationForwarder {
                 })
             });
 
-        let topic = TOPIC_NOTIFICATION_MESSAGES.replace("{tenant_id}", "+"); // MQTT single level wildcard
+        let topic = TOPIC_WF_NOTIFY_MESSAGE.replace("{tenant_id}", "+"); // MQTT single level wildcard
         let _ = messager
             .subscribe(&topic, handler) // TODO: configuable
             .await

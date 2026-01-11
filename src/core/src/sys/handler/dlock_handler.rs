@@ -25,6 +25,7 @@ use common_audit_log::audit_log;
 use lazy_static::lazy_static;
 use sigbot_types::sys::dlock::DLock;
 use sigbot_types::EntityBase;
+use std::sync::Arc;
 use std::time::Duration;
 
 lazy_static! {
@@ -38,18 +39,18 @@ pub trait IDLockHandler: Send + Sync {
     async fn release(&self, name: String) -> Result<bool, Error>;
 }
 
-pub struct DLockHandler<'a> {
-    state: &'a SigbotState,
+pub struct DLockHandler {
+    state: Arc<SigbotState>,
 }
 
-impl<'a> DLockHandler<'a> {
-    pub fn new(state: &'a SigbotState) -> Self {
+impl DLockHandler {
+    pub fn new(state: Arc<SigbotState>) -> Self {
         Self { state }
     }
 }
 
 #[async_trait]
-impl<'a> IDLockHandler for DLockHandler<'a> {
+impl IDLockHandler for DLockHandler {
     #[audit_log("[DLock][ACQUIRE] name: {name}, timeout: {timeout.as_millis()}")]
     async fn acquire(&self, name: String, timeout: Duration) -> Result<bool, Error> {
         // Genearte the holder by current pod id and process id and tokio coroutine id.

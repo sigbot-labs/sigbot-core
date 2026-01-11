@@ -27,10 +27,14 @@ pub mod sqlite;
 use crate::config::config::{AppConfigProperties, AppDBType};
 use anyhow::Error;
 use async_trait::async_trait;
+use regex::Regex;
 use sigbot_types::{PageRequest, PageResponse};
+use sigbot_utils::types::GenericValue;
+use sqlx::{PgPool, SqlitePool};
+use std::collections::HashMap;
 
 #[async_trait] // solution2: async fn + dyn polymorphism problem.
-pub trait AsyncRepository<T>: Send {
+pub trait AsyncRepository<T>: Send + Sync {
     // solution1: async fn + dyn polymorphism problem.
     // fn select(&self) -> Box<dyn Future<Output = Result<Page<T>, Error>> + Send>;
     async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error>
@@ -47,6 +51,138 @@ pub trait AsyncRepository<T>: Send {
         T: 'static + Send + Sync;
     async fn delete_all(&self) -> Result<u64, Error>;
     async fn delete_by_id(&self, id: i64) -> Result<u64, Error>;
+
+    /// Execute a custom SQL query with prepared statement parameters and return results
+    /// SQL template should use named parameters (e.g., :param_name for SQLite, $param_name for PostgreSQL)
+    /// Parameters are provided as a HashMap mapping parameter names to values
+    /// Default implementation returns an error indicating this feature is not supported
+    /// Subclasses can override this method to provide custom SQL query functionality
+    async fn select_by_sql(&self, _sql_template: &str, _params: &HashMap<String, GenericValue>) -> Result<Vec<T>, Error>
+    where
+        T: 'static + Send + Sync,
+    {
+        Err(Error::msg("select_by_sql is not implemented for this repository"))
+    }
+}
+
+/// Execute a custom SQL query with prepared statement parameters for PostgreSQL
+/// SQL template should use named parameters (:name or $name)
+pub async fn select_by_sql_postgres<T>(
+    pool: &PgPool,
+    sql_template: &str,
+    params: &HashMap<String, GenericValue>,
+) -> Result<Vec<T>, Error>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Sync + Unpin + 'static,
+{
+    // Convert SQL template with named parameters (:name or $name) to positional parameters ($1, $2, etc.)
+    let mut sql = sql_template.to_string();
+    let mut param_values = Vec::new();
+    let mut param_index = 1;
+
+    // Extract parameter names from SQL template in order of appearance
+    // Support both :name and $name formats for PostgreSQL
+    let re_named = Regex::new(r":(\w+)|(?<!\w)\$(\w+)").unwrap();
+    let mut replacements = Vec::new();
+
+    for cap in re_named.captures_iter(sql_template) {
+        let param_name = cap
+            .get(1)
+            .or_else(|| cap.get(2))
+            .map(|m| m.as_str())
+            .ok_or_else(|| Error::msg("Invalid parameter format"))?;
+
+        if params.contains_key(param_name) {
+            let placeholder = cap.get(0).unwrap().as_str();
+            let positional = format!("${}", param_index);
+            replacements.push((placeholder.to_string(), positional, param_name.to_string()));
+            param_index += 1;
+        }
+    }
+
+    // Replace placeholders with positional parameters and collect values
+    for (placeholder, positional, param_name) in &replacements {
+        sql = sql.replacen(placeholder, positional, 1);
+        if let Some(value) = params.get(param_name) {
+            param_values.push(value);
+        }
+    }
+
+    // Build query with positional parameters
+    let mut query = sqlx::query_as::<_, T>(&sql);
+    for value in param_values {
+        query = match value {
+            GenericValue::Int32(v) => query.bind(*v),
+            GenericValue::Int64(v) => query.bind(*v),
+            GenericValue::Uint32(v) => query.bind(*v as i64),
+            GenericValue::Uint64(v) => query.bind(*v as i64),
+            GenericValue::Float32(v) => query.bind(*v as f64),
+            GenericValue::Float64(v) => query.bind(*v),
+            GenericValue::Bool(v) => query.bind(*v),
+            GenericValue::String(v) => query.bind(v.clone()),
+            GenericValue::DateTime(v) => query.bind(*v),
+        };
+    }
+
+    query.fetch_all(pool).await.map_err(Error::from)
+}
+
+/// Execute a custom SQL query with prepared statement parameters for SQLite
+/// SQL template should use named parameters (:name)
+pub async fn select_by_sql_sqlite<T>(
+    pool: &SqlitePool,
+    sql_template: &str,
+    params: &HashMap<String, GenericValue>,
+) -> Result<Vec<T>, Error>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Sync + Unpin + 'static,
+{
+    // Convert SQL template with named parameters (:name) to positional parameters (?, ?, etc.)
+    let mut sql = sql_template.to_string();
+    let mut param_values = Vec::new();
+
+    // Extract parameter names from SQL template in order of appearance
+    // SQLite uses :name format for named parameters
+    let re_named = Regex::new(r":(\w+)").unwrap();
+    let mut replacements = Vec::new();
+
+    for cap in re_named.captures_iter(sql_template) {
+        let param_name = cap
+            .get(1)
+            .map(|m| m.as_str())
+            .ok_or_else(|| Error::msg("Invalid parameter format"))?;
+
+        if params.contains_key(param_name) {
+            let placeholder = cap.get(0).unwrap().as_str();
+            replacements.push((placeholder.to_string(), "?".to_string(), param_name.to_string()));
+        }
+    }
+
+    // Replace placeholders with positional parameters and collect values
+    for (placeholder, positional, param_name) in &replacements {
+        sql = sql.replacen(placeholder, positional, 1);
+        if let Some(value) = params.get(param_name) {
+            param_values.push(value);
+        }
+    }
+
+    // Build query with positional parameters
+    let mut query = sqlx::query_as::<_, T>(&sql);
+    for value in param_values {
+        query = match value {
+            GenericValue::Int32(v) => query.bind(*v),
+            GenericValue::Int64(v) => query.bind(*v),
+            GenericValue::Uint32(v) => query.bind(*v as i64),
+            GenericValue::Uint64(v) => query.bind(*v as i64),
+            GenericValue::Float32(v) => query.bind(*v as f64),
+            GenericValue::Float64(v) => query.bind(*v),
+            GenericValue::Bool(v) => query.bind(*v),
+            GenericValue::String(v) => query.bind(v.clone()),
+            GenericValue::DateTime(v) => query.bind(*v),
+        };
+    }
+
+    query.fetch_all(pool).await.map_err(Error::from)
 }
 
 pub struct RepositoryContainer<T>

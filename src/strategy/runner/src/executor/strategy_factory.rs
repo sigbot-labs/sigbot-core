@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::executor::{strategy_llm::SigbotLLMStrategyExecutor, strategy_python::SigbotPythonStrategyExecutor};
+use crate::executor::{strategy_llm::SigbotLLMStrategyExecutor, strategy_pycode::SigbotPythonStrategyExecutor};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -46,6 +46,7 @@ lazy_static! {
 }
 
 pub struct SigbotStrategyExecutorFactory {
+    /// Map from executor_id (format: "{workflow_id}:{node_id}") to executor instance
     pub implementations: HashMap<String, Arc<dyn ISigbotStrategyExecutor + Send + Sync>>,
 }
 
@@ -60,111 +61,111 @@ impl SigbotStrategyExecutorFactory {
         &SINGLE_INSTANCE
     }
 
-    #[allow(unused_variables)]
+    /// Initialize strategy executor for a workflow node
     pub async fn init(
-        matches: &clap::ArgMatches,
-        verbose: bool,
-    ) -> Result<
-        (
-            Arc<dyn ISigbotStrategyExecutor + Send + Sync>,
-            Arc<SigbotStrategyArgument>,
-        ),
-        Error,
-    > {
-        debug!("Starting Strategy Executor ...");
-
-        // e.g '--strategy-runner-provider=python'
-        let provider = StrategyProvider::of(
-            &matches
-                .get_one::<String>("STRATEGY_RUNNER_PROVIDER")
-                .unwrap_or(&StrategyProvider::PYCODE.as_str().to_owned()),
-        )?;
-        debug!("Registering Strategy Executor with provider: {}", &provider.as_str());
-
-        // e.g '--strategy-runner-configuration=<base64_encoded_json_string>'
-        let configuration = matches
-            .try_get_one::<String>("STRATEGY_RUNNER_CONFIGURATION")
-            .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
-            .expect("Failed to parse the configuration from the command line arguments.");
-
-        let argument = Arc::new(
-            SigbotStrategyArgument::from_json(
-                &decode_arg_configuration(&configuration)
-                    .map_err(|e| Error::msg(format!("Failed to decode the configuration: {}", e)))?,
-            )
-            .map_err(|e| Error::msg(format!("Failed to parse the configuration: {}", e)))?,
+        workflow_id: String,
+        node_id: String,
+        provider: StrategyProvider,
+        argument: Arc<SigbotStrategyArgument>,
+    ) -> Result<Arc<dyn ISigbotStrategyExecutor + Send + Sync>, Error> {
+        let executor_id = format!("{}:{}", workflow_id, node_id);
+        debug!(
+            "Registering Strategy Executor with id: {}, provider: {}",
+            executor_id,
+            provider.as_str()
         );
 
-        match provider {
+        let executor: Arc<dyn ISigbotStrategyExecutor + Send + Sync> = match provider {
             StrategyProvider::PYCODE => {
+                let py_executor = SigbotPythonStrategyExecutor::new(argument).await;
                 Self::get()
                     .write()
                     .unwrap()
-                    .register0(
-                        provider.as_str(),
-                        SigbotPythonStrategyExecutor::new(argument.to_owned()).await, // TODO: set up run configuration?
-                    )
-                    .expect(
-                        &format!(
-                            "Failed to register the Strategy Executor with provider: {}.",
-                            &provider.as_str()
-                        )
-                        .as_str(),
-                    );
+                    .register(executor_id.clone(), py_executor.clone())
+                    .map_err(|e| Error::msg(format!("Failed to register PYCODE executor: {}", e)))?;
+                py_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
             }
             StrategyProvider::LLM => {
+                let llm_executor = SigbotLLMStrategyExecutor::new(argument).await;
                 Self::get()
                     .write()
                     .unwrap()
-                    .register0(
-                        provider.as_str(),
-                        SigbotLLMStrategyExecutor::new(argument.to_owned()).await,
-                    )
-                    .expect(&format!(
-                        "Failed to register the Strategy Executor with provider: {}.",
-                        &provider.as_str()
-                    ));
+                    .register(executor_id.clone(), llm_executor.clone())
+                    .map_err(|e| Error::msg(format!("Failed to register LLM executor: {}", e)))?;
+                llm_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
             }
         };
 
-        let registered = Self::get_impl(provider.as_str().to_owned()).await.expect(&format!(
-            "Failed to get the registered Strategy Executor with provider: {}.",
-            &provider.as_str()
-        ));
-        info!("Registered the Strategy Executor with provider: {}", &provider.as_str());
-
-        Ok((registered, argument))
+        info!(
+            "Registered the Strategy Executor with id: {}, provider: {}",
+            executor_id,
+            provider.as_str()
+        );
+        Ok(executor)
     }
 
-    fn register0<T: ISigbotStrategyExecutor + Send + Sync + 'static>(
+    /// Register a strategy executor with a unique id
+    /// Same provider can be registered multiple times with different ids
+    fn register<T: ISigbotStrategyExecutor + Send + Sync + 'static>(
         &mut self,
-        name: &str,
+        id: String,
         handler: Arc<T>,
     ) -> Result<Arc<T>, Error> {
-        if self.implementations.contains_key(name) {
-            debug!("Already register the Strategy Executor '{}'", name);
+        if self.implementations.contains_key(&id) {
+            debug!("Already register the Strategy Executor with id '{}'", id);
             return Ok(handler);
         }
-        self.implementations.insert(name.to_owned(), handler.to_owned());
+        self.implementations.insert(id.clone(), handler.to_owned());
+        debug!("Registered Strategy Executor with id: {}", id);
         Ok(handler)
     }
 
-    pub async fn get_impl(name: String) -> Result<Arc<dyn ISigbotStrategyExecutor + Send + Sync>, Error> {
+    /// Get strategy executor by id
+    pub async fn get_impl(id: String) -> Result<Arc<dyn ISigbotStrategyExecutor + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotStrategyExecutorFactory::get().read().unwrap();
-        if let Some(implementation) = this.implementations.get(&name) {
+        if let Some(implementation) = this.implementations.get(&id) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered Strategy Executor '{}'.", name);
+            let errmsg = format!("Could not obtain registered Strategy Executor with id '{}'.", id);
             return Err(Error::msg(errmsg));
         }
     }
 
-    pub async fn close() {
-        let this = SigbotStrategyExecutorFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.shutdown().await;
+    /// Unregister and shutdown a strategy executor by id
+    pub async fn unregister(id: String) -> Result<(), Error> {
+        let executor = {
+            let mut this = SigbotStrategyExecutorFactory::get().write().unwrap();
+            this.implementations.remove(&id)
+        };
+
+        if let Some(executor) = executor {
+            executor.shutdown().await;
+            info!("Unregistered and shutdown Strategy Executor with id: {}", id);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Strategy Executor with id '{}' not found", id)))
         }
+    }
+
+    /// Close all registered strategy executors
+    pub async fn close() {
+        let executors: Vec<_> = {
+            let this = SigbotStrategyExecutorFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for executor in executors {
+            executor.shutdown().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotStrategyExecutorFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Closed all Strategy Executors");
     }
 }
 

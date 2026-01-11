@@ -20,22 +20,22 @@
 
 pub mod messager;
 
-/// This topic for strategy runner to receive strategies configuration push.
-/// data-flow: from api-server to strategy-runner.
-pub const TOPIC_CONFIG_STRATEGY: &str = "sigbot/internal/v1/{tenant_id}/config/strategy";
+/// This topic for strategy runner to receive workflow's configuration push.
+/// phy-data-flow: from api-server to strategy-runner.
+pub const TOPIC_CONFIG_WORKFLOW: &str = "/internal/v1/{TENANT_ID}/config/workflow";
 
-/// This topic for strategy runner to receive market kline/tick data streams.
-/// data-flow: from datafeed-ingestor or backtest to strategy-runner.
-pub const TOPIC_MARKET_STREAMS: &str = "sigbot/internal/v1/{tenant_id}/market/streams";
+/// This topic for strategy runner to receive workflow's market kline/tick data streams.
+/// phy-data-flow: from datafeed-ingestor or backtest to strategy-runner.
+pub const TOPIC_WF_MARKET_STREAM: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/market/stream";
 
-/// This topic for order-manager to receive trading signals.
-/// data-flow: from strategy-runner to order-manager.
-pub const TOPIC_TRADING_SIGNALS: &str = "sigbot/internal/v1/{tenant_id}/trading/signals";
+/// This topic for order-manager to receive workflow's trading signals.
+/// phy-data-flow: from strategy-runner to order-manager.
+pub const TOPIC_WF_TRADING_SIGNAL: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/trading/signal";
 
-/// This topic for wallet-manager to receive trade results.
-/// data-flow: from order-manager to wallet-manager.
-pub const TOPIC_TRADING_RESULTS: &str = "sigbot/internal/v1/{tenant_id}/trading/results";
+/// This topic for wallet-manager to receive workflow's trade order placed results.
+/// phy-data-flow: from order-manager to wallet-manager.
+pub const TOPIC_WF_TRADING_PLACED: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/trading/placed";
 
-/// This topic for notification forwarder to receive notification messages.
-/// data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to notification-forwarder.
-pub const TOPIC_NOTIFICATION_MESSAGES: &str = "sigbot/internal/v1/{tenant_id}/notifications";
+/// This topic for notification forwarder to receive workflow's notification messages.
+/// phy-data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to notification-forwarder.
+pub const TOPIC_WF_NOTIFY_MESSAGE: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/notify";

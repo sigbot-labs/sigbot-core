@@ -41,6 +41,11 @@ use crate::{
             notification_postgres::NotificationInfoPostgresRepository,
             notification_sqlite::NotificationInfoSQLiteRepository,
         },
+        workflow::store::{
+            workflow_mongo::WorkflowInfoMongoRepository,
+            workflow_postgres::WorkflowInfoPostgresRepository,
+            workflow_sqlite::WorkflowInfoSQLiteRepository,
+        },
         strategy::store::{
             strategy_mongo::StrategyInfoMongoRepository, strategy_postgres::StrategyInfoPostgresRepository,
             strategy_sqlite::StrategyInfoSQLiteRepository,
@@ -69,6 +74,7 @@ use sigbot_types::{
         exchange::exchange::ExchangeInfo,
         notification::notification::NotificationInfo,
         strategy::strategy::StrategyInfo,
+        workflow::workflow::WorkflowInfo,
         wallet::{balance::BalanceInfo, ledger::LedgerInfo, position::PositionInfo, wallet::WalletInfo},
     },
     sys::{dlock::DLock, tenant::Tenant, user::User},
@@ -99,6 +105,7 @@ pub struct SigbotState {
     pub strategy_repo: Arc<Mutex<RepositoryContainer<StrategyInfo>>>,
     pub backtest_case_repo: Arc<Mutex<RepositoryContainer<BacktestCaseInfo>>>,
     pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
+    pub workflow_repo: Arc<Mutex<RepositoryContainer<WorkflowInfo>>>,
     // The Wallet module repositories.
     pub wallet_repo: Arc<Mutex<RepositoryContainer<WalletInfo>>>,
     pub trade_repo: Arc<Mutex<RepositoryContainer<LedgerInfo>>>,
@@ -273,6 +280,26 @@ impl SigbotState {
                 _ => None,
             },
         );
+        let workflow_repo = RepositoryContainer::new(
+            match db_config.db_type {
+                AppDBType::SQLITE => Some(Box::new(
+                    WorkflowInfoSQLiteRepository::new(&db_config.sqlite).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::POSTGRESQL => Some(Box::new(
+                    WorkflowInfoPostgresRepository::new(&db_config.postgres).await.unwrap(),
+                )),
+                _ => None,
+            },
+            match db_config.db_type {
+                AppDBType::MONGODB => Some(Box::new(
+                    WorkflowInfoMongoRepository::new(&db_config.mongodb).await.unwrap(),
+                )),
+                _ => None,
+            },
+        );
         let wallet_repo = RepositoryContainer::new(
             match db_config.db_type {
                 AppDBType::SQLITE => Some(Box::new(
@@ -375,6 +402,7 @@ impl SigbotState {
             strategy_repo: Arc::new(Mutex::new(strategy_repo)),
             backtest_case_repo: Arc::new(Mutex::new(backtest_case_repo)),
             notification_repo: Arc::new(Mutex::new(notification_repo)),
+            workflow_repo: Arc::new(Mutex::new(workflow_repo)),
             // The Wallet repositories.
             wallet_repo: Arc::new(Mutex::new(wallet_repo)),
             trade_repo: Arc::new(Mutex::new(trade_repo)),

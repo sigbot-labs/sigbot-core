@@ -19,6 +19,8 @@
 // This includes modifications and derived works.
 
 use dashmap::DashMap;
+use std::borrow::Borrow;
+use std::hash::Hash;
 
 /// A concurrent-safe HashMap wrapper similar to Java's ConcurrentHashMap.
 /// Uses DashMap internally for high-performance concurrent operations with lock-free reads.
@@ -138,7 +140,11 @@ where
 
     /// Gets the value associated with the key.
     /// Note: This is a synchronous operation with DashMap (lock-free read).
-    pub fn get(&self, key: &K) -> Option<V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
         self.inner.get(key).map(|entry| entry.value().clone())
     }
 
@@ -162,7 +168,11 @@ where
     /// Removes a key from the map.
     /// Returns the value if the key existed, None otherwise.
     /// Note: This is a synchronous operation with DashMap.
-    pub fn remove(&self, key: &K) -> Option<V> {
+    pub fn remove<Q>(&self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
         self.inner.remove(key).map(|(_, v)| v)
     }
 
@@ -173,7 +183,11 @@ where
 
     /// Checks if the map contains the key.
     /// Note: This is a synchronous operation with DashMap (lock-free read).
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
         self.inner.contains_key(key)
     }
 
@@ -213,6 +227,12 @@ where
     /// Clears all elements from the map (async version for API compatibility).
     pub async fn clear_async(&self) {
         self.clear();
+    }
+
+    /// Returns an iterator over all values in the map.
+    /// Note: This is a synchronous operation with DashMap (lock-free read).
+    pub fn iter(&self) -> impl Iterator<Item = V> + '_ {
+        self.inner.iter().map(|entry| entry.value().clone())
     }
 }
 

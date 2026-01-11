@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info, warn};
 use sigbot_exchange::client::exchange_factory::ISigbotExchangeClient;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
-use sigbot_types::modules::messager::TOPIC_TRADING_RESULTS;
+use sigbot_types::modules::messager::TOPIC_WF_TRADING_PLACED;
 use sigbot_types::modules::order::events::{SigbotTradeEvent, SigbotTradeSignal};
 use sigbot_types::modules::order::{OrderMgrProvider, SigbotOrderManagerArgument};
 use std::collections::HashMap;
@@ -168,7 +168,7 @@ impl SigbotDefaultOrderManager {
             .as_ref()
             .ok_or_else(|| Error::msg("Messager client not initialized"))?;
 
-        let topic = TOPIC_TRADING_RESULTS.replace("{tenant_id}", &signal.tenant_id);
+        let topic = TOPIC_WF_TRADING_PLACED.replace("{tenant_id}", &signal.tenant_id);
         let message = serde_json::to_string(&trade_event).context("Failed to serialize SigbotTradeEvent")?;
 
         messager

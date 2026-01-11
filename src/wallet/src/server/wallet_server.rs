@@ -22,7 +22,7 @@ use crate::manager::wallet_factory::SigbotWalletManagerFactory;
 use anyhow::Error;
 use common_telemetry::{debug, error, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::{messager::TOPIC_TRADING_RESULTS, order::events::SigbotTradeEvent};
+use sigbot_types::modules::{messager::TOPIC_WF_TRADING_PLACED, order::events::SigbotTradeEvent};
 use std::sync::Arc;
 
 pub struct SigbotWalletServer {}
@@ -50,7 +50,7 @@ impl SigbotWalletServer {
         let messager0 = messager.to_owned();
 
         // Subscribe to all tenant's trade topics (using wildcard).
-        let topic = TOPIC_TRADING_RESULTS.replace("{tenant_id}", "+"); // MQTT single level wildcard
+        let topic = TOPIC_WF_TRADING_PLACED.replace("{tenant_id}", "+"); // MQTT single level wildcard
 
         let handler: Arc<
             dyn Fn(Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, Error>> + Send>>

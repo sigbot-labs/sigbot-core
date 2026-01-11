@@ -18,11 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod backtest;
-pub mod datafeed;
-pub mod exchange;
-pub mod notification;
-pub mod order;
-pub mod strategy;
-pub mod wallet;
 pub mod workflow;
+
+pub use workflow::{
+    DeleteWorkflowRequest, DeleteWorkflowResponse, QueryWorkflowRequest, QueryWorkflowResponse,
+    SaveWorkflowRequest, SaveWorkflowResponse, WorkflowInfo, WorkflowProvider, JobStatus,
+};
+
+#[cfg(test)]
+mod tests {}

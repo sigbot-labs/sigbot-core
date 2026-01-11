@@ -21,4 +21,4 @@
 pub mod pyexec;
 pub mod strategy_factory;
 pub mod strategy_llm;
-pub mod strategy_python;
+pub mod strategy_pycode;
