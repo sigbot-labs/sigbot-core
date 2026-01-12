@@ -32,7 +32,7 @@ use openidconnect::{core::CoreUserInfoClaims, LanguageTag};
 use serde::{Deserialize, Serialize};
 use sigbot_types::{
     sys::auth::{EthersWalletLoginRequest, GithubUserInfo, LogoutRequest, PasswordLoginRequest, PasswordPubKeyRequest},
-    sys::user::{SaveUserRequest, User},
+    sys::user::{SaveUserRequest, UserInfo},
 };
 use sigbot_utils::rsa_ciphers::RSACipher;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -58,7 +58,7 @@ pub enum PrincipalType {
 pub trait IAuthHandler: Send {
     async fn handle_password_pubkey(&self, param: PasswordPubKeyRequest) -> Result<String, Error>;
 
-    async fn handle_password_verify(&self, param: PasswordLoginRequest) -> Result<Arc<User>, Error>;
+    async fn handle_password_verify(&self, param: PasswordLoginRequest) -> Result<Arc<UserInfo>, Error>;
 
     async fn handle_auth_create_nonce(&self, sid: &str, nonce: String) -> Result<(), Error>;
 
@@ -119,7 +119,7 @@ impl<'a> IAuthHandler for AuthHandler<'a> {
         }
     }
 
-    async fn handle_password_verify(&self, param: PasswordLoginRequest) -> Result<Arc<User>, Error> {
+    async fn handle_password_verify(&self, param: PasswordLoginRequest) -> Result<Arc<UserInfo>, Error> {
         let cache = self.state.string_cache.to_owned();
         let key = self.build_login_private_key(&param.fingerprint_token);
 

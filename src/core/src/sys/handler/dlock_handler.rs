@@ -23,7 +23,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_audit_log::audit_log;
 use lazy_static::lazy_static;
-use sigbot_types::sys::dlock::DLock;
+use sigbot_types::sys::dlock::DLockInfo;
 use sigbot_types::EntityBase;
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,7 +59,7 @@ impl IDLockHandler for DLockHandler {
         let result = repo
             .get(&self.state.config)
             // Actually it call to acquire func.
-            .insert(DLock {
+            .insert(DLockInfo {
                 base: EntityBase::new_empty(),
                 name: Some(name),
                 holder: Some(holder.to_string()),
@@ -79,7 +79,7 @@ impl IDLockHandler for DLockHandler {
         let repo = self.state.lock_repo.lock().await;
         let result = repo
             .get(&self.state.config)
-            .update(DLock {
+            .update(DLockInfo {
                 // Actually it call to release func.
                 base: EntityBase::new_empty(),
                 name: Some(name),

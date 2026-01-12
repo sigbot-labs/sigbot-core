@@ -23,13 +23,17 @@ use anyhow::Error;
 use async_trait::async_trait;
 use common_audit_log::audit_log;
 use sigbot_types::sys::tenant::{
-    DeleteTenantRequest, QueryTenantRequest, SaveTenantRequest, SaveTenantResponse, Tenant, TenantEncryptionKeys,
+    DeleteTenantRequest, QueryTenantRequest, SaveTenantRequest, SaveTenantResponse, TenantEncryptionKeys, TenantInfo,
 };
 use sigbot_types::{PageRequest, PageResponse};
 
 #[async_trait]
 pub trait ITenantHandler: Send {
-    async fn find(&self, param: QueryTenantRequest, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error>;
+    async fn find(
+        &self,
+        param: QueryTenantRequest,
+        page: PageRequest,
+    ) -> Result<(PageResponse, Vec<TenantInfo>), Error>;
 
     async fn save(&self, param: SaveTenantRequest) -> Result<SaveTenantResponse, Error>;
 
@@ -49,7 +53,11 @@ impl<'a> TenantHandler<'a> {
 #[async_trait]
 impl<'a> ITenantHandler for TenantHandler<'a> {
     #[audit_log("[TENANT][FIND] name: {param.name.clone().unwrap_or_default()}")]
-    async fn find(&self, param: QueryTenantRequest, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
+    async fn find(
+        &self,
+        param: QueryTenantRequest,
+        page: PageRequest,
+    ) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
         let repo = self.state.tenant_repo.lock().await;
         repo.get(&self.state.config).select(param.to_tenant(), page).await
     }

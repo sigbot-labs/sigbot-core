@@ -27,12 +27,12 @@ use crate::store::AsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::TenantInfo;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
 
 pub struct TenantPostgresRepository {
-    inner: PostgresRepository<Tenant>,
+    inner: PostgresRepository<TenantInfo>,
 }
 
 impl TenantPostgresRepository {
@@ -44,15 +44,15 @@ impl TenantPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<Tenant> for TenantPostgresRepository {
-    async fn select(&self, tenant: Tenant, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
-        let result = dynamic_postgres_query!(tenant, "sys_tenant", self.inner.get_pool(), "updated_at", page, Tenant)?;
+impl AsyncRepository<TenantInfo> for TenantPostgresRepository {
+    async fn select(&self, tenant: TenantInfo, page: PageRequest) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
+        let result = dynamic_postgres_query!(tenant, "sys_tenant", self.inner.get_pool(), "updated_at", page, TenantInfo)?;
         info!("query tenants: {:?}", result);
         Ok((result.0, result.1))
     }
 
-    async fn select_by_id(&self, id: i64) -> Result<Tenant, Error> {
-        let tenant = sqlx::query_as::<_, Tenant>("SELECT * FROM sys_tenant WHERE id = $1 and del_flag = 0")
+    async fn select_by_id(&self, id: i64) -> Result<TenantInfo, Error> {
+        let tenant = sqlx::query_as::<_, TenantInfo>("SELECT * FROM sys_tenant WHERE id = $1 and del_flag = 0")
             .bind(id)
             .fetch_one(self.inner.get_pool())
             .await?;
@@ -61,13 +61,13 @@ impl AsyncRepository<Tenant> for TenantPostgresRepository {
         Ok(tenant)
     }
 
-    async fn insert(&self, mut tenant: Tenant) -> Result<i64, Error> {
+    async fn insert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
         let inserted_id = dynamic_postgres_insert!(tenant, "tenants", self.inner.get_pool())?;
         info!("Inserted tenant.id: {:?}", inserted_id);
         Ok(inserted_id)
     }
 
-    async fn update(&self, mut tenant: Tenant) -> Result<i64, Error> {
+    async fn update(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
         let updated_id = dynamic_postgres_update!(tenant, "sys_tenant", self.inner.get_pool())?;
         info!("Updated tenant.id: {:?}", updated_id);
         Ok(updated_id)

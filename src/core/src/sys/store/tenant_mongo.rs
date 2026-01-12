@@ -27,14 +27,14 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use mongodb::bson::doc;
 use mongodb::Collection;
-use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::TenantInfo;
 use sigbot_types::{PageRequest, PageResponse};
 use std::sync::Arc;
 
 pub struct TenantMongoRepository {
     #[allow(unused)]
-    inner: Arc<MongoRepository<Tenant>>,
-    collection: Collection<Tenant>,
+    inner: Arc<MongoRepository<TenantInfo>>,
+    collection: Collection<TenantInfo>,
 }
 
 impl TenantMongoRepository {
@@ -46,8 +46,8 @@ impl TenantMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<Tenant> for TenantMongoRepository {
-    async fn select(&self, tenant: Tenant, page: PageRequest) -> Result<(PageResponse, Vec<Tenant>), Error> {
+impl AsyncRepository<TenantInfo> for TenantMongoRepository {
+    async fn select(&self, tenant: TenantInfo, page: PageRequest) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
         //let result = &self.inner.select(tenant, page).await;
         match dynamic_mongo_query!(tenant, self.collection, "updated_at", page, Tenant) {
             Ok(result) => {
@@ -58,7 +58,7 @@ impl AsyncRepository<Tenant> for TenantMongoRepository {
         }
     }
 
-    async fn select_by_id(&self, id: i64) -> Result<Tenant, Error> {
+    async fn select_by_id(&self, id: i64) -> Result<TenantInfo, Error> {
         let filter = doc! { "id": id };
         let tenant = self
             .collection
@@ -68,11 +68,11 @@ impl AsyncRepository<Tenant> for TenantMongoRepository {
         Ok(tenant)
     }
 
-    async fn insert(&self, mut tenant: Tenant) -> Result<i64, Error> {
+    async fn insert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(tenant, self.collection)
     }
 
-    async fn update(&self, mut tenant: Tenant) -> Result<i64, Error> {
+    async fn update(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
         dynamic_mongo_update!(tenant, self.collection)
     }
 

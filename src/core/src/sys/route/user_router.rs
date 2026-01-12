@@ -30,7 +30,7 @@ use axum::{
     Router,
 };
 use common_telemetry::info;
-use sigbot_types::sys::user::{DeleteUserRequest, QueryUserRequest, SaveUserRequest, User};
+use sigbot_types::sys::user::{DeleteUserRequest, QueryUserRequest, SaveUserRequest, UserInfo};
 use sigbot_types::{
     sys::user::{DeleteUserResponse, QueryUserResponse, SaveUserRequestWith, SaveUserResponse},
     PageRequest, RespBase,
@@ -48,7 +48,7 @@ pub fn init() -> Router<SigbotState> {
 #[utoipa::path(
     get,
     path = "/sys/user/current",
-    responses((status = 200, description = "Getting for current user.", body = User)),
+    responses((status = 200, description = "Getting for current user.", body = UserInfo)),
     tag = "User"
 )]
 async fn handle_get_current_user(State(state): State<SigbotState>) -> impl IntoResponse {

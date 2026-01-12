@@ -27,14 +27,14 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use mongodb::bson::doc;
 use mongodb::Collection;
-use sigbot_types::sys::user::User;
+use sigbot_types::sys::user::UserInfo;
 use sigbot_types::{PageRequest, PageResponse};
 use std::sync::Arc;
 
 pub struct UserMongoRepository {
     #[allow(unused)]
-    inner: Arc<MongoRepository<User>>,
-    collection: Collection<User>,
+    inner: Arc<MongoRepository<UserInfo>>,
+    collection: Collection<UserInfo>,
 }
 
 impl UserMongoRepository {
@@ -46,8 +46,8 @@ impl UserMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<User> for UserMongoRepository {
-    async fn select(&self, user: User, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error> {
+impl AsyncRepository<UserInfo> for UserMongoRepository {
+    async fn select(&self, user: UserInfo, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         //let result = &self.inner.select(user, page).await;
         match dynamic_mongo_query!(user, self.collection, "updated_at", page, User) {
             Ok(result) => {
@@ -58,7 +58,7 @@ impl AsyncRepository<User> for UserMongoRepository {
         }
     }
 
-    async fn select_by_id(&self, id: i64) -> Result<User, Error> {
+    async fn select_by_id(&self, id: i64) -> Result<UserInfo, Error> {
         let filter = doc! { "id": id };
         let user = self
             .collection
@@ -68,11 +68,11 @@ impl AsyncRepository<User> for UserMongoRepository {
         Ok(user)
     }
 
-    async fn insert(&self, mut user: User) -> Result<i64, Error> {
+    async fn insert(&self, mut user: UserInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(user, self.collection)
     }
 
-    async fn update(&self, mut user: User) -> Result<i64, Error> {
+    async fn update(&self, mut user: UserInfo) -> Result<i64, Error> {
         dynamic_mongo_update!(user, self.collection)
     }
 

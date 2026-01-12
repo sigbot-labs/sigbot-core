@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use common_telemetry::info;
 use sigbot_core::sys::handler::dlock_handler::IDLockHandler;
 use sigbot_core::{context::state::SigbotState, sys::handler::dlock_handler::DLockHandler};
-use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::TenantInfo;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -118,7 +118,7 @@ impl SigbotStandaloneDeployer {
         .await;
     }
 
-    async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn startup_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
 
@@ -140,7 +140,7 @@ impl SigbotStandaloneDeployer {
         );
     }
 
-    async fn shutdown_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
 
         info!(
@@ -159,7 +159,7 @@ impl SigbotStandaloneDeployer {
         );
     }
 
-    async fn startup_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Initializing datafeed runner for tenant {} in standalone mode",
@@ -169,7 +169,7 @@ impl SigbotStandaloneDeployer {
         // Components are initialized when needed by the main application
     }
 
-    async fn shutdown_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Shutting down datafeed runner for tenant {} in standalone mode",
@@ -178,7 +178,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components are shared, no actual shutdown needed
     }
 
-    async fn startup_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Initializing strategy runner for tenant {} in standalone mode",
@@ -187,7 +187,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components run in-process, no actual deployment needed
     }
 
-    async fn shutdown_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Shutting down strategy runner for tenant {} in standalone mode",
@@ -196,7 +196,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components are shared, no actual shutdown needed
     }
 
-    async fn startup_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn startup_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Initializing notification forwarder for tenant {} in standalone mode",
@@ -205,7 +205,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components run in-process, no actual deployment needed
     }
 
-    async fn shutdown_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Shutting down notification forwarder for tenant {} in standalone mode",
@@ -214,7 +214,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components are shared, no actual shutdown needed
     }
 
-    async fn startup_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Initializing backtest runner for tenant {} in standalone mode",
@@ -223,7 +223,7 @@ impl SigbotStandaloneDeployer {
         // In standalone mode, components run in-process, no actual deployment needed
     }
 
-    async fn shutdown_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         info!(
             "Shutting down backtest runner for tenant {} in standalone mode",

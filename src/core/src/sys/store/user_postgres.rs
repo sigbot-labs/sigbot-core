@@ -27,12 +27,12 @@ use crate::store::AsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
-use sigbot_types::sys::user::User;
+use sigbot_types::sys::user::UserInfo;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
 
 pub struct UserPostgresRepository {
-    inner: PostgresRepository<User>,
+    inner: PostgresRepository<UserInfo>,
 }
 
 impl UserPostgresRepository {
@@ -44,8 +44,8 @@ impl UserPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<User> for UserPostgresRepository {
-    async fn select(&self, user: User, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error> {
+impl AsyncRepository<UserInfo> for UserPostgresRepository {
+    async fn select(&self, user: UserInfo, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
         // let table = "sys_user";
@@ -137,13 +137,13 @@ impl AsyncRepository<User> for UserPostgresRepository {
         //     Err(error) => Err(error.into()),
         // }
 
-        let result = dynamic_postgres_query!(user, "sys_user", self.inner.get_pool(), "updated_at", page, User)?;
+        let result = dynamic_postgres_query!(user, "sys_user", self.inner.get_pool(), "updated_at", page, UserInfo)?;
         info!("query users: {:?}", result);
         Ok((result.0, result.1))
     }
 
-    async fn select_by_id(&self, id: i64) -> Result<User, Error> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM sys_user WHERE id = $1 and del_flag = 0")
+    async fn select_by_id(&self, id: i64) -> Result<UserInfo, Error> {
+        let user = sqlx::query_as::<_, UserInfo>("SELECT * FROM sys_user WHERE id = $1 and del_flag = 0")
             .bind(id)
             .fetch_one(self.inner.get_pool())
             .await?;
@@ -152,7 +152,7 @@ impl AsyncRepository<User> for UserPostgresRepository {
         Ok(user)
     }
 
-    async fn insert(&self, mut user: User) -> Result<i64, Error> {
+    async fn insert(&self, mut user: UserInfo) -> Result<i64, Error> {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
         // let serialized = serde_json::to_value(user).unwrap();
@@ -216,7 +216,7 @@ impl AsyncRepository<User> for UserPostgresRepository {
         Ok(inserted_id)
     }
 
-    async fn update(&self, mut user: User) -> Result<i64, Error> {
+    async fn update(&self, mut user: UserInfo) -> Result<i64, Error> {
         let updated_id = dynamic_postgres_update!(user, "sys_user", self.inner.get_pool())?;
         info!("Updated user.id: {:?}", updated_id);
         Ok(updated_id)

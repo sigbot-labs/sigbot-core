@@ -34,7 +34,7 @@ use kube::{
 use sigbot_core::config::config::{get_config, DeployMode};
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::{DLockHandler, IDLockHandler};
-use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::TenantInfo;
 use sigbot_types::sys::tenant::{
     ComponentConnectionConfig, ComponentInstance, ComponentType, ComponentsConfig, TenantEncryptionKeys,
 };
@@ -153,7 +153,7 @@ impl SigbotKubernetesDeployer {
         .await;
     }
 
-    async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn startup_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
@@ -275,7 +275,7 @@ impl SigbotKubernetesDeployer {
         info!("Completed middleware components startup for tenant {}", tenant_id);
     }
 
-    async fn shutdown_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
 
@@ -483,7 +483,7 @@ impl SigbotKubernetesDeployer {
     /// Save component configuration to tenant.components field with encrypted password
     async fn save_component_config(
         &self,
-        tenant: &Tenant,
+        tenant: &TenantInfo,
         component_type: ComponentType,
         instance_name: &str,
         service_name: &str,
@@ -1535,7 +1535,7 @@ impl SigbotKubernetesDeployer {
         }
     }
 
-    async fn startup_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
         let deployment_name = format!("datafeed-{}", tenant_id);
@@ -1576,11 +1576,11 @@ impl SigbotKubernetesDeployer {
         }
     }
 
-    async fn shutdown_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         self.delete_deployment(tenant.base.id.unwrap_or(0), "datafeed").await;
     }
 
-    async fn startup_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
         let deployment_name = format!("strategy-{}", tenant_id);
@@ -1621,11 +1621,11 @@ impl SigbotKubernetesDeployer {
         }
     }
 
-    async fn shutdown_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         self.delete_deployment(tenant.base.id.unwrap_or(0), "strategy").await;
     }
 
-    async fn startup_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn startup_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
         let deployment_name = format!("notification-{}", tenant_id);
@@ -1669,12 +1669,12 @@ impl SigbotKubernetesDeployer {
         }
     }
 
-    async fn shutdown_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         self.delete_deployment(tenant.base.id.unwrap_or(0), "notification")
             .await;
     }
 
-    async fn startup_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let namespace_name = format!("sigbot-tenant-{}", tenant_id);
         let deployment_name = format!("backtest-{}", tenant_id);
@@ -1715,7 +1715,7 @@ impl SigbotKubernetesDeployer {
         }
     }
 
-    async fn shutdown_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         self.delete_deployment(tenant.base.id.unwrap_or(0), "backtest").await;
     }
 

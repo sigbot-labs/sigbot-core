@@ -26,7 +26,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct DLock {
+pub struct DLockInfo {
     #[serde(flatten)]
     pub base: EntityBase,
     pub name: Option<String>,
@@ -34,9 +34,9 @@ pub struct DLock {
     pub timeout: Option<Duration>,
 }
 
-impl Default for DLock {
+impl Default for DLockInfo {
     fn default() -> Self {
-        DLock {
+        DLockInfo {
             base: EntityBase::new_empty(),
             name: None,
             holder: None,
@@ -47,9 +47,9 @@ impl Default for DLock {
 
 /// SqliteRow impl for DLock.
 
-impl<'r> FromRow<'r, SqliteRow> for DLock {
+impl<'r> FromRow<'r, SqliteRow> for DLockInfo {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(DLock {
+        Ok(DLockInfo {
             base: EntityBase {
                 id: row.try_get("id")?,
                 status: row.try_get::<Option<i8>, _>("status")?,
@@ -70,9 +70,9 @@ impl<'r> FromRow<'r, SqliteRow> for DLock {
 
 /// Postgres Row impl for DLock.
 
-impl<'r> FromRow<'r, PgRow> for DLock {
+impl<'r> FromRow<'r, PgRow> for DLockInfo {
     fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
-        Ok(DLock {
+        Ok(DLockInfo {
             base: EntityBase {
                 id: row.try_get("id")?,
                 status: row.try_get::<Option<i8>, _>("status")?,

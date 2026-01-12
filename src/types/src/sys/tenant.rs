@@ -31,6 +31,106 @@ use std::collections::HashMap;
 use std::error::Error;
 use validator::Validate;
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
+pub struct TenantInfo {
+    #[serde(flatten)]
+    pub base: EntityBase,
+    pub name: Option<String>,
+    pub shared: Option<bool>,  // True if the tenant is shared, false if the tenant is exclusive.
+    pub admin_id: Option<i64>, // The ID of the administrator user.
+    pub properties: Option<serde_json::Value>,
+    pub description: Option<String>,
+    // Tenant-specific encryption key pair for encrypting component passwords
+    // Public key is stored in database, private key should be shown only once during tenant creation
+    pub encryption_public_key: Option<String>, // Base64 encoded RSA public key
+    pub encryption_private_key_hash: Option<String>, // SHA256 hash of private key for verification
+    // Encrypted private key (encrypted with system master key, only stored if cloud_managed_key is true)
+    pub encrypted_private_key: Option<String>, // Base64 encoded, encrypted with system master key
+    // Cloud-managed key: If true, platform stores encrypted private key for recovery
+    // This prevents data loss if user loses their private key
+    pub cloud_managed_key: Option<bool>, // True if platform manages the private key
+    // Component deployment configurations (encrypted passwords stored here)
+    pub components: Option<serde_json::Value>, // JSON object containing component configurations
+}
+
+impl Default for TenantInfo {
+    fn default() -> Self {
+        TenantInfo {
+            base: EntityBase::new_empty(),
+            name: None,
+            shared: None,
+            admin_id: None,
+            properties: None,
+            description: None,
+            encryption_public_key: None,
+            encryption_private_key_hash: None,
+            cloud_managed_key: None,
+            encrypted_private_key: None,
+            components: None,
+        }
+    }
+}
+
+/// SqliteRow impl for Tenant.
+
+impl<'r> FromRow<'r, SqliteRow> for TenantInfo {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(TenantInfo {
+            base: EntityBase::from_row(row).unwrap(),
+            name: row.try_get("name")?,
+            shared: row.try_get("shared")?,
+            admin_id: row.try_get("admin_id")?,
+            properties: row.try_get::<Option<String>, _>("properties")?.and_then(|json_str| {
+                if json_str.is_empty() {
+                    None
+                } else {
+                    serde_json::from_str::<serde_json::Value>(&json_str).ok()
+                }
+            }),
+            description: row.try_get("description")?,
+            encryption_public_key: row.try_get("encryption_public_key")?,
+            encryption_private_key_hash: row.try_get("encryption_private_key_hash")?,
+            cloud_managed_key: row.try_get("cloud_managed_key")?,
+            encrypted_private_key: row.try_get("encrypted_private_key")?,
+            components: row.try_get::<Option<String>, _>("components")?.and_then(|json_str| {
+                if json_str.is_empty() {
+                    None
+                } else {
+                    serde_json::from_str::<serde_json::Value>(&json_str).ok()
+                }
+            }),
+        })
+    }
+}
+
+/// Postgres Row impl for Tenant.
+
+impl<'r> FromRow<'r, PgRow> for TenantInfo {
+    fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
+        Ok(TenantInfo {
+            base: EntityBase::from_row(row)?,
+            name: row.try_get("name")?,
+            shared: row.try_get("shared")?,
+            admin_id: row.try_get("admin_id")?,
+            properties: {
+                // PostgreSQL JSONB can be retrieved as serde_json::Value
+                let json_val: Option<serde_json::Value> = row.try_get("properties").ok().flatten();
+                json_val.and_then(|v| if v.is_null() { None } else { Some(v) })
+            },
+            description: row.try_get("description")?,
+            encryption_public_key: row.try_get("encryption_public_key")?,
+            encryption_private_key_hash: row.try_get("encryption_private_key_hash")?,
+            cloud_managed_key: row.try_get("cloud_managed_key")?,
+            encrypted_private_key: row.try_get("encrypted_private_key")?,
+            components: {
+                // PostgreSQL JSONB can be retrieved as serde_json::Value
+                let json_val: Option<serde_json::Value> = row.try_get("components").ok().flatten();
+                json_val.and_then(|v| if v.is_null() { None } else { Some(v) })
+            },
+        })
+    }
+}
+
 /// Component type enumeration
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -274,106 +374,6 @@ impl TenantEncryptionKeys {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct Tenant {
-    #[serde(flatten)]
-    pub base: EntityBase,
-    pub name: Option<String>,
-    pub shared: Option<bool>,  // True if the tenant is shared, false if the tenant is exclusive.
-    pub admin_id: Option<i64>, // The ID of the administrator user.
-    pub properties: Option<serde_json::Value>,
-    pub description: Option<String>,
-    // Tenant-specific encryption key pair for encrypting component passwords
-    // Public key is stored in database, private key should be shown only once during tenant creation
-    pub encryption_public_key: Option<String>, // Base64 encoded RSA public key
-    pub encryption_private_key_hash: Option<String>, // SHA256 hash of private key for verification
-    // Encrypted private key (encrypted with system master key, only stored if cloud_managed_key is true)
-    pub encrypted_private_key: Option<String>, // Base64 encoded, encrypted with system master key
-    // Cloud-managed key: If true, platform stores encrypted private key for recovery
-    // This prevents data loss if user loses their private key
-    pub cloud_managed_key: Option<bool>, // True if platform manages the private key
-    // Component deployment configurations (encrypted passwords stored here)
-    pub components: Option<serde_json::Value>, // JSON object containing component configurations
-}
-
-impl Default for Tenant {
-    fn default() -> Self {
-        Tenant {
-            base: EntityBase::new_empty(),
-            name: None,
-            shared: None,
-            admin_id: None,
-            properties: None,
-            description: None,
-            encryption_public_key: None,
-            encryption_private_key_hash: None,
-            cloud_managed_key: None,
-            encrypted_private_key: None,
-            components: None,
-        }
-    }
-}
-
-/// SqliteRow impl for Tenant.
-
-impl<'r> FromRow<'r, SqliteRow> for Tenant {
-    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(Tenant {
-            base: EntityBase::from_row(row).unwrap(),
-            name: row.try_get("name")?,
-            shared: row.try_get("shared")?,
-            admin_id: row.try_get("admin_id")?,
-            properties: row.try_get::<Option<String>, _>("properties")?.and_then(|json_str| {
-                if json_str.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str::<serde_json::Value>(&json_str).ok()
-                }
-            }),
-            description: row.try_get("description")?,
-            encryption_public_key: row.try_get("encryption_public_key")?,
-            encryption_private_key_hash: row.try_get("encryption_private_key_hash")?,
-            cloud_managed_key: row.try_get("cloud_managed_key")?,
-            encrypted_private_key: row.try_get("encrypted_private_key")?,
-            components: row.try_get::<Option<String>, _>("components")?.and_then(|json_str| {
-                if json_str.is_empty() {
-                    None
-                } else {
-                    serde_json::from_str::<serde_json::Value>(&json_str).ok()
-                }
-            }),
-        })
-    }
-}
-
-/// Postgres Row impl for Tenant.
-
-impl<'r> FromRow<'r, PgRow> for Tenant {
-    fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
-        Ok(Tenant {
-            base: EntityBase::from_row(row)?,
-            name: row.try_get("name")?,
-            shared: row.try_get("shared")?,
-            admin_id: row.try_get("admin_id")?,
-            properties: {
-                // PostgreSQL JSONB can be retrieved as serde_json::Value
-                let json_val: Option<serde_json::Value> = row.try_get("properties").ok().flatten();
-                json_val.and_then(|v| if v.is_null() { None } else { Some(v) })
-            },
-            description: row.try_get("description")?,
-            encryption_public_key: row.try_get("encryption_public_key")?,
-            encryption_private_key_hash: row.try_get("encryption_private_key_hash")?,
-            cloud_managed_key: row.try_get("cloud_managed_key")?,
-            encrypted_private_key: row.try_get("encrypted_private_key")?,
-            components: {
-                // PostgreSQL JSONB can be retrieved as serde_json::Value
-                let json_val: Option<serde_json::Value> = row.try_get("components").ok().flatten();
-                json_val.and_then(|v| if v.is_null() { None } else { Some(v) })
-            },
-        })
-    }
-}
-
 // --- Models. ---
 
 #[derive(
@@ -397,8 +397,8 @@ pub struct QueryTenantRequest {
 }
 
 impl QueryTenantRequest {
-    pub fn to_tenant(&self) -> Tenant {
-        Tenant {
+    pub fn to_tenant(&self) -> TenantInfo {
+        TenantInfo {
             base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
             shared: self.shared.clone(),
@@ -420,11 +420,11 @@ impl QueryTenantRequest {
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct QueryTenantResponse {
     pub page: Option<PageResponse>,
-    pub data: Option<Vec<Tenant>>,
+    pub data: Option<Vec<TenantInfo>>,
 }
 
 impl QueryTenantResponse {
-    pub fn new(page: PageResponse, data: Vec<Tenant>) -> Self {
+    pub fn new(page: PageResponse, data: Vec<TenantInfo>) -> Self {
         QueryTenantResponse {
             page: Some(page),
             data: Some(data),
@@ -456,8 +456,8 @@ pub struct SaveTenantRequest {
 }
 
 impl SaveTenantRequest {
-    pub fn to_tenant(&self) -> Tenant {
-        Tenant {
+    pub fn to_tenant(&self) -> TenantInfo {
+        TenantInfo {
             base: EntityBase::new_with_id(self.id),
             name: self.name.clone(), // self.name.as_ref().map(|n| n.to_string())
             shared: None,

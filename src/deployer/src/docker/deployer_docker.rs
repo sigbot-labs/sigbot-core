@@ -28,7 +28,7 @@ use common_telemetry::{error, info, warn};
 use sigbot_core::config::config::get_config;
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::dlock_handler::{DLockHandler, IDLockHandler};
-use sigbot_types::sys::tenant::Tenant;
+use sigbot_types::sys::tenant::TenantInfo;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -159,7 +159,7 @@ impl SigbotDockerDeployer {
         .await;
     }
 
-    async fn startup_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn startup_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
         let config = get_config();
@@ -218,7 +218,7 @@ impl SigbotDockerDeployer {
         info!("Completed middleware components startup for tenant {}", tenant_id);
     }
 
-    async fn shutdown_middleware_components(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_middleware_components(&self, tenant: Arc<TenantInfo>) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let config = get_config();
         let network_name = format!(
@@ -255,35 +255,35 @@ impl SigbotDockerDeployer {
         }
     }
 
-    async fn startup_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         self.startup_microservice_container(tenant, "datafeed").await;
     }
 
-    async fn shutdown_datafeed_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_datafeed_runner(&self, tenant: Arc<TenantInfo>) {
         self.shutdown_microservice_container(tenant, "datafeed").await;
     }
 
-    async fn startup_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         self.startup_microservice_container(tenant, "strategy").await;
     }
 
-    async fn shutdown_strategy_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_strategy_runner(&self, tenant: Arc<TenantInfo>) {
         self.shutdown_microservice_container(tenant, "strategy").await;
     }
 
-    async fn startup_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn startup_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         self.startup_microservice_container(tenant, "notification").await;
     }
 
-    async fn shutdown_notification_forwarder(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_notification_forwarder(&self, tenant: Arc<TenantInfo>) {
         self.shutdown_microservice_container(tenant, "notification").await;
     }
 
-    async fn startup_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn startup_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         self.startup_microservice_container(tenant, "backtest").await;
     }
 
-    async fn shutdown_backtest_runner(&self, tenant: Arc<Tenant>) {
+    async fn shutdown_backtest_runner(&self, tenant: Arc<TenantInfo>) {
         self.shutdown_microservice_container(tenant, "backtest").await;
     }
 
@@ -502,7 +502,7 @@ impl SigbotDockerDeployer {
         Ok(())
     }
 
-    async fn startup_microservice_container(&self, tenant: Arc<Tenant>, component: &str) {
+    async fn startup_microservice_container(&self, tenant: Arc<TenantInfo>, component: &str) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let tenant_name = tenant.name.as_deref().unwrap_or("unknown");
         let config = get_config();
@@ -578,7 +578,7 @@ impl SigbotDockerDeployer {
         );
     }
 
-    async fn shutdown_microservice_container(&self, tenant: Arc<Tenant>, component: &str) {
+    async fn shutdown_microservice_container(&self, tenant: Arc<TenantInfo>, component: &str) {
         let tenant_id = tenant.base.id.unwrap_or(0);
         let container_name = format!("{}-{}", component, tenant_id);
 

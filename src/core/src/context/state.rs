@@ -41,11 +41,6 @@ use crate::{
             notification_postgres::NotificationInfoPostgresRepository,
             notification_sqlite::NotificationInfoSQLiteRepository,
         },
-        workflow::store::{
-            workflow_mongo::WorkflowInfoMongoRepository,
-            workflow_postgres::WorkflowInfoPostgresRepository,
-            workflow_sqlite::WorkflowInfoSQLiteRepository,
-        },
         strategy::store::{
             strategy_mongo::StrategyInfoMongoRepository, strategy_postgres::StrategyInfoPostgresRepository,
             strategy_sqlite::StrategyInfoSQLiteRepository,
@@ -57,6 +52,10 @@ use crate::{
             position_mongo::PositionInfoMongoRepository, position_postgres::PositionInfoPostgresRepository,
             position_sqlite::PositionInfoSQLiteRepository, wallet_mongo::WalletInfoMongoRepository,
             wallet_postgres::WalletInfoPostgresRepository, wallet_sqlite::WalletInfoSQLiteRepository,
+        },
+        workflow::store::{
+            workflow_mongo::WorkflowInfoMongoRepository, workflow_postgres::WorkflowInfoPostgresRepository,
+            workflow_sqlite::WorkflowInfoSQLiteRepository,
         },
     },
     store::RepositoryContainer,
@@ -74,10 +73,10 @@ use sigbot_types::{
         exchange::exchange::ExchangeInfo,
         notification::notification::NotificationInfo,
         strategy::strategy::StrategyInfo,
-        workflow::workflow::WorkflowInfo,
         wallet::{balance::BalanceInfo, ledger::LedgerInfo, position::PositionInfo, wallet::WalletInfo},
+        workflow::workflow::WorkflowInfo,
     },
-    sys::{dlock::DLock, tenant::Tenant, user::User},
+    sys::{dlock::DLockInfo, tenant::TenantInfo, user::UserInfo},
 };
 use sigbot_utils::httpclients;
 use std::sync::Arc;
@@ -96,9 +95,9 @@ pub struct SigbotState {
     pub mongo_checker: MongoChecker,
     pub redis_cluster_checker: RedisClusterChecker,
     // The System module repositories.
-    pub user_repo: Arc<Mutex<RepositoryContainer<User>>>,
-    pub tenant_repo: Arc<Mutex<RepositoryContainer<Tenant>>>,
-    pub lock_repo: Arc<Mutex<RepositoryContainer<DLock>>>,
+    pub user_repo: Arc<Mutex<RepositoryContainer<UserInfo>>>,
+    pub tenant_repo: Arc<Mutex<RepositoryContainer<TenantInfo>>>,
+    pub lock_repo: Arc<Mutex<RepositoryContainer<DLockInfo>>>,
     // The Service module repositories.
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,

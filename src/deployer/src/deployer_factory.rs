@@ -29,7 +29,7 @@ use lazy_static::lazy_static;
 use sigbot_core::context::state::SigbotState;
 use sigbot_core::sys::handler::tenant_handler::ITenantHandler;
 use sigbot_types::{
-    sys::tenant::{QueryTenantRequest, Tenant},
+    sys::tenant::{QueryTenantRequest, TenantInfo},
     PageRequest, PageResponse,
 };
 use std::{
@@ -128,9 +128,9 @@ impl SigbotDeployerFactory {
         startup_handler: F,
         shutdown_handler: G,
     ) where
-        F: Fn(Arc<Tenant>) -> FutF + Send,
+        F: Fn(Arc<TenantInfo>) -> FutF + Send,
         FutF: Future<Output = ()> + Send,
-        G: Fn(Arc<Tenant>) -> FutG + Send,
+        G: Fn(Arc<TenantInfo>) -> FutG + Send,
         FutG: Future<Output = ()> + Send,
     {
         info!("Scanning Tenants components lifecycle process ...");

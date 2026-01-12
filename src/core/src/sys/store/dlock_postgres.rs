@@ -24,14 +24,14 @@ use crate::store::AsyncRepository;
 use anyhow::Context;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
-use sigbot_types::sys::dlock::DLock;
+use sigbot_types::sys::dlock::DLockInfo;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
 use sigbot_utils::dash_maps::ConcurrentMap;
 use std::time::SystemTime;
 
 pub struct DLockPostgresRepository {
-    inner: PostgresRepository<DLock>,
+    inner: PostgresRepository<DLockInfo>,
     initializer: ConcurrentMap<String, u64>,
 }
 
@@ -46,7 +46,7 @@ impl DLockPostgresRepository {
     // TODO: We can further enhance the implementation as follows:
     // 1. Add a `version` field to enable repeated lock acquisition;
     // 2. Add a `renew` function to allow the lock holder to renew the lock before its expiration, based on business needs.
-    pub async fn acquire(&self, dlock: DLock) -> Result<i64, Error> {
+    pub async fn acquire(&self, dlock: DLockInfo) -> Result<i64, Error> {
         let name = dlock.name.context("name is required")?;
         let holder = dlock.holder.context("holder is required")?;
         let timeout_ms = dlock.timeout.context("timeout is required")?.as_millis() as i64;
@@ -111,7 +111,7 @@ impl DLockPostgresRepository {
         }
     }
 
-    pub async fn release(&self, dlock: DLock) -> Result<i64, Error> {
+    pub async fn release(&self, dlock: DLockInfo) -> Result<i64, Error> {
         let name = dlock.name.context("name is required")?;
         let holder = dlock.holder.context("holder is required")?;
 
@@ -140,28 +140,28 @@ impl DLockPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<DLock> for DLockPostgresRepository {
+impl AsyncRepository<DLockInfo> for DLockPostgresRepository {
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
-    async fn select(&self, dlock: DLock, page: PageRequest) -> Result<(PageResponse, Vec<DLock>), Error> {
+    async fn select(&self, dlock: DLockInfo, page: PageRequest) -> Result<(PageResponse, Vec<DLockInfo>), Error> {
         unimplemented!("Unsupported operation: select for DLock");
     }
 
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
-    async fn select_by_id(&self, id: i64) -> Result<DLock, Error> {
+    async fn select_by_id(&self, id: i64) -> Result<DLockInfo, Error> {
         unimplemented!("Unsupported operation: select_by_id for DLock");
     }
 
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
-    async fn insert(&self, dlock: DLock) -> Result<i64, Error> {
+    async fn insert(&self, dlock: DLockInfo) -> Result<i64, Error> {
         Ok(self.acquire(dlock).await?) // Specifically logically, insert is equivalent to acquire.
     }
 
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
-    async fn update(&self, dlock: DLock) -> Result<i64, Error> {
+    async fn update(&self, dlock: DLockInfo) -> Result<i64, Error> {
         Ok(self.release(dlock).await?) // Specifically logically, update is equivalent to release.
     }
 

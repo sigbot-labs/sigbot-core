@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::{sys::user::User, EntityBase, PageResponse};
+use crate::{sys::user::UserInfo, EntityBase, PageResponse};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -55,8 +55,8 @@ pub struct QueryUserApiV1Request {
 }
 
 impl QueryUserApiV1Request {
-    pub fn to_user(&self) -> User {
-        User {
+    pub fn to_user(&self) -> UserInfo {
+        UserInfo {
             base: EntityBase::new_with_by(None, None, None),
             name: Some(self.name.clone().unwrap_or_default()),
             email: Some(self.email.clone().unwrap_or_default()),
@@ -80,11 +80,11 @@ impl QueryUserApiV1Request {
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct QueryUserApiV1Response {
     pub page: Option<PageResponse>,
-    pub data: Option<Vec<User>>,
+    pub data: Option<Vec<UserInfo>>,
 }
 
 impl QueryUserApiV1Response {
-    pub fn new(page: PageResponse, data: Vec<User>) -> Self {
+    pub fn new(page: PageResponse, data: Vec<UserInfo>) -> Self {
         QueryUserApiV1Response {
             page: Some(page),
             data: Some(data),
@@ -129,8 +129,8 @@ pub struct SaveUserApiV1Request {
 }
 
 impl SaveUserApiV1Request {
-    pub fn to_user(&self) -> User {
-        User {
+    pub fn to_user(&self) -> UserInfo {
+        UserInfo {
             base: EntityBase::new_with_id(self.id),
             name: self.name.clone(),
             email: self.email.clone(),

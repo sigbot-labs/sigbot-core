@@ -22,7 +22,7 @@ use crate::context::state::SigbotState;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_audit_log::audit_log;
-use sigbot_types::sys::user::{DeleteUserRequest, QueryUserRequest, SaveUserRequest, SaveUserRequestWith, User};
+use sigbot_types::sys::user::{DeleteUserRequest, QueryUserRequest, SaveUserRequest, SaveUserRequestWith, UserInfo};
 use sigbot_types::{EntityBase, PageRequest, PageResponse};
 use std::sync::Arc;
 
@@ -38,7 +38,7 @@ pub trait IUserHandler: Send {
         github_claims_sub: Option<String>,
         google_claims_sub: Option<String>,
         ethers_address: Option<String>,
-    ) -> Result<Option<Arc<User>>, Error>;
+    ) -> Result<Option<Arc<UserInfo>>, Error>;
 
     async fn set(
         &self,
@@ -53,7 +53,7 @@ pub trait IUserHandler: Send {
         param: SaveUserRequestWith,
     ) -> Result<(), Error>;
 
-    async fn find(&self, param: QueryUserRequest, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error>;
+    async fn find(&self, param: QueryUserRequest, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error>;
 
     async fn save(&self, param: SaveUserRequest) -> Result<i64, Error>;
 
@@ -82,8 +82,8 @@ impl<'a> IUserHandler for UserHandler<'a> {
         github_claims_sub: Option<String>,
         google_claims_sub: Option<String>,
         ethers_address: Option<String>,
-    ) -> Result<Option<Arc<User>>, Error> {
-        let param = User {
+    ) -> Result<Option<Arc<UserInfo>>, Error> {
+        let param = UserInfo {
             base: EntityBase::new_with_id(id),
             name,
             email,
@@ -213,7 +213,7 @@ impl<'a> IUserHandler for UserHandler<'a> {
     }
 
     #[audit_log("[USER][FIND] name: {param.name.clone().unwrap_or_default()}")]
-    async fn find(&self, param: QueryUserRequest, page: PageRequest) -> Result<(PageResponse, Vec<User>), Error> {
+    async fn find(&self, param: QueryUserRequest, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         let repo = self.state.user_repo.lock().await;
         repo.get(&self.state.config).select(param.to_user(), page).await
     }

@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use axum::{extract::State, response::IntoResponse, routing::get, Router};
 use hyper::StatusCode;
 use serde::Serialize;
-use sigbot_types::{sys::user::User, PageRequest};
+use sigbot_types::{sys::user::UserInfo, PageRequest};
 use std::collections::HashMap;
 
 pub(crate) const HEALTHZ_URI: &str = "/_/healthz";
@@ -58,7 +58,7 @@ impl SQLiteChecker {
                 let repo = state.user_repo.lock().await;
                 match repo
                     .get(&state.config)
-                    .select(User::default(), PageRequest::default())
+                    .select(UserInfo::default(), PageRequest::default())
                     .await
                 {
                     Ok(_) => true,
@@ -102,7 +102,7 @@ impl MongoChecker {
                 let repo = state.user_repo.lock().await;
                 match repo
                     .get(&state.config)
-                    .select(User::default(), PageRequest::default())
+                    .select(UserInfo::default(), PageRequest::default())
                     .await
                 {
                     Ok(_) => true,

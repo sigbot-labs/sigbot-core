@@ -28,7 +28,7 @@ use validator::Validate;
 // Manual impl for decode.
 // #[derive(Serialize, Deserialize, Clone, Debug, sqlx::sqlite::FromRow, sqlx::sqlite::Decode)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub struct User {
+pub struct UserInfo {
     #[serde(flatten)]
     pub base: EntityBase,
     pub name: Option<String>,
@@ -48,9 +48,9 @@ pub struct User {
     pub lang: Option<String>,
 }
 
-impl Default for User {
+impl Default for UserInfo {
     fn default() -> Self {
-        User {
+        UserInfo {
             base: EntityBase::new_empty(),
             name: None,
             email: None,
@@ -73,9 +73,9 @@ impl Default for User {
 
 /// SqliteRow impl for User.
 
-impl<'r> FromRow<'r, SqliteRow> for User {
+impl<'r> FromRow<'r, SqliteRow> for UserInfo {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(User {
+        Ok(UserInfo {
             base: EntityBase::from_row(row).unwrap(),
             name: row.try_get("name")?,
             email: row.try_get("email")?,
@@ -98,9 +98,9 @@ impl<'r> FromRow<'r, SqliteRow> for User {
 
 /// Postgres Row impl for User.
 
-impl<'r> FromRow<'r, PgRow> for User {
+impl<'r> FromRow<'r, PgRow> for UserInfo {
     fn from_row(row: &'r PgRow) -> Result<Self, sqlx::Error> {
-        Ok(User {
+        Ok(UserInfo {
             base: EntityBase::from_row(row)?,
             name: row.try_get("name")?,
             email: row.try_get("email")?,
@@ -168,8 +168,8 @@ pub struct QueryUserRequest {
 }
 
 impl QueryUserRequest {
-    pub fn to_user(&self) -> User {
-        User {
+    pub fn to_user(&self) -> UserInfo {
+        UserInfo {
             base: EntityBase::new_empty(),
             name: Some(self.name.clone().unwrap_or_default()),
             email: Some(self.email.clone().unwrap_or_default()),
@@ -193,11 +193,11 @@ impl QueryUserRequest {
 #[derive(Serialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct QueryUserResponse {
     pub page: Option<PageResponse>,
-    pub data: Option<Vec<User>>,
+    pub data: Option<Vec<UserInfo>>,
 }
 
 impl QueryUserResponse {
-    pub fn new(page: PageResponse, data: Vec<User>) -> Self {
+    pub fn new(page: PageResponse, data: Vec<UserInfo>) -> Self {
         QueryUserResponse {
             page: Some(page),
             data: Some(data),
@@ -244,8 +244,8 @@ pub struct SaveUserRequest {
 }
 
 impl SaveUserRequest {
-    pub fn to_user(&self) -> User {
-        User {
+    pub fn to_user(&self) -> UserInfo {
+        UserInfo {
             base: EntityBase::new_with_id(self.id),
             name: self.name.clone(), // self.name.as_ref().map(|n| n.to_string())
             email: self.email.clone(),
