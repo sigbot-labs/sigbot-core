@@ -21,14 +21,18 @@
 use crate::executor::strategy_factory::SigbotStrategyExecutorFactory;
 use common_telemetry::{debug, info, warn};
 use sigbot_core::{
-    config::config,
+    config::config_tenant::{get_tenant_config, init_tenant_config},
     context::state::SigbotState,
     modules::workflow::{
         SigbotWorkflowHandlerWrapper, SigbotWorkflowManager, SigbotWorkflowStartHandler, SigbotWorkflowStopHandler,
     },
 };
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::workflow::workflow::{WorkflowStageType, WorkflowStageWrapper};
+use sigbot_types::modules::{
+    decode_arg_config,
+    strategy::SigbotStrategyArgument,
+    workflow::workflow::{WorkflowStageType, WorkflowStageWrapper},
+};
 use std::sync::Arc;
 
 pub struct SigbotStrategyRunner {}
@@ -39,20 +43,20 @@ impl SigbotStrategyRunner {
     }
 
     pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        // Parse SigbotStrategyArgument from command line arguments first
         debug!("Parsing Strategy Executor configuration.");
+
         let configuration = matches
             .try_get_one::<String>("STRATEGY_RUNNER_CONFIGURATION")
             .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
+        init_tenant_config(&configuration);
 
         let argument = Arc::new(
-            sigbot_types::modules::decode_arg_configuration(&configuration)
-                .and_then(|json| {
-                    sigbot_types::modules::strategy::SigbotStrategyArgument::from_json(&json)
-                        .map_err(|e| anyhow::Error::msg(format!("Failed to parse the configuration: {}", e)))
-                })
-                .expect("Failed to decode and parse the configuration."),
+            SigbotStrategyArgument::from_json(
+                &decode_arg_config(&configuration).expect("Failed to decode tenant configuration."),
+            )
+            .map_err(|e| anyhow::Error::msg(format!("Failed to parse the configuration: {}", e)))
+            .expect("Failed to parse the configuration."),
         );
 
         debug!("Initializing Messager Client.");
@@ -61,9 +65,9 @@ impl SigbotStrategyRunner {
             .expect("Failed to initialize Messager Client.");
         info!("Initialized Messager Client. {}", messager.provider().as_str());
 
-        // Initialize Workflow Manager
+        // Initialize Workflow Manager with tenant-specific configuration
         debug!("Initializing Workflow Manager.");
-        let state = Arc::new(SigbotState::new(&config::get_config()).await);
+        let state = Arc::new(SigbotState::new(&get_tenant_config()).await);
 
         // Create start handler callback
         // This handler receives NodeJob, and should start the strategy executor asynchronously

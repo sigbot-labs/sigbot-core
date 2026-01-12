@@ -28,7 +28,7 @@ use sigbot_core::{
     modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater},
 };
 use sigbot_types::modules::{
-    decode_arg_configuration,
+    decode_arg_config,
     wallet::{SigbotWalletManagerArgument, WalletMgrProvider},
 };
 use std::{
@@ -104,7 +104,7 @@ impl SigbotWalletManagerFactory {
 
         let argument = Arc::new(
             SigbotWalletManagerArgument::from_json(
-                &decode_arg_configuration(&configuration)
+                &decode_arg_config(&configuration)
                     .context(format!("Failed to decode the configuration: {}", configuration))?,
             )
             .context(format!("Failed to parse the configuration: {}", configuration))?,

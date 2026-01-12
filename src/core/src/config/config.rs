@@ -20,6 +20,7 @@
 
 use crate::mgmt::apm::logging::LogMode;
 use crate::mgmt::health::HEALTHZ_URI;
+use anyhow::Result;
 use arc_swap::ArcSwap;
 use config::Config;
 use dotenv::dotenv;
@@ -1217,7 +1218,7 @@ impl Default for GenerateLLMProperties {
     }
 }
 
-// App Configuration.
+// ---- App Configuration. ----
 
 #[derive(Debug)]
 pub struct AppConfig {
@@ -1312,12 +1313,16 @@ impl AppConfig {
     }
 
     pub fn validate(self) -> Result<AppConfig, anyhow::Error> {
-        // self.validate();
+        self.inner.validate()?;
         Ok(self)
     }
 }
 
-fn init() -> Arc<AppConfig> {
+// Global the single refreshable configuration instance.
+// see: https://github.com/wl4g-collect/openobserve/blob/v0.10.9/src/config/src/config.rs#L186
+static CONFIG: Lazy<ArcSwap<AppConfig>> = Lazy::new(|| ArcSwap::from(init()));
+
+pub(crate) fn init() -> Arc<AppConfig> {
     dotenv().ok(); // Notice: Must be called before parse from environment file (.env).
 
     // Priority order (HIGHEST to LOWEST): environment -> file config -> defaults
@@ -1381,6 +1386,80 @@ pub fn refresh_config() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// Global the single refreshable configuration instance.
-// see: https://github.com/wl4g-collect/openobserve/blob/v0.10.9/src/config/src/config.rs#L186
-static CONFIG: Lazy<ArcSwap<AppConfig>> = Lazy::new(|| ArcSwap::from(init()));
+// ---- Custom Configuration Configurer. ----
+
+pub trait CustomConfigConfigurer: Send + Sync {
+    fn configure(&self, base_config: &AppConfigProperties, custom_config_json: &str) -> Result<AppConfigProperties>;
+}
+
+pub(crate) static CUSTOM_CONFIGURER: Lazy<ArcSwap<Option<Arc<dyn CustomConfigConfigurer>>>> =
+    Lazy::new(|| ArcSwap::from(Arc::new(None)));
+
+pub fn register_custom_configurer(configurer: Arc<dyn CustomConfigConfigurer>) {
+    CUSTOM_CONFIGURER.store(Arc::new(Some(configurer)));
+}
+
+pub(crate) fn init_with_custom(custom_config_json: &str) -> Arc<AppConfig> {
+    dotenv().ok(); // Notice: Must be called before parse from environment file (.env).
+
+    // Priority order (HIGHEST to LOWEST): environment -> file config -> defaults
+    let mut builder = Config::builder();
+
+    // Step 1: Set defaults as base (LOWEST priority)
+    // Serialize default config to JSON string and use it as a source
+    let default_config = AppConfigProperties::default();
+    let default_json_str = serde_json::to_string(&default_config).expect("Failed to serialize default config");
+    builder = builder.add_source(config::File::from_str(&default_json_str, config::FileFormat::Json));
+
+    // Step 2: Add file config source if SIGBOT_CFG_PATH is set (MEDIUM priority)
+    if let Ok(path) = env::var("SIGBOT_CFG_PATH") {
+        let path = path.trim();
+        if !path.is_empty() {
+            builder = builder.add_source(config::File::with_name(path));
+        }
+    }
+
+    // Step 3: Always add environment variables source (HIGHEST priority, like Spring Boot env override)
+    // Use double underscore for hierarchy separation to distinguish nested structs
+    builder = builder.add_source(
+        config::Environment::with_prefix("SIGBOT")
+            // Use double "__" as separator to distinguish between different hierarchy levels
+            // SIGBOT__APPDB__TYPE -> appdb.type (after kebab-case conversion)
+            .separator("__")
+            .convert_case(config::Case::Kebab)
+            .keep_prefix(false), // Remove the prefix when matching.
+    );
+
+    // Build and deserialize. config-rs will merge sources by priority: later sources override earlier ones
+    let mut yaml_config = builder
+        .build()
+        .unwrap_or_else(|err| panic!("Error parsing config: {}", err))
+        .try_deserialize::<AppConfigProperties>()
+        .unwrap_or_else(|err| panic!("Error deserialize config: {}", err));
+
+    // Step 4: Apply tenant-specific configuration configurer if configured
+    if let Some(ref configurer) = **CUSTOM_CONFIGURER.load() {
+        match configurer.configure(&yaml_config, custom_config_json) {
+            Ok(configured_config) => {
+                yaml_config = configured_config;
+            }
+            Err(e) => {
+                panic!("Failed to customize configure tenant configuration: {}", e);
+            }
+        }
+    }
+    let config = AppConfig::new(&yaml_config);
+
+    if env::var("SIGBOT_CFG_VERBOSE")
+        .unwrap_or_else(|_| env::var("VERBOSE").unwrap_or_else(|_| "false".to_owned()))
+        .eq_ignore_ascii_case("true")
+    {
+        println!("If you don't want to print the loaded configuration details, you can disable it by set up SIGBOT_CFG_VERBOSE=false.");
+        println!(
+            "Loaded configuration: {}",
+            serde_json::to_string(&config.to_owned().inner).unwrap()
+        );
+    }
+
+    return config;
+}

@@ -25,7 +25,7 @@ use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::{
-    decode_arg_configuration,
+    decode_arg_config,
     strategy::{strategy::StrategyProvider, SigbotStrategyArgument},
 };
 use std::{

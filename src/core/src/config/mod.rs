@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 pub mod config;
+pub mod config_tenant;
 pub mod constant;
 pub mod resources;
 pub mod swagger;

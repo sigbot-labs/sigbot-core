@@ -27,7 +27,7 @@ use lazy_static::lazy_static;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::{
     backtest::{BacktestMgrProvider, SigbotBacktestManagerArgument},
-    decode_arg_configuration,
+    decode_arg_config,
 };
 use std::{
     collections::HashMap,
@@ -95,7 +95,7 @@ impl SigbotBacktestManagerFactory {
 
         let argument = Arc::new(
             SigbotBacktestManagerArgument::from_json(
-                &decode_arg_configuration(&configuration)
+                &decode_arg_config(&configuration)
                     .context(format!("Failed to decode the configuration: {}", configuration))?,
             )
             .context(format!("Failed to parse the configuration: {}", configuration))?,

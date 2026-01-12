@@ -261,7 +261,6 @@ pub enum WorkflowStageWrapper {
 }
 
 impl WorkflowStageWrapper {
-    /// Get provider string representation
     pub fn as_str(&self) -> String {
         match self {
             WorkflowStageWrapper::Datafeed(p) => p.as_str().to_string(),
@@ -272,7 +271,6 @@ impl WorkflowStageWrapper {
         }
     }
 
-    /// Parse provider from string
     pub fn from_str(provider_str: &str, stage_type: &str) -> Option<Self> {
         match stage_type.to_uppercase().as_str() {
             "INPUT" => {
@@ -297,6 +295,7 @@ impl WorkflowStageWrapper {
                 }
             }
             "OUTPUT" => {
+                // TODO: support external writer provider
                 if let Ok(provider) = OrderMgrProvider::of(provider_str) {
                     Some(WorkflowStageWrapper::ExternalWriter(provider_str.to_string()))
                 } else {

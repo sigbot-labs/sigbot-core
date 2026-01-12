@@ -27,7 +27,7 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::{
-    decode_arg_configuration,
+    decode_arg_config,
     notification::{notification::NotificationProvider, SigbotNotificationArgument},
 };
 use std::{
@@ -97,7 +97,7 @@ impl SigbotNotificationClientFactory {
 
         let argument = Arc::new(
             SigbotNotificationArgument::from_json(
-                &decode_arg_configuration(&configuration)
+                &decode_arg_config(&configuration)
                     .context(format!("Failed to decode the configuration: {}", configuration))?,
             )
             .context(format!("Failed to parse the configuration: {}", configuration))?,

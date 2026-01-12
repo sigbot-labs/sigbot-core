@@ -31,7 +31,7 @@ pub mod strategy;
 pub mod wallet;
 pub mod workflow;
 
-pub fn decode_arg_configuration(configuration: &str) -> Result<String, Error> {
+pub fn decode_arg_config(configuration: &str) -> Result<String, Error> {
     // if there are base64 encoded, decode it first, otherwise return the original string.
     match base64s::Base64Helper::decode(configuration) {
         Ok(decoded_bytes) => {

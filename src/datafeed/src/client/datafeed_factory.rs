@@ -28,7 +28,7 @@ use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::{
     datafeed::{datafeed::DatafeedProvider, SigbotDatefeedArgument},
-    decode_arg_configuration,
+    decode_arg_config,
 };
 use std::{
     collections::HashMap,
@@ -98,7 +98,7 @@ impl SigbotDatafeedClientFactory {
 
         let argument = Arc::new(
             SigbotDatefeedArgument::from_json(
-                &decode_arg_configuration(&configuration)
+                &decode_arg_config(&configuration)
                     .context(format!("Failed to decode the configuration: {}", configuration))?,
             )
             .context(format!("Failed to parse the configuration: {}", configuration))?,
