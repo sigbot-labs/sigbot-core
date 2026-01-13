@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::AsyncRepository;
+use super::IAsyncRepository;
 use crate::config::config::SqliteAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
@@ -38,10 +38,6 @@ struct SQLitePoolManager {
 }
 
 static POOL_MANAGER: OnceCell<Arc<SQLitePoolManager>> = OnceCell::const_new();
-
-async fn init_pool_manager(config: SqliteAppDBProperties) -> Result<Arc<SQLitePoolManager>, Error> {
-    SQLitePoolManager::init(&config).await
-}
 
 impl SQLitePoolManager {
     async fn init(config: &SqliteAppDBProperties) -> Result<Arc<Self>, Error> {
@@ -102,7 +98,7 @@ impl<T: Any + Send + Sync> SQLiteRepository<T> {
     pub async fn get_or_init(config: &SqliteAppDBProperties) -> Result<Self, Error> {
         let config = config.clone();
         let manager = POOL_MANAGER
-            .get_or_try_init(|| async move { init_pool_manager(config).await })
+            .get_or_try_init(|| async move { SQLitePoolManager::init(&config).await })
             .await?;
         Ok(SQLiteRepository {
             phantom: PhantomData,
@@ -117,7 +113,7 @@ impl<T: Any + Send + Sync> SQLiteRepository<T> {
 
 #[allow(unused)]
 #[async_trait]
-impl<T: Any + Send + Sync> AsyncRepository<T> for SQLiteRepository<T> {
+impl<T: Any + Send + Sync> IAsyncRepository<T> for SQLiteRepository<T> {
     async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error> {
         unimplemented!("select not implemented for SQLiteRepository")
     }
@@ -126,7 +122,7 @@ impl<T: Any + Send + Sync> AsyncRepository<T> for SQLiteRepository<T> {
         unimplemented!("select_by_id not implemented for SQLiteRepository")
     }
 
-    async fn insert(&self, param: T) -> Result<i64, Error> {
+    async fn upsert(&self, param: T) -> Result<i64, Error> {
         unimplemented!("insert not implemented for SQLiteRepository");
         let pool = self.get_pool();
     }
@@ -212,7 +208,7 @@ macro_rules! dynamic_sqlite_query {
 }
 
 #[macro_export]
-macro_rules! dynamic_sqlite_insert {
+macro_rules! dynamic_sqlite_upsert {
     ($bean:expr, $table:expr, $pool:expr) => {
         {
             use sigbot_utils::types::GenericValue;

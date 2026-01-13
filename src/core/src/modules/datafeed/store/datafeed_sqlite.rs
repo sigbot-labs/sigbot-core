@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
+use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl DatafeedInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<DatafeedInfo> for DatafeedInfoSQLiteRepository {
+impl IAsyncRepository<DatafeedInfo> for DatafeedInfoSQLiteRepository {
     async fn select(
         &self,
         datafeed: DatafeedInfo,
@@ -73,10 +73,10 @@ impl AsyncRepository<DatafeedInfo> for DatafeedInfoSQLiteRepository {
         Ok(datafeed)
     }
 
-    async fn insert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(datafeed, "t_datafeed", self.inner.get_pool())?;
-        info!("Inserted datafeed.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(datafeed, "t_datafeed", self.inner.get_pool())?;
+        info!("Inserted datafeed.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {

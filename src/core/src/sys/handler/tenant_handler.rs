@@ -230,7 +230,7 @@ impl<'a> ITenantHandler for TenantHandler<'a> {
         let tenant_id = if param.id.is_some() {
             repo.get(&self.state.config).update(tenant).await?
         } else {
-            repo.get(&self.state.config).insert(tenant).await?
+            repo.get(&self.state.config).upsert(tenant).await?
         };
 
         // Get public key for response

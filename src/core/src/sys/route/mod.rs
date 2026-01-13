@@ -19,5 +19,6 @@
 // This includes modifications and derived works.
 
 pub mod auth_router;
+pub mod log_router;
 pub mod tenant_router;
 pub mod user_router;

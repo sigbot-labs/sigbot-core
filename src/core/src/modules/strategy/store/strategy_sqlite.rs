@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
+use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl StrategyInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<StrategyInfo> for StrategyInfoSQLiteRepository {
+impl IAsyncRepository<StrategyInfo> for StrategyInfoSQLiteRepository {
     async fn select(
         &self,
         strategy: StrategyInfo,
@@ -73,10 +73,10 @@ impl AsyncRepository<StrategyInfo> for StrategyInfoSQLiteRepository {
         Ok(strategy)
     }
 
-    async fn insert(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(strategy, "t_strategy", self.inner.get_pool())?;
-        info!("Inserted strategy.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(strategy, "t_strategy", self.inner.get_pool())?;
+        info!("Inserted strategy.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {

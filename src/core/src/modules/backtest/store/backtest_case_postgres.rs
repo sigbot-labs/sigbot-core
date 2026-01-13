@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
+use crate::dynamic_postgres_upsert;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl BacktestCaseInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoPostgresRepository {
+impl IAsyncRepository<BacktestCaseInfo> for BacktestCaseInfoPostgresRepository {
     async fn select(
         &self,
         backtest_case: BacktestCaseInfo,
@@ -73,10 +73,10 @@ impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoPostgresRepository {
         Ok(backtest_case)
     }
 
-    async fn insert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_postgres_insert!(backtest_case, "t_backtest_case", self.inner.get_pool())?;
-        info!("Inserted backtest_case.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_postgres_upsert!(backtest_case, "t_backtest_case", self.inner.get_pool())?;
+        info!("Inserted backtest_case.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {

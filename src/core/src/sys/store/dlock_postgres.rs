@@ -20,7 +20,7 @@
 
 use crate::config::config::PostgresAppDBProperties;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::Context;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
@@ -140,7 +140,7 @@ impl DLockPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<DLockInfo> for DLockPostgresRepository {
+impl IAsyncRepository<DLockInfo> for DLockPostgresRepository {
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
     async fn select(&self, dlock: DLockInfo, page: PageRequest) -> Result<(PageResponse, Vec<DLockInfo>), Error> {
@@ -155,7 +155,7 @@ impl AsyncRepository<DLockInfo> for DLockPostgresRepository {
 
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
-    async fn insert(&self, dlock: DLockInfo) -> Result<i64, Error> {
+    async fn upsert(&self, dlock: DLockInfo) -> Result<i64, Error> {
         Ok(self.acquire(dlock).await?) // Specifically logically, insert is equivalent to acquire.
     }
 

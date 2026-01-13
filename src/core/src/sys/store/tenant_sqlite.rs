@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
+use crate::dynamic_sqlite_upsert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl TenantSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<TenantInfo> for TenantSQLiteRepository {
+impl IAsyncRepository<TenantInfo> for TenantSQLiteRepository {
     async fn select(&self, tenant: TenantInfo, page: PageRequest) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
         let result = dynamic_sqlite_query!(
             tenant,
@@ -69,10 +69,10 @@ impl AsyncRepository<TenantInfo> for TenantSQLiteRepository {
         Ok(tenant)
     }
 
-    async fn insert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(tenant, "sys_tenant", self.inner.get_pool())?;
-        info!("Inserted tenant.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(tenant, "sys_tenant", self.inner.get_pool())?;
+        info!("Inserted tenant.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut tenant: TenantInfo) -> Result<i64, Error> {

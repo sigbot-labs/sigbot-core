@@ -21,7 +21,7 @@
 use crate::config::config::PostgresAppDBProperties;
 use crate::dynamic_postgres_query;
 use crate::store::postgres::PostgresRepository;
-use crate::store::{select_by_sql_postgres, AsyncRepository};
+use crate::store::{select_by_sql_postgres, IAsyncRepository};
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::debug;
@@ -44,7 +44,7 @@ impl WorkflowInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
+impl IAsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
     async fn select(
         &self,
         workflow: WorkflowInfo,
@@ -72,7 +72,7 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
         Ok(workflow)
     }
 
-    async fn insert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
         // Serialize flow_info to JSON string for database storage
         let flow_json_str = workflow
             .flow_info
@@ -85,7 +85,7 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
             .await;
         workflow.base.pre_insert(insert_by).await;
 
-        let inserted_id = sqlx::query_scalar::<_, i64>(
+        let upserted_id = sqlx::query_scalar::<_, i64>(
             "INSERT INTO s_workflow (name, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
              ON CONFLICT (id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP 
@@ -103,8 +103,8 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoPostgresRepository {
         .fetch_one(self.inner.get_pool())
         .await?;
 
-        debug!("Inserted workflow.id: {:?}", inserted_id);
-        Ok(inserted_id)
+        debug!("Inserted workflow.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {

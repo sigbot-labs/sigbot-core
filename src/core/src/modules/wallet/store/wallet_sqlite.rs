@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
+use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -43,7 +43,7 @@ impl WalletInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<WalletInfo> for WalletInfoSQLiteRepository {
+impl IAsyncRepository<WalletInfo> for WalletInfoSQLiteRepository {
     async fn select(&self, wallet: WalletInfo, page: PageRequest) -> Result<(PageResponse, Vec<WalletInfo>), Error> {
         let result = dynamic_sqlite_query!(
             wallet,
@@ -68,10 +68,10 @@ impl AsyncRepository<WalletInfo> for WalletInfoSQLiteRepository {
         Ok(wallet)
     }
 
-    async fn insert(&self, mut wallet: WalletInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(wallet, "s_wallets", self.inner.get_pool())?;
-        info!("Inserted wallet.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut wallet: WalletInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(wallet, "s_wallets", self.inner.get_pool())?;
+        info!("Inserted wallet.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut wallet: WalletInfo) -> Result<i64, Error> {

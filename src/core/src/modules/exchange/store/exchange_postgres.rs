@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
+use crate::dynamic_postgres_upsert;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl ExchangeInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
+impl IAsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
     async fn select(
         &self,
         exchange: ExchangeInfo,
@@ -163,7 +163,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         Ok(exchange)
     }
 
-    async fn insert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
         // let serialized = serde_json::to_value(exchange).unwrap();
@@ -222,9 +222,9 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoPostgresRepository {
         //     }
         // }
 
-        let inserted_id = dynamic_postgres_insert!(exchange, "exchanges", self.inner.get_pool())?;
-        info!("Inserted exchange.id: {:?}", inserted_id);
-        Ok(inserted_id)
+        let upserted_id = dynamic_postgres_upsert!(exchange, "exchanges", self.inner.get_pool())?;
+        info!("Inserted exchange.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {

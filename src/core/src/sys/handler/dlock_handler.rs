@@ -59,7 +59,7 @@ impl IDLockHandler for DLockHandler {
         let result = repo
             .get(&self.state.config)
             // Actually it call to acquire func.
-            .insert(DLockInfo {
+            .upsert(DLockInfo {
                 base: EntityBase::new_empty(),
                 name: Some(name),
                 holder: Some(holder.to_string()),

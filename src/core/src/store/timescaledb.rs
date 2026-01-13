@@ -19,7 +19,7 @@
 // This includes modifications and derived works.
 
 use super::IAsyncRepository;
-use crate::config::config::PostgresAppDBProperties;
+use crate::config::config::TimescaleDBAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, error, info};
@@ -31,41 +31,46 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
-struct PostgresPoolManager {
+struct TimescaleDBPoolManager {
     pool: Arc<PgPool>,
 }
 
-static POOL_MANAGER: OnceCell<Arc<PostgresPoolManager>> = OnceCell::const_new();
+static POOL_MANAGER: OnceCell<Arc<TimescaleDBPoolManager>> = OnceCell::const_new();
 
-impl PostgresPoolManager {
-    async fn init(config: &PostgresAppDBProperties) -> Result<Arc<Self>, Error> {
+impl TimescaleDBPoolManager {
+    async fn init(config: &TimescaleDBAppDBProperties) -> Result<Arc<Self>, Error> {
+        use crate::config::config::PostgresAppDBProperties;
+        let postgres_config = PostgresAppDBProperties {
+            inner: config.inner.clone(),
+        };
+
         let db_url = format!(
             "postgres://{}:{}@{}:{}/{}",
-            config.username,
-            config.password.as_deref().unwrap_or(""),
-            config.host,
-            config.port,
-            config.database
+            postgres_config.username,
+            postgres_config.password.as_deref().unwrap_or(""),
+            postgres_config.host,
+            postgres_config.port,
+            postgres_config.database
         );
 
         if !Postgres::database_exists(&db_url).await.unwrap_or(false) {
-            info!("Creating database {}", db_url);
+            info!("Creating TimescaleDB database {}", db_url);
             match Postgres::create_database(&db_url).await {
-                Ok(_) => info!("Create db success"),
-                Err(error) => panic!("Error to create db: {}", error),
+                Ok(_) => info!("Create TimescaleDB database success"),
+                Err(error) => panic!("Error to create TimescaleDB database: {}", error),
             }
         } else {
-            debug!("The postgres database already exists, skip migration.");
+            debug!("The TimescaleDB database already exists, skip migration.");
         }
 
         match PgPool::connect(&db_url).await {
             Ok(pool) => {
-                info!("Connected to the postgres database to migration ...");
+                info!("Connected to the TimescaleDB database to migration ...");
                 let pool = Self::run_migration(pool).await;
-                Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
+                Ok(Arc::new(TimescaleDBPoolManager { pool: Arc::new(pool) }))
             }
             Err(e) => {
-                error!("Failed to connect to the postgres database to migration: {}", e);
+                error!("Failed to connect to the TimescaleDB database to migration: {}", e);
                 Err(e.into())
             }
         }
@@ -73,78 +78,28 @@ impl PostgresPoolManager {
 
     async fn run_migration(pool: PgPool) -> PgPool {
         let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        info!("The postgres database migration result: {:?}", results);
+        info!("The TimescaleDB database migration result: {:?}", results);
         match results {
-            Ok(_) => info!("The postgres database migration successfully."),
+            Ok(_) => info!("The TimescaleDB database migration successfully."),
             Err(error) => {
-                panic!("Error to migrate the postgres database: {}", error);
+                panic!("Error to migrate the TimescaleDB database: {}", error);
             }
         }
         pool
     }
 }
 
-pub struct PostgresRepository<T: Any + Send + Sync> {
-    phantom: PhantomData<T>,
-    pool: Arc<PgPool>,
-}
-
-impl<T: Any + Send + Sync> PostgresRepository<T> {
-    pub async fn get_or_init(config: &PostgresAppDBProperties) -> Result<Self, Error> {
-        let config = config.clone();
-        let manager = POOL_MANAGER
-            .get_or_try_init(|| async move { PostgresPoolManager::init(&config).await })
-            .await?;
-        Ok(PostgresRepository {
-            phantom: PhantomData,
-            pool: manager.pool.clone(),
-        })
-    }
-
-    pub fn get_pool(&self) -> &PgPool {
-        &*self.pool
-    }
-}
-
-#[allow(unused)]
-#[async_trait]
-impl<T: Any + Send + Sync> IAsyncRepository<T> for PostgresRepository<T> {
-    async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error> {
-        unimplemented!("select not implemented for PostgresRepository")
-    }
-
-    async fn select_by_id(&self, id: i64) -> Result<T, Error> {
-        unimplemented!("select_by_id not implemented for PostgresRepository")
-    }
-
-    async fn upsert(&self, param: T) -> Result<i64, Error> {
-        unimplemented!("insert not implemented for PostgresRepository");
-        let pool = self.get_pool();
-    }
-
-    async fn update(&self, param: T) -> Result<i64, Error> {
-        unimplemented!("update not implemented for PostgresRepository")
-    }
-
-    async fn delete_all(&self) -> Result<u64, Error> {
-        unimplemented!("delete_all not implemented for PostgresRepository")
-    }
-
-    async fn delete_by_id(&self, id: i64) -> Result<u64, Error> {
-        unimplemented!("delete_by_id not implemented for PostgresRepository")
-    }
-}
-
+/// Executes a SELECT query with dynamic WHERE clause based on bean fields
 #[macro_export]
-macro_rules! dynamic_postgres_query {
+macro_rules! dynamic_timescaledb_query {
     ($bean:expr, $table:expr, $pool:expr, $order_by:expr, $page:expr, $($t:ty),+) => {
         {
             use chrono::{DateTime, Utc};
             use sigbot_utils::types::GenericValue;
             // Notice:
-            // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+            // 1. (TimescaleDB) Because the ORM library is not used for the time being, the fields are dynamically
             // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
-            // 2. (MongoDB) The underlying BSON serialization is also based on serde, so using #[serde(rename="xx")] is also valid
+            // 2. TimescaleDB uses PostgreSQL protocol, so the implementation is similar to PostgreSQL
             // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
             let serialized = serde_json::to_value(&$bean).unwrap();
             let obj = serialized.as_object().unwrap();
@@ -169,7 +124,8 @@ macro_rules! dynamic_postgres_query {
                 }
             }
             if let Some(id) = $bean.base.id {
-                fields.push("id = ?".to_string());
+                index += 1;
+                fields.push(format!("id = ${}", index));
                 params.push(GenericValue::Int64(id));
             }
             let where_clause = if fields.is_empty() {
@@ -229,8 +185,9 @@ macro_rules! dynamic_postgres_query {
     };
 }
 
+/// Executes an INSERT query with ON CONFLICT handling
 #[macro_export]
-macro_rules! dynamic_postgres_upsert {
+macro_rules! dynamic_timescaledb_insert {
     ($bean:expr, $table:expr, $pool:expr) => {
         {
             use chrono::{DateTime, Utc};
@@ -240,9 +197,9 @@ macro_rules! dynamic_postgres_upsert {
             let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
 
             // Notice:
-            // 1. (SQLite/Postgres) Because the ORM library is not used for the time being, the fields are dynamically
+            // 1. (TimescaleDB) Because the ORM library is not used for the time being, the fields are dynamically
             // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
-            // 2. (MongoDB) The underlying BSON serialization is also based on serde, so using #[serde(rename="xx")] is also valid
+            // 2. TimescaleDB uses PostgreSQL protocol, so the implementation is similar to PostgreSQL
             // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
             $bean.base.pre_insert(insert_by).await;
 
@@ -257,25 +214,25 @@ macro_rules! dynamic_postgres_upsert {
                     if value.is_boolean() {
                         let v = value.as_bool().unwrap();
                         fields.push(key.as_str());
-                        values.push("?");
+                        values.push(format!("${}", fields.len()));
                         params.push(GenericValue::Bool(v));
                     } else if value.is_number() {
                         if value.is_i64() {
                             let v = value.as_i64().unwrap();
                             fields.push(key.as_str());
-                            values.push("?");
+                            values.push(format!("${}", fields.len()));
                             params.push(GenericValue::Int64(v));
                         } else if value.is_f64() {
                             let v = value.as_f64().unwrap();
                             fields.push(key.as_str());
-                            values.push("?");
+                            values.push(format!("${}", fields.len()));
                             params.push(GenericValue::Float64(v));
                         }
                     } else if value.is_string() {
                         let v = value.as_str().unwrap_or("");
                         if !v.is_empty() {
                             fields.push(key.as_str());
-                            values.push("?");
+                            values.push(format!("${}", fields.len()));
                             if key == "created_at" || key == "updated_at" {
                                 let dt = DateTime::parse_from_rfc3339(v)?;
                                 params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
@@ -290,9 +247,9 @@ macro_rules! dynamic_postgres_upsert {
                 return Ok(-1);
             }
 
-            // e.g: 'INSERT INTO sys_user ( id, name ) VALUES ( 2, "John Doe" ) ON CONFLICT ( id ) DO UPDATE SET updated_at = CURRENT_TIMESTAMP(13) RETURNING id;'
+            // e.g: 'INSERT INTO sys_user ( id, name ) VALUES ( $1, $2 ) ON CONFLICT ( id ) DO UPDATE SET updated_at = CURRENT_TIMESTAMP RETURNING id;'
             let query = format!("INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {} RETURNING id",
-                $table, fields.join(","), values.join(","), "updated_at = CURRENT_TIMESTAMP(13)");
+                $table, fields.join(","), values.join(","), "updated_at = CURRENT_TIMESTAMP");
 
             let mut operator = sqlx::query(&query);
             for param in params.iter() {
@@ -321,73 +278,127 @@ macro_rules! dynamic_postgres_upsert {
     };
 }
 
+/// Executes an UPDATE query based on bean fields
 #[macro_export]
-macro_rules! dynamic_postgres_update {
-    ($bean:expr, $table:expr, $pool:expr) => {
-        {
-            use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
+macro_rules! dynamic_timescaledb_update {
+    ($bean:expr, $table:expr, $pool:expr) => {{
+        use crate::util::auths::SecurityContext;
+        use sigbot_utils::types::GenericValue;
 
-            let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
-            $bean.base.pre_update(updated_by).await;
+        let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+        $bean.base.pre_update(updated_by).await;
 
-            // Notice:
-            // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
-            // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
-            // 2. (MongoDB) The underlying BSON serialization is also based on serde, so using #[serde(rename="xx")] is also valid
-            // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
-            let id = $bean.base.id.unwrap();
-            let serialized = serde_json::to_value($bean).unwrap();
-            let obj = serialized.as_object().unwrap();
+        // Notice:
+        // 1. (TimescaleDB) Because the ORM library is not used for the time being, the fields are dynamically
+        // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+        // 2. TimescaleDB uses PostgreSQL protocol, so the implementation is similar to PostgreSQL
+        // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+        let id = $bean.base.id.unwrap();
+        let serialized = serde_json::to_value($bean).unwrap();
+        let obj = serialized.as_object().unwrap();
 
-            let mut fields = Vec::new();
-            let mut params = Vec::new();
-            for (key, value) in obj {
-                if !value.is_null() {
-                    if value.is_boolean() {
-                        let v = value.as_bool().unwrap();
-                        fields.push(format!("{} = ?", key));
-                        params.push(GenericValue::Bool(v));
-                    } else if value.is_number() {
-                        let v = value.as_i64().unwrap();
-                        fields.push(format!("{} = ?", key));
-                        params.push(GenericValue::Int64(v));
-                    } else if value.is_string() {
-                        let v = value.as_str().unwrap_or("");
-                        if !v.is_empty() {
-                            fields.push(format!("{} = ?", key));
-                            params.push(GenericValue::String(v.to_string()));
-                        }
+        let mut fields = Vec::new();
+        let mut params = Vec::new();
+        for (key, value) in obj {
+            if !value.is_null() {
+                if value.is_boolean() {
+                    let v = value.as_bool().unwrap();
+                    fields.push(format!("{} = ${}", key, fields.len() + 1));
+                    params.push(GenericValue::Bool(v));
+                } else if value.is_number() {
+                    let v = value.as_i64().unwrap();
+                    fields.push(format!("{} = ${}", key, fields.len() + 1));
+                    params.push(GenericValue::Int64(v));
+                } else if value.is_string() {
+                    let v = value.as_str().unwrap_or("");
+                    if !v.is_empty() {
+                        fields.push(format!("{} = ${}", key, fields.len() + 1));
+                        params.push(GenericValue::String(v.to_string()));
                     }
                 }
-            }
-            if fields.is_empty() {
-                return Ok(0);
-            }
-
-            let query = format!("UPDATE {} SET {} WHERE id = ?", $table, fields.join(", "));
-            let mut operator = sqlx::query(&query);
-            for param in params.iter() {
-                if let GenericValue::Bool(v) = param {
-                    operator = operator.bind(v);
-                } else if let GenericValue::Int64(v) = param {
-                    operator = operator.bind(v);
-                } else if let GenericValue::String(v) = param {
-                    operator = operator.bind(v);
-                }
-            }
-            operator = operator.bind(id);
-
-            match operator.execute($pool).await {
-                std::result::Result::Ok(result) => {
-                    if result.rows_affected() > 0 {
-                        return Ok(id);
-                    } else {
-                        return Ok(-1);
-                    }
-                },
-                Err(e) => Err(Error::from(e)),
             }
         }
-    };
+        if fields.is_empty() {
+            return Ok(0);
+        }
+
+        let query = format!(
+            "UPDATE {} SET {} WHERE id = ${}",
+            $table,
+            fields.join(", "),
+            fields.len() + 1
+        );
+        let mut operator = sqlx::query(&query);
+        for param in params.iter() {
+            if let GenericValue::Bool(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Int64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::String(v) = param {
+                operator = operator.bind(v);
+            }
+        }
+        operator = operator.bind(id);
+
+        match operator.execute($pool).await {
+            std::result::Result::Ok(result) => {
+                if result.rows_affected() > 0 {
+                    return Ok(id);
+                } else {
+                    return Ok(-1);
+                }
+            }
+            Err(e) => Err(Error::from(e)),
+        }
+    }};
+}
+
+pub struct TimescaleDBRepository<T: Any + Send + Sync> {
+    phantom: PhantomData<T>,
+    pool: Arc<PgPool>,
+}
+
+impl<T: Any + Send + Sync> TimescaleDBRepository<T> {
+    pub async fn get_or_init(config: &TimescaleDBAppDBProperties) -> Result<Self, Error> {
+        let config = config.clone();
+        let manager = POOL_MANAGER
+            .get_or_try_init(|| async move { TimescaleDBPoolManager::init(&config).await })
+            .await?;
+        Ok(TimescaleDBRepository {
+            phantom: PhantomData,
+            pool: manager.pool.clone(),
+        })
+    }
+
+    pub fn get_pool(&self) -> &PgPool {
+        &*self.pool
+    }
+}
+
+#[allow(unused)]
+#[async_trait]
+impl<T: Any + Send + Sync> IAsyncRepository<T> for TimescaleDBRepository<T> {
+    async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error> {
+        unimplemented!("select not implemented for TimescaleDBRepository")
+    }
+
+    async fn select_by_id(&self, id: i64) -> Result<T, Error> {
+        unimplemented!("select_by_id not implemented for TimescaleDBRepository")
+    }
+
+    async fn upsert(&self, param: T) -> Result<i64, Error> {
+        unimplemented!("upsert not implemented for TimescaleDBRepository");
+    }
+
+    async fn update(&self, param: T) -> Result<i64, Error> {
+        unimplemented!("update not implemented for TimescaleDBRepository")
+    }
+
+    async fn delete_all(&self) -> Result<u64, Error> {
+        unimplemented!("delete_all not implemented for TimescaleDBRepository")
+    }
+
+    async fn delete_by_id(&self, id: i64) -> Result<u64, Error> {
+        unimplemented!("delete_by_id not implemented for TimescaleDBRepository")
+    }
 }

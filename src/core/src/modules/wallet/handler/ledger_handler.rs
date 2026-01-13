@@ -66,7 +66,7 @@ impl<'a> ILedgerInfoHandler for LedgerInfoHandler<'a> {
             ts: chrono::Utc::now(),
         };
 
-        let repo = self.state.trade_repo.lock().await;
+        let repo = self.state.ledger_repo.lock().await;
         repo.get(&self.state.config).select(trade, page).await
     }
 }

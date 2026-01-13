@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl ExchangeInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<ExchangeInfo> for ExchangeInfoMongoRepository {
+impl IAsyncRepository<ExchangeInfo> for ExchangeInfoMongoRepository {
     async fn select(
         &self,
         exchange: ExchangeInfo,
@@ -72,7 +72,7 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoMongoRepository {
         Ok(exchange)
     }
 
-    async fn insert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(exchange, self.collection)
     }
 

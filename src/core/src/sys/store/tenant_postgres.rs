@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
+use crate::dynamic_postgres_upsert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl TenantPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<TenantInfo> for TenantPostgresRepository {
+impl IAsyncRepository<TenantInfo> for TenantPostgresRepository {
     async fn select(&self, tenant: TenantInfo, page: PageRequest) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
         let result = dynamic_postgres_query!(tenant, "sys_tenant", self.inner.get_pool(), "updated_at", page, TenantInfo)?;
         info!("query tenants: {:?}", result);
@@ -61,10 +61,10 @@ impl AsyncRepository<TenantInfo> for TenantPostgresRepository {
         Ok(tenant)
     }
 
-    async fn insert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_postgres_insert!(tenant, "tenants", self.inner.get_pool())?;
-        info!("Inserted tenant.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut tenant: TenantInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_postgres_upsert!(tenant, "tenants", self.inner.get_pool())?;
+        info!("Inserted tenant.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut tenant: TenantInfo) -> Result<i64, Error> {

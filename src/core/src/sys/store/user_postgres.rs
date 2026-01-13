@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
+use crate::dynamic_postgres_upsert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl UserPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<UserInfo> for UserPostgresRepository {
+impl IAsyncRepository<UserInfo> for UserPostgresRepository {
     async fn select(&self, user: UserInfo, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
@@ -152,7 +152,7 @@ impl AsyncRepository<UserInfo> for UserPostgresRepository {
         Ok(user)
     }
 
-    async fn insert(&self, mut user: UserInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut user: UserInfo) -> Result<i64, Error> {
         // use chrono::{DateTime, Utc};
         // use sigbot_utils::types::GenericValue;
         // let serialized = serde_json::to_value(user).unwrap();
@@ -211,9 +211,9 @@ impl AsyncRepository<UserInfo> for UserPostgresRepository {
         //     }
         // }
 
-        let inserted_id = dynamic_postgres_insert!(user, "users", self.inner.get_pool())?;
-        info!("Inserted user.id: {:?}", inserted_id);
-        Ok(inserted_id)
+        let upserted_id = dynamic_postgres_upsert!(user, "users", self.inner.get_pool())?;
+        info!("Inserted user.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut user: UserInfo) -> Result<i64, Error> {

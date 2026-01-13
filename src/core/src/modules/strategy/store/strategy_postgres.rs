@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
+use crate::dynamic_postgres_upsert;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl StrategyInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<StrategyInfo> for StrategyInfoPostgresRepository {
+impl IAsyncRepository<StrategyInfo> for StrategyInfoPostgresRepository {
     async fn select(
         &self,
         strategy: StrategyInfo,
@@ -72,10 +72,10 @@ impl AsyncRepository<StrategyInfo> for StrategyInfoPostgresRepository {
         Ok(strategy)
     }
 
-    async fn insert(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_postgres_insert!(strategy, "strategys", self.inner.get_pool())?;
-        info!("Inserted strategy.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_postgres_upsert!(strategy, "strategys", self.inner.get_pool())?;
+        info!("Inserted strategy.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut strategy: StrategyInfo) -> Result<i64, Error> {

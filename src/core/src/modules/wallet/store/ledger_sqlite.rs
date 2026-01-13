@@ -20,7 +20,7 @@
 
 use crate::config::config::SqliteAppDBProperties;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -41,7 +41,7 @@ impl LedgerInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<LedgerInfo> for LedgerInfoSQLiteRepository {
+impl IAsyncRepository<LedgerInfo> for LedgerInfoSQLiteRepository {
     async fn select(&self, ledger: LedgerInfo, page: PageRequest) -> Result<(PageResponse, Vec<LedgerInfo>), Error> {
         let mut conditions = Vec::new();
         let mut params: Vec<String> = Vec::new();
@@ -97,7 +97,7 @@ impl AsyncRepository<LedgerInfo> for LedgerInfoSQLiteRepository {
         ))
     }
 
-    async fn insert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
+    async fn upsert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
         // Use INSERT OR IGNORE for idempotency (handles duplicate messages from EMQX)
         // s_ledger is immutable ledger (append-only), so we don't update on conflict
         sqlx::query(

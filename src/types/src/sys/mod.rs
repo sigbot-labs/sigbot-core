@@ -20,5 +20,6 @@
 
 pub mod auth;
 pub mod dlock;
+pub mod log;
 pub mod tenant;
 pub mod user;

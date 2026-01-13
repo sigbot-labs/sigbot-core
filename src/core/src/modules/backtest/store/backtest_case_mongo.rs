@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl BacktestCaseInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoMongoRepository {
+impl IAsyncRepository<BacktestCaseInfo> for BacktestCaseInfoMongoRepository {
     async fn select(
         &self,
         backtest_case: BacktestCaseInfo,
@@ -72,7 +72,7 @@ impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoMongoRepository {
         Ok(backtest_case)
     }
 
-    async fn insert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(backtest_case, self.collection)
     }
 

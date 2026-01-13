@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -46,7 +46,7 @@ impl BalanceInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<BalanceInfo> for BalanceInfoMongoRepository {
+impl IAsyncRepository<BalanceInfo> for BalanceInfoMongoRepository {
     async fn select(&self, balance: BalanceInfo, page: PageRequest) -> Result<(PageResponse, Vec<BalanceInfo>), Error> {
         let mut filter = doc! {};
 
@@ -81,7 +81,7 @@ impl AsyncRepository<BalanceInfo> for BalanceInfoMongoRepository {
         ))
     }
 
-    async fn insert(&self, balance: BalanceInfo) -> Result<i64, Error> {
+    async fn upsert(&self, balance: BalanceInfo) -> Result<i64, Error> {
         // Use upsert for idempotency (handles duplicate messages from EMQX)
         let filter = doc! { "wallet_id": balance.wallet_id, "asset": &balance.asset };
         let update = doc! {

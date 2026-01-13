@@ -23,6 +23,8 @@ pub mod mongo;
 pub mod postgres;
 #[macro_use]
 pub mod sqlite;
+#[macro_use]
+pub mod timescaledb;
 
 use crate::config::config::{AppConfigProperties, AppDBType};
 use anyhow::Error;
@@ -34,7 +36,7 @@ use sqlx::{PgPool, SqlitePool};
 use std::collections::HashMap;
 
 #[async_trait] // solution2: async fn + dyn polymorphism problem.
-pub trait AsyncRepository<T>: Send + Sync {
+pub trait IAsyncRepository<T>: Send + Sync {
     // solution1: async fn + dyn polymorphism problem.
     // fn select(&self) -> Box<dyn Future<Output = Result<Page<T>, Error>> + Send>;
     async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error>
@@ -43,7 +45,7 @@ pub trait AsyncRepository<T>: Send + Sync {
     async fn select_by_id(&self, id: i64) -> Result<T, Error>
     where
         T: 'static + Send + Sync;
-    async fn insert(&self, mut param: T) -> Result<i64, Error>
+    async fn upsert(&self, mut param: T) -> Result<i64, Error>
     where
         T: 'static + Send + Sync;
     async fn update(&self, mut param: T) -> Result<i64, Error>
@@ -189,9 +191,10 @@ pub struct RepositoryContainer<T>
 where
     T: 'static + Send + Sync,
 {
-    sqlite_repo: Option<Box<dyn AsyncRepository<T>>>,
-    postgres_repo: Option<Box<dyn AsyncRepository<T>>>,
-    mongo_repo: Option<Box<dyn AsyncRepository<T>>>,
+    sqlite_repo: Option<Box<dyn IAsyncRepository<T>>>,
+    postgres_repo: Option<Box<dyn IAsyncRepository<T>>>,
+    mongo_repo: Option<Box<dyn IAsyncRepository<T>>>,
+    timescaledb_repo: Option<Box<dyn IAsyncRepository<T>>>,
 }
 
 impl<T> RepositoryContainer<T>
@@ -199,43 +202,53 @@ where
     T: 'static + Send + Sync,
 {
     pub fn new(
-        sqlite_repo: Option<Box<dyn AsyncRepository<T>>>,
-        postgres_repo: Option<Box<dyn AsyncRepository<T>>>,
-        mongo_repo: Option<Box<dyn AsyncRepository<T>>>,
+        sqlite_repo: Option<Box<dyn IAsyncRepository<T>>>,
+        postgres_repo: Option<Box<dyn IAsyncRepository<T>>>,
+        mongo_repo: Option<Box<dyn IAsyncRepository<T>>>,
+        timescaledb_repo: Option<Box<dyn IAsyncRepository<T>>>,
     ) -> Self {
         RepositoryContainer {
             sqlite_repo,
             postgres_repo,
             mongo_repo,
+            timescaledb_repo,
         }
     }
 
-    fn sqlite_repo(&self) -> &dyn AsyncRepository<T> {
+    fn sqlite_repo(&self) -> &dyn IAsyncRepository<T> {
         self.sqlite_repo
             .as_ref()
             .map(|repo| &**repo)
             .expect("The sqlite repository not configured.")
     }
 
-    fn postgres_repo(&self) -> &dyn AsyncRepository<T> {
+    fn postgres_repo(&self) -> &dyn IAsyncRepository<T> {
         self.postgres_repo
             .as_ref()
             .map(|repo| &**repo)
             .expect("The postgresql repository not configured.")
     }
 
-    fn mongo_repo(&self) -> &dyn AsyncRepository<T> {
+    fn mongo_repo(&self) -> &dyn IAsyncRepository<T> {
         self.mongo_repo
             .as_ref()
             .map(|repo| &**repo)
             .expect("The mongodb repository not configured.")
     }
 
-    pub fn get(/*&mut self*/ &self, config: &AppConfigProperties) -> &dyn AsyncRepository<T> {
+    fn timescaledb_repo(&self) -> &dyn IAsyncRepository<T> {
+        self.timescaledb_repo
+            .as_ref()
+            .map(|repo| &**repo)
+            .expect("The timescaledb repository not configured.")
+    }
+
+    pub fn get(&self, config: &AppConfigProperties) -> &dyn IAsyncRepository<T> {
         match config.appdb.db_type {
             AppDBType::SQLITE => self.sqlite_repo(),
             AppDBType::POSTGRESQL => self.postgres_repo(),
             AppDBType::MONGODB => self.mongo_repo(),
+            AppDBType::TIMESCALEDB => self.timescaledb_repo(),
         }
     }
 }

@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -46,7 +46,7 @@ impl LedgerInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<LedgerInfo> for LedgerInfoMongoRepository {
+impl IAsyncRepository<LedgerInfo> for LedgerInfoMongoRepository {
     async fn select(&self, ledger: LedgerInfo, page: PageRequest) -> Result<(PageResponse, Vec<LedgerInfo>), Error> {
         let mut filter = doc! {};
 
@@ -84,7 +84,7 @@ impl AsyncRepository<LedgerInfo> for LedgerInfoMongoRepository {
         ))
     }
 
-    async fn insert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
+    async fn upsert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
         // Use upsert with DO NOTHING semantics for idempotency (handles duplicate messages from EMQX)
         // s_ledger is immutable ledger (append-only), so we check existence first
         let filter = doc! {

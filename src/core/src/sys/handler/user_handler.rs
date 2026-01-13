@@ -224,7 +224,7 @@ impl<'a> IUserHandler for UserHandler<'a> {
         if param.id.is_some() {
             repo.get(&self.state.config).update(param.to_user()).await
         } else {
-            repo.get(&self.state.config).insert(param.to_user()).await
+            repo.get(&self.state.config).upsert(param.to_user()).await
         }
     }
 

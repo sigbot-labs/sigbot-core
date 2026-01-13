@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::PostgresAppDBProperties;
-use crate::dynamic_postgres_insert;
 use crate::dynamic_postgres_query;
 use crate::dynamic_postgres_update;
+use crate::dynamic_postgres_upsert;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl DatafeedInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<DatafeedInfo> for DatafeedInfoPostgresRepository {
+impl IAsyncRepository<DatafeedInfo> for DatafeedInfoPostgresRepository {
     async fn select(
         &self,
         datafeed: DatafeedInfo,
@@ -72,10 +72,10 @@ impl AsyncRepository<DatafeedInfo> for DatafeedInfoPostgresRepository {
         Ok(datafeed)
     }
 
-    async fn insert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_postgres_insert!(datafeed, "datafeeds", self.inner.get_pool())?;
-        info!("Inserted datafeed.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_postgres_upsert!(datafeed, "datafeeds", self.inner.get_pool())?;
+        info!("Inserted datafeed.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {

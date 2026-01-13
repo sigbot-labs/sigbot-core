@@ -20,7 +20,7 @@
 
 use crate::config::config::SqliteAppDBProperties;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -41,7 +41,7 @@ impl BalanceInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<BalanceInfo> for BalanceInfoSQLiteRepository {
+impl IAsyncRepository<BalanceInfo> for BalanceInfoSQLiteRepository {
     async fn select(&self, balance: BalanceInfo, page: PageRequest) -> Result<(PageResponse, Vec<BalanceInfo>), Error> {
         let mut conditions = Vec::new();
         let mut params: Vec<String> = Vec::new();
@@ -93,7 +93,7 @@ impl AsyncRepository<BalanceInfo> for BalanceInfoSQLiteRepository {
         ))
     }
 
-    async fn insert(&self, balance: BalanceInfo) -> Result<i64, Error> {
+    async fn upsert(&self, balance: BalanceInfo) -> Result<i64, Error> {
         // Use ON CONFLICT for idempotency (handles duplicate messages from EMQX)
         sqlx::query(
             "INSERT INTO s_balances (wallet_id, asset, available, locked, updated_at)

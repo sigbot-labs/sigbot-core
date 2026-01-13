@@ -20,8 +20,8 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
-use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
+use crate::store::IAsyncRepository;
+use crate::{dynamic_mongo_query, dynamic_mongo_update, dynamic_mongo_insert};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -46,7 +46,7 @@ impl WalletInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<WalletInfo> for WalletInfoMongoRepository {
+impl IAsyncRepository<WalletInfo> for WalletInfoMongoRepository {
     async fn select(&self, wallet: WalletInfo, page: PageRequest) -> Result<(PageResponse, Vec<WalletInfo>), Error> {
         let result = dynamic_mongo_query!(wallet, self.collection.clone(), "updated_at", page, WalletInfo)
             .map_err(|e: mongodb::error::Error| Error::from(e))?;
@@ -65,11 +65,11 @@ impl AsyncRepository<WalletInfo> for WalletInfoMongoRepository {
         Ok(wallet)
     }
 
-    async fn insert(&self, mut wallet: WalletInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_mongo_insert!(wallet, self.collection.clone())
+    async fn upsert(&self, mut wallet: WalletInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_mongo_insert!(wallet, self.collection.clone())
             .map_err(|e: mongodb::error::Error| Error::from(e))?;
-        info!("Inserted wallet.id: {:?}", inserted_id);
-        Ok(inserted_id)
+        info!("Inserted wallet.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut wallet: WalletInfo) -> Result<i64, Error> {

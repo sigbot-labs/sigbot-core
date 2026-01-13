@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl WorkflowInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<WorkflowInfo> for WorkflowInfoMongoRepository {
+impl IAsyncRepository<WorkflowInfo> for WorkflowInfoMongoRepository {
     async fn select(
         &self,
         workflow: WorkflowInfo,
@@ -71,7 +71,7 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoMongoRepository {
         Ok(workflow)
     }
 
-    async fn insert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(workflow, self.collection)
     }
 

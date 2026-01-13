@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl DatafeedInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<DatafeedInfo> for DatafeedInfoMongoRepository {
+impl IAsyncRepository<DatafeedInfo> for DatafeedInfoMongoRepository {
     async fn select(
         &self,
         datafeed: DatafeedInfo,
@@ -72,7 +72,7 @@ impl AsyncRepository<DatafeedInfo> for DatafeedInfoMongoRepository {
         Ok(datafeed)
     }
 
-    async fn insert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut datafeed: DatafeedInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(datafeed, self.collection)
     }
 

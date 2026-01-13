@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl UserMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<UserInfo> for UserMongoRepository {
+impl IAsyncRepository<UserInfo> for UserMongoRepository {
     async fn select(&self, user: UserInfo, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         //let result = &self.inner.select(user, page).await;
         match dynamic_mongo_query!(user, self.collection, "updated_at", page, User) {
@@ -68,7 +68,7 @@ impl AsyncRepository<UserInfo> for UserMongoRepository {
         Ok(user)
     }
 
-    async fn insert(&self, mut user: UserInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut user: UserInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(user, self.collection)
     }
 

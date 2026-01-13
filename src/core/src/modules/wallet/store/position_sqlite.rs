@@ -20,7 +20,7 @@
 
 use crate::config::config::SqliteAppDBProperties;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -41,7 +41,7 @@ impl PositionInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<PositionInfo> for PositionInfoSQLiteRepository {
+impl IAsyncRepository<PositionInfo> for PositionInfoSQLiteRepository {
     async fn select(
         &self,
         position: PositionInfo,
@@ -97,7 +97,7 @@ impl AsyncRepository<PositionInfo> for PositionInfoSQLiteRepository {
         ))
     }
 
-    async fn insert(&self, position: PositionInfo) -> Result<i64, Error> {
+    async fn upsert(&self, position: PositionInfo) -> Result<i64, Error> {
         // Use ON CONFLICT for idempotency (handles duplicate messages from EMQX)
         sqlx::query(
             "INSERT INTO s_positions (wallet_id, symbol, side, size, entry_price, realized_pnl, updated_at)

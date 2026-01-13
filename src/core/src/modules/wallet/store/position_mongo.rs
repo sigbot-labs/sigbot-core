@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -46,7 +46,7 @@ impl PositionInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<PositionInfo> for PositionInfoMongoRepository {
+impl IAsyncRepository<PositionInfo> for PositionInfoMongoRepository {
     async fn select(
         &self,
         position: PositionInfo,
@@ -85,7 +85,7 @@ impl AsyncRepository<PositionInfo> for PositionInfoMongoRepository {
         ))
     }
 
-    async fn insert(&self, position: PositionInfo) -> Result<i64, Error> {
+    async fn upsert(&self, position: PositionInfo) -> Result<i64, Error> {
         // Use upsert for idempotency (handles duplicate messages from EMQX)
         let filter = doc! {
             "wallet_id": position.wallet_id,

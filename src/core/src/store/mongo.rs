@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::AsyncRepository;
+use super::IAsyncRepository;
 use crate::config::config::MongoAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
@@ -59,7 +59,7 @@ impl<T: Any + Send + Sync> MongoRepository<T> {
 
 #[allow(unused)]
 #[async_trait]
-impl<T: Any + Send + Sync> AsyncRepository<T> for MongoRepository<T> {
+impl<T: Any + Send + Sync> IAsyncRepository<T> for MongoRepository<T> {
     async fn select(&self, mut param: T, page: PageRequest) -> Result<(PageResponse, Vec<T>), Error> {
         //use crate::dynamic_mongo_query;
         //match dynamic_mongo_query!(param, self.database.collection("users"), "updated_at", page, User) {
@@ -76,7 +76,7 @@ impl<T: Any + Send + Sync> AsyncRepository<T> for MongoRepository<T> {
         unimplemented!("select_by_id not implemented for MongoRepository")
     }
 
-    async fn insert(&self, param: T) -> Result<i64, Error> {
+    async fn upsert(&self, param: T) -> Result<i64, Error> {
         unimplemented!("insert not implemented for MongoRepository")
     }
 
@@ -165,8 +165,8 @@ macro_rules! dynamic_mongo_insert {
             // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
             let result = $collection.insert_one(&$bean).await?;
 
-            if let Some(inserted_id) = result.inserted_id.as_object_id() {
-                tracing::debug!("inserted_id: {}", inserted_id);
+            if let Some(upserted_id) = result.inserted_id.as_object_id() {
+                tracing::debug!("upserted_id: {}", upserted_id);
                 Ok(id)
             } else {
                 Ok(-1)

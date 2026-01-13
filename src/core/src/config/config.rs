@@ -312,6 +312,8 @@ pub struct AppDBProperties {
     pub postgres: PostgresAppDBProperties,
     #[serde(rename = "mongodb", default = "MongoAppDBProperties::default")]
     pub mongodb: MongoAppDBProperties,
+    #[serde(rename = "timescaledb", default = "TimescaleDBAppDBProperties::default")]
+    pub timescaledb: TimescaleDBAppDBProperties,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -320,6 +322,7 @@ pub enum AppDBType {
     SQLITE,
     POSTGRESQL,
     MONGODB,
+    TIMESCALEDB,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -368,6 +371,30 @@ pub struct MongoAppDBProperties {
     pub url: Option<String>,
     #[serde(rename = "database")]
     pub database: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TimescaleDBAppDBProperties {
+    #[serde(flatten)]
+    pub inner: PostgresPropertiesBase,
+}
+
+impl Default for TimescaleDBAppDBProperties {
+    fn default() -> Self {
+        TimescaleDBAppDBProperties {
+            inner: PostgresPropertiesBase {
+                host: "localhost".to_string(),
+                port: 5432,
+                database: "sigbot_ts".to_string(),
+                schema: "public".to_string(),
+                username: "postgres".to_string(),
+                password: Some("changeit".to_string()),
+                min_connections: Some(5),
+                max_connections: Some(20),
+                use_ssl: false,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -891,6 +918,7 @@ impl Default for AppDBProperties {
             sqlite: SqliteAppDBProperties::default(),
             postgres: PostgresAppDBProperties::default(),
             mongodb: MongoAppDBProperties::default(),
+            timescaledb: TimescaleDBAppDBProperties::default(),
         }
     }
 }

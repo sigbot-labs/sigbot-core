@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
+use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl BacktestCaseInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoSQLiteRepository {
+impl IAsyncRepository<BacktestCaseInfo> for BacktestCaseInfoSQLiteRepository {
     async fn select(
         &self,
         backtest_case: BacktestCaseInfo,
@@ -74,10 +74,10 @@ impl AsyncRepository<BacktestCaseInfo> for BacktestCaseInfoSQLiteRepository {
         Ok(backtest_case)
     }
 
-    async fn insert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(backtest_case, "t_backtest_case", self.inner.get_pool())?;
-        info!("Inserted backtest_case.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(backtest_case, "t_backtest_case", self.inner.get_pool())?;
+        info!("Inserted backtest_case.id: {:?}", upserted_id);
+        Ok(upserted_id)
     }
 
     async fn update(&self, mut backtest_case: BacktestCaseInfo) -> Result<i64, Error> {

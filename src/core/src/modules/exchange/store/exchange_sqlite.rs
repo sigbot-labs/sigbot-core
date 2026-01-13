@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
+use crate::dynamic_sqlite_upsert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl ExchangeInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
+impl IAsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
     async fn select(
         &self,
         exchange: ExchangeInfo,
@@ -83,10 +83,10 @@ impl AsyncRepository<ExchangeInfo> for ExchangeInfoSQLiteRepository {
         Ok(exchange)
     }
 
-    async fn insert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(exchange, "t_exchange", self.inner.get_pool())?;
-        info!("Inserted exchange.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut exchange: ExchangeInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(exchange, "t_exchange", self.inner.get_pool())?;
+        info!("Inserted exchange.id: {:?}", upserted_id);
+        Ok(upserted_id)
 
         //  let result = sqlx
         //   ::query(

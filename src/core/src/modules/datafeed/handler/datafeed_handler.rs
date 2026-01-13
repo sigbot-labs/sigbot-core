@@ -97,7 +97,7 @@ impl<'a> IDatafeedInfoHandler for DatafeedInfoHandler<'a> {
         if param.id.is_some() {
             repo.get(&self.state.config).update(param.to_entity()?).await
         } else {
-            repo.get(&self.state.config).insert(param.to_entity()?).await
+            repo.get(&self.state.config).upsert(param.to_entity()?).await
         }
     }
 

@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
+use crate::dynamic_sqlite_upsert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -44,7 +44,7 @@ impl UserSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<UserInfo> for UserSQLiteRepository {
+impl IAsyncRepository<UserInfo> for UserSQLiteRepository {
     async fn select(&self, user: UserInfo, page: PageRequest) -> Result<(PageResponse, Vec<UserInfo>), Error> {
         let result = dynamic_sqlite_query!(user, "sys_user", self.inner.get_pool(), "updated_at", page, UserInfo)?;
 
@@ -72,10 +72,10 @@ impl AsyncRepository<UserInfo> for UserSQLiteRepository {
         Ok(user)
     }
 
-    async fn insert(&self, mut user: UserInfo) -> Result<i64, Error> {
-        let inserted_id = dynamic_sqlite_insert!(user, "sys_user", self.inner.get_pool())?;
-        info!("Inserted user.id: {:?}", inserted_id);
-        Ok(inserted_id)
+    async fn upsert(&self, mut user: UserInfo) -> Result<i64, Error> {
+        let upserted_id = dynamic_sqlite_upsert!(user, "sys_user", self.inner.get_pool())?;
+        info!("Inserted user.id: {:?}", upserted_id);
+        Ok(upserted_id)
 
         //  let result = sqlx
         //   ::query(

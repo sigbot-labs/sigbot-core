@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
 // Copyleft (c) 2024 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under

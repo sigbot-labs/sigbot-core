@@ -20,7 +20,7 @@
 
 use crate::config::config::MongoAppDBProperties;
 use crate::store::mongo::MongoRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use crate::{dynamic_mongo_insert, dynamic_mongo_query, dynamic_mongo_update};
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,7 +46,7 @@ impl NotificationInfoMongoRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<NotificationInfo> for NotificationInfoMongoRepository {
+impl IAsyncRepository<NotificationInfo> for NotificationInfoMongoRepository {
     async fn select(
         &self,
         notification: NotificationInfo,
@@ -72,7 +72,7 @@ impl AsyncRepository<NotificationInfo> for NotificationInfoMongoRepository {
         Ok(notification)
     }
 
-    async fn insert(&self, mut notification: NotificationInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut notification: NotificationInfo) -> Result<i64, Error> {
         dynamic_mongo_insert!(notification, self.collection)
     }
 

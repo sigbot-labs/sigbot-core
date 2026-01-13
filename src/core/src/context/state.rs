@@ -60,7 +60,7 @@ use crate::{
     },
     store::RepositoryContainer,
     sys::store::{
-        dlock_postgres::DLockPostgresRepository, tenant_mongo::TenantMongoRepository,
+        dlock_postgres::DLockPostgresRepository, LogRepositoryContainer, tenant_mongo::TenantMongoRepository,
         tenant_postgres::TenantPostgresRepository, tenant_sqlite::TenantSQLiteRepository,
         user_mongo::UserMongoRepository, user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
     },
@@ -98,6 +98,7 @@ pub struct SigbotState {
     pub user_repo: Arc<Mutex<RepositoryContainer<UserInfo>>>,
     pub tenant_repo: Arc<Mutex<RepositoryContainer<TenantInfo>>>,
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLockInfo>>>,
+    pub log_repo: Arc<Mutex<LogRepositoryContainer>>,
     // The Service module repositories.
     pub datafeed_repo: Arc<Mutex<RepositoryContainer<DatafeedInfo>>>,
     pub exchange_repo: Arc<Mutex<RepositoryContainer<ExchangeInfo>>>,
@@ -106,8 +107,8 @@ pub struct SigbotState {
     pub notification_repo: Arc<Mutex<RepositoryContainer<NotificationInfo>>>,
     pub workflow_repo: Arc<Mutex<RepositoryContainer<WorkflowInfo>>>,
     // The Wallet module repositories.
+    pub ledger_repo: Arc<Mutex<RepositoryContainer<LedgerInfo>>>,
     pub wallet_repo: Arc<Mutex<RepositoryContainer<WalletInfo>>>,
-    pub trade_repo: Arc<Mutex<RepositoryContainer<LedgerInfo>>>,
     pub balance_repo: Arc<Mutex<RepositoryContainer<BalanceInfo>>>,
     pub position_repo: Arc<Mutex<RepositoryContainer<PositionInfo>>>,
 }
@@ -145,6 +146,7 @@ impl SigbotState {
                 AppDBType::MONGODB => Some(Box::new(UserMongoRepository::new(&db_config.mongodb).await.unwrap())),
                 _ => None,
             },
+            None,
         );
         let tenant_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -161,6 +163,7 @@ impl SigbotState {
                 AppDBType::MONGODB => Some(Box::new(TenantMongoRepository::new(&db_config.mongodb).await.unwrap())),
                 _ => None,
             },
+            None,
         );
         let lock_repo = RepositoryContainer::new(
             None,
@@ -170,6 +173,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
             None,
         );
 
@@ -194,6 +198,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let exchange_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -214,6 +219,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let strategy_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -234,6 +240,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let backtest_case_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -256,6 +263,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let notification_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -278,6 +286,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let workflow_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -298,6 +307,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let wallet_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -318,6 +328,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let trade_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -338,6 +349,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let balance_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -358,6 +370,7 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
         let position_repo = RepositoryContainer::new(
             match db_config.db_type {
@@ -378,7 +391,12 @@ impl SigbotState {
                 )),
                 _ => None,
             },
+            None,
         );
+
+        // Build log repository
+        let log_repo = LogRepositoryContainer::new(&db_config).await.unwrap();
+
         let app_state = SigbotState {
             // Notice: Arc object clone only increments the reference counter, and does not copy the actual data block.
             config: config.clone(),
@@ -395,6 +413,7 @@ impl SigbotState {
             user_repo: Arc::new(Mutex::new(user_repo)),
             tenant_repo: Arc::new(Mutex::new(tenant_repo)),
             lock_repo: Arc::new(Mutex::new(lock_repo)),
+            log_repo: Arc::new(Mutex::new(log_repo)),
             // The Application repositories.
             datafeed_repo: Arc::new(Mutex::new(datafeed_repo)),
             exchange_repo: Arc::new(Mutex::new(exchange_repo)),
@@ -404,7 +423,7 @@ impl SigbotState {
             workflow_repo: Arc::new(Mutex::new(workflow_repo)),
             // The Wallet repositories.
             wallet_repo: Arc::new(Mutex::new(wallet_repo)),
-            trade_repo: Arc::new(Mutex::new(trade_repo)),
+            ledger_repo: Arc::new(Mutex::new(trade_repo)),
             balance_repo: Arc::new(Mutex::new(balance_repo)),
             position_repo: Arc::new(Mutex::new(position_repo)),
         };

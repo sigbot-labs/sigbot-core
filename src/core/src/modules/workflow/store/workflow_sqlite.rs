@@ -19,11 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::SqliteAppDBProperties;
-use crate::dynamic_sqlite_insert;
 use crate::dynamic_sqlite_query;
 use crate::dynamic_sqlite_update;
+use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::{select_by_sql_sqlite, AsyncRepository};
+use crate::store::{select_by_sql_sqlite, IAsyncRepository};
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
 use common_telemetry::debug;
@@ -46,7 +46,7 @@ impl WorkflowInfoSQLiteRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
+impl IAsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
     async fn select(
         &self,
         workflow: WorkflowInfo,
@@ -75,7 +75,7 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
         Ok(workflow)
     }
 
-    async fn insert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
+    async fn upsert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
         // Convert flow_info to flow_json for database storage (database column is still named flow_json)
         if let Some(ref flow_info) = workflow.flow_info {
             // Serialize flow_info to JSON string for database storage
@@ -101,19 +101,19 @@ impl AsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
                 .execute(self.inner.get_pool())
                 .await?;
 
-            let inserted_id = if let Some(id) = workflow_id {
+            let upserted_id = if let Some(id) = workflow_id {
                 id
             } else {
                 sqlx::query_scalar::<_, i64>("SELECT last_insert_rowid()")
                     .fetch_one(self.inner.get_pool())
                     .await?
             };
-            debug!("Inserted workflow.id: {:?}", inserted_id);
-            Ok(inserted_id)
+            debug!("Inserted workflow.id: {:?}", upserted_id);
+            Ok(upserted_id)
         } else {
-            let inserted_id = dynamic_sqlite_insert!(workflow, "s_workflow", self.inner.get_pool())?;
-            debug!("Inserted workflow.id: {:?}", inserted_id);
-            Ok(inserted_id)
+            let upserted_id = dynamic_sqlite_upsert!(workflow, "s_workflow", self.inner.get_pool())?;
+            debug!("Inserted workflow.id: {:?}", upserted_id);
+            Ok(upserted_id)
         }
     }
 

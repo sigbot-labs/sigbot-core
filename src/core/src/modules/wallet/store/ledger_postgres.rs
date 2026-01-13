@@ -20,7 +20,7 @@
 
 use crate::config::config::PostgresAppDBProperties;
 use crate::store::postgres::PostgresRepository;
-use crate::store::AsyncRepository;
+use crate::store::IAsyncRepository;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::info;
@@ -41,7 +41,7 @@ impl LedgerInfoPostgresRepository {
 }
 
 #[async_trait]
-impl AsyncRepository<LedgerInfo> for LedgerInfoPostgresRepository {
+impl IAsyncRepository<LedgerInfo> for LedgerInfoPostgresRepository {
     async fn select(&self, ledger: LedgerInfo, page: PageRequest) -> Result<(PageResponse, Vec<LedgerInfo>), Error> {
         let mut conditions = Vec::new();
         let mut param_index = 1;
@@ -110,7 +110,7 @@ impl AsyncRepository<LedgerInfo> for LedgerInfoPostgresRepository {
         ))
     }
 
-    async fn insert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
+    async fn upsert(&self, ledger: LedgerInfo) -> Result<i64, Error> {
         // Use ON CONFLICT DO NOTHING for idempotency (handles duplicate messages from EMQX)
         // s_ledger is immutable ledger (append-only), so we don't update on conflict
         sqlx::query(
