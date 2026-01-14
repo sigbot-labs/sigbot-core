@@ -220,45 +220,6 @@ impl StatsLogResponse {
     }
 }
 
-// --- Log Manager types ---
-
-use crate::modules::messager::messager::MessagerConfiguration;
-use anyhow::Context;
-use std::{collections::HashMap, sync::Arc};
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct LogManagerArgument {
-    pub messager_config: Arc<MessagerConfiguration>,
-    pub properties: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
-}
-
-impl LogManagerArgument {
-    pub fn from_json(json: &str) -> Result<Self, anyhow::Error> {
-        serde_json::from_str(json).context(format!("Failed to parse log manager info from JSON. - {}", json))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
-pub enum LogMgrProvider {
-    DEFAULT,
-}
-
-impl LogMgrProvider {
-    pub fn of(provider: &str) -> Result<LogMgrProvider, anyhow::Error> {
-        match provider.to_uppercase().as_str() {
-            "DEFAULT" => Ok(LogMgrProvider::DEFAULT),
-            _ => Err(anyhow::anyhow!("Unsupported the log manager provider: {}", provider)),
-        }
-    }
-
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            LogMgrProvider::DEFAULT => "DEFAULT",
-        }
-    }
-}
-
 // --- Workflow log message types ---
 
 /// Log entry structure from messager (EMQX)
