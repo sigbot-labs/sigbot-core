@@ -21,6 +21,8 @@ members = [
     "src/wallet",
     "src/backtest",
     "src/notification",
+    "src/logservice",
+    "src/exporter",
 ]
 resolver = "2"
 
@@ -64,6 +66,8 @@ sigbot-order = { path = "src/order" }
 sigbot-wallet = { path = "src/wallet" }
 sigbot-backtest = { path = "src/backtest" }
 sigbot-notification = { path = "src/notification" }
+sigbot-logservice = { path = "src/logservice" }
+sigbot-exporter = { path = "src/exporter" }
 
 # Lang libs
 regex = "1.11.1"

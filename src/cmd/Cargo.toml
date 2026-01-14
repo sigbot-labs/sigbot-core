@@ -27,6 +27,8 @@ sigbot-order.workspace = true
 sigbot-wallet.workspace = true
 sigbot-backtest.workspace = true
 sigbot-notification.workspace = true
+sigbot-logservice.workspace = true
+sigbot-exporter.workspace = true
 
 # Thirdparty dependencies.
 #mimalloc.workspace = true

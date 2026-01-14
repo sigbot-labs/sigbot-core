@@ -437,6 +437,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de45108900e1f9b9242f7f2e254aa3e2c029c921c258fe9e6b4217eeebd54288"
 dependencies = [
  "axum-core 0.5.2",
+ "base64 0.22.1",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -457,8 +458,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
+ "sha1",
  "sync_wrapper 1.0.2",
  "tokio",
+ "tokio-tungstenite 0.26.2",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
@@ -7842,6 +7845,8 @@ dependencies = [
  "sigbot-core",
  "sigbot-datafeed",
  "sigbot-deployer",
+ "sigbot-exporter",
+ "sigbot-logservice",
  "sigbot-messager",
  "sigbot-notification",
  "sigbot-order",
@@ -8033,6 +8038,50 @@ dependencies = [
  "sigbot-types",
  "sigbot-utils",
  "tokio",
+]
+
+[[package]]
+name = "sigbot-exporter"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap 4.5.34",
+ "common-telemetry",
+ "lazy_static",
+ "serde",
+ "serde_json",
+ "sigbot-core",
+ "sigbot-messager",
+ "sigbot-types",
+ "sigbot-utils",
+ "tokio",
+]
+
+[[package]]
+name = "sigbot-logservice"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.3",
+ "axum-macros",
+ "clap 4.5.34",
+ "common-makestruct",
+ "common-telemetry",
+ "dashmap",
+ "futures",
+ "lazy_static",
+ "reqwest 0.12.15",
+ "serde",
+ "serde_json",
+ "sigbot-core",
+ "sigbot-messager",
+ "sigbot-types",
+ "sigbot-utils",
+ "tokio",
+ "tower 0.5.2",
+ "tower-http 0.5.2",
 ]
 
 [[package]]

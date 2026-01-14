@@ -39,3 +39,7 @@ pub const TOPIC_WF_TRADING_PLACED: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID
 /// This topic for notification forwarder to receive workflow's notification messages.
 /// phy-data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to notification-forwarder.
 pub const TOPIC_WF_NOTIFY_MESSAGE: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/notify";
+
+/// This topic for log service to receive workflow's log messages.
+/// phy-data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to log-service.
+pub const TOPIC_WF_LOG: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/{NODE_ID}/log";

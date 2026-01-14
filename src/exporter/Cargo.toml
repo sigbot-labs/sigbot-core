@@ -1,0 +1,25 @@
+[package]
+name = "sigbot-exporter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Other modules dependencies.
+common-telemetry.workspace = true
+sigbot-types.workspace = true
+sigbot-utils.workspace = true
+sigbot-core.workspace = true
+sigbot-messager.workspace = true
+
+# Thirdparty dependencies.
+clap.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+lazy_static.workspace = true
+anyhow.workspace = true
+tokio.workspace = true

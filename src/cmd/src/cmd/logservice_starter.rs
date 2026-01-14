@@ -24,33 +24,34 @@ use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::mgmt::apm;
-use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
-use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
+use sigbot_logservice::server::log_server::SigbotLogServer;
 use sigbot_types::modules::messager::messager::MessagerProvider;
+use sigbot_types::sys::log::LogMgrProvider;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
 
-pub struct SigbotDatafeedIngestorStarter {}
+pub struct SigbotLogServiceStarter {}
 
-impl SigbotDatafeedIngestorStarter {
-    pub const COMMAND_NAME: &'static str = "datafeed";
+impl SigbotLogServiceStarter {
+    pub const COMMAND_NAME: &'static str = "logservice";
 
     // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
     pub const ASCII_NAME: &'static str = r#"
- ____              __             ____                  __     
-/\  _`\           /\ \__         /\  _`\               /\ \    
-\ \ \/\ \     __  \ \ ,_\    __  \ \ \L\_\ __     __   \_\ \   
- \ \ \ \ \  /'__`\ \ \ \/  /'__`\ \ \  _\/'__`\ /'__`\ /'_` \  
-  \ \ \_\ \/\ \L\.\_\ \ \_/\ \L\.\_\ \ \/\  __//\  __//\ \L\ \ 
-   \ \____/\ \__/.\_\\ \__\ \__/.\_\\ \_\ \____\ \____\ \___,_\
-    \/___/  \/__/\/_/ \/__/\/__/\/_/ \/_/\/____/\/____/\/__,_ /
-                                                                         
-                                        (Sigbot Datafeed Runner)
+ __                                                                                     
+/\ \                          /'\_/`\                                                   
+\ \ \        ___      __     /\      \     __      ___      __       __      __   _ __  
+ \ \ \  __  / __`\  /'_ `\   \ \ \__\ \  /'__`\  /' _ `\  /'__`\   /'_ `\  /'__`\/\`'__\
+  \ \ \L\ \/\ \L\ \/\ \L\ \   \ \ \_/\ \/\ \L\.\_/\ \/\ \/\ \L\.\_/\ \L\ \/\  __/\ \ \/ 
+   \ \____/\ \____/\ \____ \   \ \_\\ \_\ \__/.\_\ \_\ \_\ \__/.\_\ \____ \ \____\\ \_\ 
+    \/___/  \/___/  \/___L\ \   \/_/ \/_/\/__/\/_/\/_/\/_/\/__/\/_/\/___L\ \/____/ \/_/ 
+                      /\____/                                        /\____/            
+                      \_/__/                                         \_/__/             
+                                                                 (Sigbot Log Manager)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Datafeed Ingestor.")
+            .about("Run Sigbot Log Service Server.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")
@@ -66,26 +67,30 @@ impl SigbotDatafeedIngestorStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("DATAFEED_PROVIDERS")
-                    .short('p')
-                    .long("datafeed-providers")
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .short('c')
+                    .long("messager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
-                    .help(format!(
-                        "The providers of multi Datafeeds separated by commas. (supported are: {}, {}, {})",
-                        DatafeedProvider::BINANCE.as_str(),
-                        DatafeedProvider::TWITTER.as_str(),
-                        DatafeedProvider::TRUTHSOCIAL.as_str()
-                    ))
-                    .default_value(DatafeedProvider::BINANCE.as_str()),
+                    .help("The configuration of Messager. (base64 encoded JSON string)"),
             )
             .arg(
-                Arg::new("DATAFEED_CONFIGURATION")
-                    .short('c')
-                    .long("datafeed-configuration")
+                Arg::new("LOG_MANAGER_PROVIDER")
+                    .long("log-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(3)
-                    .help("The configuration of Datafeed. (base64 encoded JSON string)"),
+                    .help(format!(
+                        "The provider of Log Manager. (supported are: {})",
+                        LogMgrProvider::DEFAULT.as_str(),
+                    ))
+                    .default_value(LogMgrProvider::DEFAULT.as_str()),
+            )
+            .arg(
+                Arg::new("LOG_MANAGER_CONFIGURATION")
+                    .long("log-manager-configuration")
+                    .value_parser(clap::value_parser!(String))
+                    .display_order(4)
+                    .help("The configuration of Log Manager. (base64 encoded JSON string)"),
             )
     }
 
@@ -93,7 +98,12 @@ impl SigbotDatafeedIngestorStarter {
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default(get_config().logging.is_human_mode());
 
-        print_banner(verbose, Self::ASCII_NAME, Some("DataFeed Server listen on"));
+        print_banner(verbose, Self::ASCII_NAME, Some("Log Service listen on"));
+        let config = get_config();
+        eprintln!(
+            "            WebSocket endpoint: \"ws://{}:{}/ws/logs\"",
+            &config.server.host, config.server.port
+        );
 
         apm::init().await;
 
@@ -105,10 +115,10 @@ impl SigbotDatafeedIngestorStarter {
 
         Self::start(matches, verbose).await;
 
-        signal_handle.await.unwrap();
+        signal_handle.await.expect("Failed to start Management server.");
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotDatafeedIngestor::startup(matches, verbose).await;
+        SigbotLogServer::startup(matches, verbose).await;
     }
 }

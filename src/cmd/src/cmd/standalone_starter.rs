@@ -19,16 +19,14 @@
 // This includes modifications and derived works.
 
 use super::api_starter::SigbotAPIServer;
+use crate::cmd::internal::banner::print_banner;
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_backtest::server::backtest_server::SigbotBacktestServer;
 use sigbot_core::config::config::get_config;
 use sigbot_core::llm::handler::llm_factory::SigbotLLMFactory;
-use sigbot_core::{
-    config::config::{GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
-    mgmt::apm,
-};
+use sigbot_core::mgmt::apm;
 use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
 use sigbot_notification::server::notification_forwarder::SigbotNotificationForwarder;
 use sigbot_order::server::order_server::SigbotOrderServer;
@@ -49,6 +47,19 @@ pub struct SigbotStandaloneStarter {}
 
 impl SigbotStandaloneStarter {
     pub const COMMAND_NAME: &'static str = "standalone";
+
+    // http://www.network-science.de/ascii/#larry3d,graffiti,basic,drpepper,rounded,roman
+    pub const ASCII_NAME: &'static str = r#"
+ ____                __              __      
+/\  _`\   __        /\ \            /\ \__   
+\ \,\L\_\/\_\     __\ \ \____    ___\ \ ,_\  
+ \/_\__ \\/\ \  /'_ `\ \ '__`\  / __`\ \ \/  
+   /\ \L\ \ \ \/\ \L\ \ \ \L\ \/\ \L\ \ \ \_ 
+   \ `\____\ \_\ \____ \ \_,__/\ \____/\ \__\
+    \/_____/\/_/\/___L\ \/___/  \/___/  \/__/
+                  /\____/                    
+                  \_/__/      (Sigbot Standalone (All-in-One))
+ "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
@@ -184,7 +195,7 @@ impl SigbotStandaloneStarter {
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default(get_config().logging.is_human_mode());
 
-        Self::print_banner(verbose);
+        print_banner(verbose, Self::ASCII_NAME, None);
 
         apm::init().await;
 
@@ -208,64 +219,5 @@ impl SigbotStandaloneStarter {
         SigbotBacktestServer::startup(matches, verbose).await;
         SigbotLLMFactory::init().await;
         SigbotAPIServer::startup(matches, verbose, None, None).await;
-    }
-
-    fn print_banner(verbose: bool) {
-        let config = get_config();
-
-        // http://www.network-science.de/ascii/#larry3d,graffiti,basic,drpepper,rounded,roman
-        let ascii_name = r#"
- ____                __              __      
-/\  _`\   __        /\ \            /\ \__   
-\ \,\L\_\/\_\     __\ \ \____    ___\ \ ,_\  
- \/_\__ \\/\ \  /'_ `\ \ '__`\  / __`\ \ \/  
-   /\ \L\ \ \ \/\ \L\ \ \ \L\ \/\ \L\ \ \ \_ 
-   \ `\____\ \_\ \____ \ \_,__/\ \____/\ \__\
-    \/_____/\/_/\/___L\ \/___/  \/___/  \/__/
-                  /\____/                    
-                  \_/__/      (Sigbot Standalone (All-in-One))
- "#;
-        eprintln!("");
-        eprintln!("{}", ascii_name);
-        eprintln!("                Program Version: {:?}", GIT_VERSION);
-        eprintln!(
-            "                Package Version: {:?}",
-            env!("CARGO_PKG_VERSION").to_string()
-        );
-        eprintln!("                Git Commit Hash: {:?}", GIT_COMMIT_HASH);
-        eprintln!("                 Git Build Date: {:?}", GIT_BUILD_DATE);
-        let path = env::var("SIGBOT_CFG_PATH").unwrap_or("none".to_string());
-        eprintln!("        Configuration file path: {:?}", path);
-        eprintln!(
-            "            Web Serve listen on: \"{}://{}:{}\"",
-            "http", &config.server.host, config.server.port
-        );
-        if config.mgmt.enabled {
-            eprintln!(
-                "     Management serve listen on: \"{}://{}:{}\"",
-                "http", config.mgmt.host, config.mgmt.port
-            );
-            if config.mgmt.tokio_console.enabled {
-                #[cfg(feature = "profiling-tokio-console")]
-                let server_addr = &config.mgmt.tokio_console.server_bind;
-                #[cfg(feature = "profiling-tokio-console")]
-                eprintln!("   TokioConsole serve listen on: \"{}://{}\"", "http", server_addr);
-            }
-            if config.mgmt.pyroscope.enabled {
-                #[cfg(feature = "profiling-pyroscope")]
-                let server_url = &config.mgmt.pyroscope.server_url;
-                #[cfg(feature = "profiling-pyroscope")]
-                eprintln!("     Pyroscope agent connect to: \"{}\"", server_url);
-            }
-            if config.mgmt.otel.enabled {
-                let endpoint = &config.mgmt.otel.endpoint;
-                eprintln!("          Otel agent connect to: \"{}\"", endpoint);
-            }
-        }
-        if verbose {
-            let config_json = serde_json::to_string(&config.inner).unwrap_or_default();
-            eprintln!("Configuration loaded: {}", config_json);
-        }
-        eprintln!("");
     }
 }

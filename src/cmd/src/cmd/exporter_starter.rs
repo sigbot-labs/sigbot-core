@@ -24,33 +24,34 @@ use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::mgmt::apm;
-use sigbot_datafeed::server::datafeed_ingestor::SigbotDatafeedIngestor;
-use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
+use sigbot_exporter::server::exporter_server::SigbotExporterServer;
+use sigbot_types::modules::exporter::ExporterMgrProvider;
 use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
 
-pub struct SigbotDatafeedIngestorStarter {}
+pub struct SigbotExporterManagerStarter {}
 
-impl SigbotDatafeedIngestorStarter {
-    pub const COMMAND_NAME: &'static str = "datafeed";
+impl SigbotExporterManagerStarter {
+    pub const COMMAND_NAME: &'static str = "exporter";
 
     // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
     pub const ASCII_NAME: &'static str = r#"
- ____              __             ____                  __     
-/\  _`\           /\ \__         /\  _`\               /\ \    
-\ \ \/\ \     __  \ \ ,_\    __  \ \ \L\_\ __     __   \_\ \   
- \ \ \ \ \  /'__`\ \ \ \/  /'__`\ \ \  _\/'__`\ /'__`\ /'_` \  
-  \ \ \_\ \/\ \L\.\_\ \ \_/\ \L\.\_\ \ \/\  __//\  __//\ \L\ \ 
-   \ \____/\ \__/.\_\\ \__\ \__/.\_\\ \_\ \____\ \____\ \___,_\
-    \/___/  \/__/\/_/ \/__/\/__/\/_/ \/_/\/____/\/____/\/__,_ /
-                                                                         
-                                        (Sigbot Datafeed Runner)
+     ____                                  __                   
+    /\  _`\                               /\ \__                
+    \ \ \L\_\  __  _  _____     ___   _ __\ \ ,_\    __   _ __  
+     \ \  _\L /\ \/'\/\ '__`\  / __`\/\`'__\ \ \/  /'__`\/\`'__\
+      \ \ \L\ \/>  </\ \ \L\ \/\ \L\ \ \ \/ \ \ \_/\  __/\ \ \/ 
+       \ \____//\_/\_\\ \ ,__/\ \____/\ \_\  \ \__\ \____\\ \_\ 
+        \/___/ \//\/_/ \ \ \/  \/___/  \/_/   \/__/\/____/ \/_/ 
+                        \ \_\                                   
+                         \/_/                                    
+                                     (Sigbot Exporter Manager)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Datafeed Ingestor.")
+            .about("Run Sigbot tenantization Exporter Manager")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")
@@ -66,26 +67,25 @@ impl SigbotDatafeedIngestorStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("DATAFEED_PROVIDERS")
+                Arg::new("EXPORTER_MANAGER_PROVIDER")
                     .short('p')
-                    .long("datafeed-providers")
+                    .long("exporter-manager-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(
-                        "The providers of multi Datafeeds separated by commas. (supported are: {}, {}, {})",
-                        DatafeedProvider::BINANCE.as_str(),
-                        DatafeedProvider::TWITTER.as_str(),
-                        DatafeedProvider::TRUTHSOCIAL.as_str()
+                        "The provider of Exporter Manager. (supported are: {}, {})",
+                        ExporterMgrProvider::GOOGLESHEETS.as_str(),
+                        ExporterMgrProvider::KAFKA.as_str(),
                     ))
-                    .default_value(DatafeedProvider::BINANCE.as_str()),
+                    .default_value(ExporterMgrProvider::GOOGLESHEETS.as_str()),
             )
             .arg(
-                Arg::new("DATAFEED_CONFIGURATION")
+                Arg::new("EXPORTER_MANAGER_CONFIGURATION")
                     .short('c')
-                    .long("datafeed-configuration")
+                    .long("exporter-manager-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(3)
-                    .help("The configuration of Datafeed. (base64 encoded JSON string)"),
+                    .help("The configuration of Exporter Manager. (base64 encoded JSON string)"),
             )
     }
 
@@ -93,7 +93,7 @@ impl SigbotDatafeedIngestorStarter {
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default(get_config().logging.is_human_mode());
 
-        print_banner(verbose, Self::ASCII_NAME, Some("DataFeed Server listen on"));
+        print_banner(verbose, Self::ASCII_NAME, None);
 
         apm::init().await;
 
@@ -105,10 +105,10 @@ impl SigbotDatafeedIngestorStarter {
 
         Self::start(matches, verbose).await;
 
-        signal_handle.await.unwrap();
+        signal_handle.await.expect("Failed to start Management server.");
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotDatafeedIngestor::startup(matches, verbose).await;
+        SigbotExporterServer::startup(matches, verbose).await;
     }
 }

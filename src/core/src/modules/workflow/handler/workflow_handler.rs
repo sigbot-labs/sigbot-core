@@ -44,8 +44,10 @@ pub trait IWorkflowInfoHandler: Send + Sync {
 
     async fn delete(&self, param: DeleteWorkflowRequest) -> Result<u64, Error>;
 
+    // TODO: should be support the sharding jobs (simliar to apache elastic job) for huge workflows parallel run.
     async fn find_start_jobs(&self) -> Result<Vec<WorkflowInfo>, Error>;
 
+    // TODO: should be support the sharding jobs (simliar to apache elastic job) for huge of workflows parallel run.
     async fn find_stop_jobs(&self) -> Result<Vec<WorkflowInfo>, Error>;
 
     async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64, Error>;

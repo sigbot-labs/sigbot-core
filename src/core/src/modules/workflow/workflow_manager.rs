@@ -365,7 +365,7 @@ impl SigbotWorkflowManager {
                     );
                 }
 
-                // Create and register jobs for all nodes before calling handler
+                // Register jobs for all nodes before calling handler
                 let mut registered_jobs = Vec::new();
                 let manager0 = Arc::new(self.to_owned());
                 for node_id in &node_ids_to_start {

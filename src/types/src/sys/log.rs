@@ -25,8 +25,8 @@ use sqlx::postgres::PgRow;
 use sqlx::{sqlite::SqliteRow, FromRow, Row};
 use validator::Validate;
 
-/// Generic log entry structure for logging
-/// This structure is designed to be reusable across different projects
+// --- Log Entity. ---
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct LogInfo {
     #[serde(flatten)]
@@ -89,7 +89,7 @@ impl<'r> FromRow<'r, PgRow> for LogInfo {
     }
 }
 
-// --- Log operation models(append, tail, search, stats) ---
+// --- Log models(append, tail, search, stats) ---
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Validate, utoipa::ToSchema, MakeStructWith)]
 #[excludes(id)]
@@ -218,4 +218,69 @@ impl StatsLogResponse {
     pub fn new(stats: LogStats) -> Self {
         StatsLogResponse { stats }
     }
+}
+
+// --- Log Manager types ---
+
+use crate::modules::messager::messager::MessagerConfiguration;
+use anyhow::Context;
+use std::{collections::HashMap, sync::Arc};
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LogManagerArgument {
+    pub messager_config: Arc<MessagerConfiguration>,
+    pub properties: Option<HashMap<String, String>>,
+    pub secrets: Option<HashMap<String, String>>,
+}
+
+impl LogManagerArgument {
+    pub fn from_json(json: &str) -> Result<Self, anyhow::Error> {
+        serde_json::from_str(json).context(format!("Failed to parse log manager info from JSON. - {}", json))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
+pub enum LogMgrProvider {
+    DEFAULT,
+}
+
+impl LogMgrProvider {
+    pub fn of(provider: &str) -> Result<LogMgrProvider, anyhow::Error> {
+        match provider.to_uppercase().as_str() {
+            "DEFAULT" => Ok(LogMgrProvider::DEFAULT),
+            _ => Err(anyhow::anyhow!("Unsupported the log manager provider: {}", provider)),
+        }
+    }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            LogMgrProvider::DEFAULT => "DEFAULT",
+        }
+    }
+}
+
+// --- Workflow log message types ---
+
+/// Log entry structure from messager (EMQX)
+/// Published to TOPIC_WF_LOG by workflow nodes
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkflowLogEntry {
+    pub workflow_id: String,
+    pub node_id: Option<String>,
+    pub content: Vec<String>,
+}
+
+/// WebSocket message for log subscription
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LogSubscribeMessage {
+    pub action: String, // "subscribe" or "unsubscribe"
+    pub workflow_id: String,
+}
+
+/// WebSocket message for log data streaming
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LogStreamMessage {
+    pub workflow_id: String,
+    pub node_id: Option<String>,
+    pub content: Vec<String>,
 }

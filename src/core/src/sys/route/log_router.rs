@@ -20,46 +20,23 @@
 
 use crate::context::state::SigbotState;
 use crate::sys::handler::log_handler::{ILogHandler, LogHandler};
-use crate::util::web::ValidatedJson;
 use axum::{
     extract::{Json, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use sigbot_types::sys::log::{
-    AppendLogRequest, AppendLogResponse, SearchLogRequest, SearchLogResponse, StatsLogRequest, StatsLogResponse,
-    TailLogRequest, TailLogResponse,
+    SearchLogRequest, SearchLogResponse, StatsLogRequest, StatsLogResponse, TailLogRequest, TailLogResponse,
 };
 use sigbot_types::PageRequest;
 
 pub fn init() -> Router<SigbotState> {
     Router::new()
-        .route("/sys/log/append", post(handle_append_log))
         .route("/sys/log/tail", get(handle_tail_log))
         .route("/sys/log/search", get(handle_search_log))
         .route("/sys/log/stats", get(handle_stats_log))
-}
-
-#[utoipa::path(
-    post,
-    path = "/sys/log/append",
-    request_body = AppendLogRequest,
-    responses((status = 200, description = "Append log entry.", body = AppendLogResponse)),
-    tag = "Log"
-)]
-async fn handle_append_log(
-    State(state): State<SigbotState>,
-    ValidatedJson(param): ValidatedJson<AppendLogRequest>,
-) -> impl IntoResponse {
-    match get_log_handler(&state).append(param).await {
-        Ok(id) => Ok(Json(AppendLogResponse::new(id))),
-        Err(e) => {
-            common_telemetry::error!("Failed to append log: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
 }
 
 #[utoipa::path(

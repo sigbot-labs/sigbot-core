@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::cmd::internal::banner::print_banner;
 use crate::cmd::internal::management_server::SigbotManagementServer;
 use axum::{
     body::Body,
@@ -29,19 +30,18 @@ use axum::{
 use clap::Command;
 use common_telemetry::{error, info};
 use sigbot_core::{
-    config::{
-        config::{get_config, GIT_BUILD_DATE, GIT_COMMIT_HASH, GIT_VERSION},
-        swagger,
-    },
+    config::{config::get_config, swagger},
     context::state::SigbotState,
     mgmt::{apm, health::init as health_router},
     sys::route::{
         auth_router::{auth_middleware, init as auth_router},
+        log_router::init as log_router,
+        tenant_router::init as tenant_router,
         user_router::init as user_router,
     },
 };
 use sigbot_utils::{panics::PanicHelper, tokio_signal::tokio_graceful_shutdown_handler};
-use std::{env, future::Future, pin::Pin};
+use std::{future::Future, pin::Pin};
 use tokio::{net::TcpListener, sync::oneshot};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -53,6 +53,19 @@ pub type MiddlewareFunction =
 impl SigbotAPIServer {
     pub const COMMAND_NAME: &'static str = "api";
 
+    // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
+    pub const ASCII_NAME: &'static str = r#"
+ ______                  ____                                           
+/\  _  \          __    /\  _`\                                         
+\ \ \L\ \  _____ /\_\   \ \,\L\_\     __   _ __   __  __     __   _ __  
+ \ \  __ \/\ '__`\/\ \   \/_\__ \   /'__`\/\`'__\/\ \/\ \  /'__`\/\`'__\
+  \ \ \/\ \ \ \L\ \ \ \    /\ \L\ \/\  __/\ \ \/ \ \ \_/ |/\  __/\ \ \/ 
+   \ \_\ \_\ \ ,__/\ \_\   \ `\____\ \____\\ \_\  \ \___/ \ \____\\ \_\ 
+    \/_/\/_/\ \ \/  \/_/    \/_____/\/____/ \/_/   \/__/   \/____/ \/_/ 
+             \ \_\                                                      
+              \/_/                                     (Sigbot API Server)
+ "#;
+
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME).about("Run Sigbot platformization API Server.")
     }
@@ -61,7 +74,7 @@ impl SigbotAPIServer {
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) -> () {
         PanicHelper::set_hook_default(get_config().logging.is_human_mode());
 
-        Self::print_banner(verbose);
+        print_banner(verbose, Self::ASCII_NAME, None);
 
         apm::init().await;
 
@@ -88,7 +101,11 @@ impl SigbotAPIServer {
 
         // 1. Merge the biz modules routes.
         info!("Register Web server app routers ...");
-        let mut register_router = Router::new().merge(auth_router()).merge(user_router());
+        let mut register_router = Router::new()
+            .merge(auth_router())
+            .merge(user_router())
+            .merge(tenant_router())
+            .merge(log_router());
 
         // 1.1 Merge the addition router.
         register_router = if let Some(addition_router) = addition_router {
@@ -181,64 +198,6 @@ impl SigbotAPIServer {
                 panic!("Error starting API Server: {}", e);
             }
         }
-    }
-
-    fn print_banner(verbose: bool) {
-        let config = get_config();
-        // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
-        let ascii_name = r#"
- ______                  ____                                           
-/\  _  \          __    /\  _`\                                         
-\ \ \L\ \  _____ /\_\   \ \,\L\_\     __   _ __   __  __     __   _ __  
- \ \  __ \/\ '__`\/\ \   \/_\__ \   /'__`\/\`'__\/\ \/\ \  /'__`\/\`'__\
-  \ \ \/\ \ \ \L\ \ \ \    /\ \L\ \/\  __/\ \ \/ \ \ \_/ |/\  __/\ \ \/ 
-   \ \_\ \_\ \ ,__/\ \_\   \ `\____\ \____\\ \_\  \ \___/ \ \____\\ \_\ 
-    \/_/\/_/\ \ \/  \/_/    \/_____/\/____/ \/_/   \/__/   \/____/ \/_/ 
-             \ \_\                                                      
-              \/_/                                     (Sigbot API Server)
- "#;
-        eprintln!("");
-        eprintln!("{}", ascii_name);
-        eprintln!("                Program Version: {:?}", GIT_VERSION);
-        eprintln!(
-            "                Package Version: {:?}",
-            env!("CARGO_PKG_VERSION").to_string()
-        );
-        eprintln!("                Git Commit Hash: {:?}", GIT_COMMIT_HASH);
-        eprintln!("                 Git Build Date: {:?}", GIT_BUILD_DATE);
-        let path = env::var("SIGBOT_CFG_PATH").unwrap_or("none".to_string());
-        eprintln!("        Configuration file path: {:?}", path);
-        eprintln!(
-            "            Web Serve listen on: \"{}://{}:{}\"",
-            "http", &config.server.host, config.server.port
-        );
-        if config.mgmt.enabled {
-            eprintln!(
-                "     Management serve listen on: \"{}://{}:{}\"",
-                "http", config.mgmt.host, config.mgmt.port
-            );
-            if config.mgmt.tokio_console.enabled {
-                #[cfg(feature = "profiling-tokio-console")]
-                let server_addr = &config.mgmt.tokio_console.server_bind;
-                #[cfg(feature = "profiling-tokio-console")]
-                eprintln!("   TokioConsole serve listen on: \"{}://{}\"", "http", server_addr);
-            }
-            if config.mgmt.pyroscope.enabled {
-                #[cfg(feature = "profiling-pyroscope")]
-                let server_url = &config.mgmt.pyroscope.server_url;
-                #[cfg(feature = "profiling-pyroscope")]
-                eprintln!("     Pyroscope agent connect to: \"{}\"", server_url);
-            }
-            if config.mgmt.otel.enabled {
-                let endpoint = &config.mgmt.otel.endpoint;
-                eprintln!("          Otel agent connect to: \"{}\"", endpoint);
-            }
-        }
-        if verbose {
-            let config_json = serde_json::to_string(&config.inner).unwrap_or_default();
-            eprintln!("Configuration loaded: {}", config_json);
-        }
-        eprintln!("");
     }
 }
 

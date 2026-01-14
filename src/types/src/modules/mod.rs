@@ -24,6 +24,7 @@ use sigbot_utils::base64s;
 pub mod backtest;
 pub mod datafeed;
 pub mod exchange;
+pub mod exporter;
 pub mod messager;
 pub mod notification;
 pub mod order;
