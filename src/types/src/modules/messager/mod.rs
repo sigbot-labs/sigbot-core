@@ -43,3 +43,11 @@ pub const TOPIC_WF_NOTIFY_MESSAGE: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID
 /// This topic for log service to receive workflow's log messages.
 /// phy-data-flow: from any components(api-server, strategy-runner, order-manager, wallet-manager, etc.) to log-service.
 pub const TOPIC_WF_LOG: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/{NODE_ID}/log";
+
+/// This topic for strategy runner to receive hyperparameter updates from evaluator.
+/// phy-data-flow: from evaluator to strategy-runner.
+pub const TOPIC_WF_HYPERPARAMETER_UPDATE: &str = "/internal/v1/{TENANT_ID}/{WORKFLOW_ID}/hyperparameter/update";
+
+/// This topic for evaluator to receive market data trigger events.
+/// phy-data-flow: from datafeed-ingestor or market data rules to evaluator.
+pub const TOPIC_EVALUATOR_TRIGGER: &str = "/internal/v1/{TENANT_ID}/evaluator/trigger";

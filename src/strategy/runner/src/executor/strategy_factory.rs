@@ -24,10 +24,7 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
-use sigbot_types::modules::{
-    decode_arg_config,
-    strategy::{strategy::StrategyProvider, SigbotStrategyArgument},
-};
+use sigbot_types::modules::strategy::{strategy::StrategyProvider, SigbotStrategyArgument};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
