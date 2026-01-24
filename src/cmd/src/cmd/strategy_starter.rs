@@ -74,9 +74,8 @@ impl SigbotStrategyRunnerStarter {
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(
-                        "The strategy runner provider to use. (supported are: {}, {})",
+                        "The strategy runner provider to use. (supported are: {})",
                         StrategyProvider::PYCODE.as_str(),
-                        StrategyProvider::LLM.as_str(),
                     ))
                     .default_value(StrategyProvider::PYCODE.as_str()),
             )

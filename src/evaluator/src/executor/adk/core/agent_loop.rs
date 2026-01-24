@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::core::agent_base::{ISigbotAgent, SigbotAgentContext, SigbotAgentResult};
+use crate::executor::adk::core::agent_base::{ISigbotAgent, SigbotAgentContext, SigbotAgentResult};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, error, info, warn};

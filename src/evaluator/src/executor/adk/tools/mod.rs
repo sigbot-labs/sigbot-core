@@ -35,24 +35,24 @@ use std::sync::Arc;
 
 /// Register all default tools for the evaluator agents
 pub fn register_default_tools() -> BasicToolset {
-    let mut toolset = BasicToolset::new("evaluator_tools");
+    let tools: Vec<Arc<dyn Tool>> = vec![
+        // Register Binance tools
+        Arc::new(BinanceMarketDataTool::new()),
+        Arc::new(BinanceKlineTool::new()),
+        Arc::new(BinanceVolumeTool::new()),
+        // Register Twitter tools
+        Arc::new(TwitterSearchTool::new()),
+        Arc::new(TwitterUserTool::new()),
+        Arc::new(TwitterTrendsTool::new()),
+    ];
 
-    // Register Binance tools
-    toolset.add_tool(Arc::new(BinanceMarketDataTool::new()) as Arc<dyn Tool>);
-    toolset.add_tool(Arc::new(BinanceKlineTool::new()) as Arc<dyn Tool>);
-    toolset.add_tool(Arc::new(BinanceVolumeTool::new()) as Arc<dyn Tool>);
-
-    // Register Twitter tools
-    toolset.add_tool(Arc::new(TwitterSearchTool::new()) as Arc<dyn Tool>);
-    toolset.add_tool(Arc::new(TwitterUserTool::new()) as Arc<dyn Tool>);
-    toolset.add_tool(Arc::new(TwitterTrendsTool::new()) as Arc<dyn Tool>);
-
-    toolset
+    BasicToolset::new("evaluator_tools".to_string(), tools)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adk_core::Toolset; // Import Toolset trait
 
     #[test]
     fn test_register_default_tools() {

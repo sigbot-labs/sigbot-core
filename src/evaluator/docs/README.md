@@ -73,8 +73,8 @@ The evaluator supports dual triggering:
 ```bash
 sigbot evaluator \
   --messager-provider=mqtt \
-  --evaluator-manager-provider=default \
-  --evaluator-manager-configuration=<base64_encoded_json>
+  --evaluator-runner-provider=default \
+  --evaluator-runner-configuration=<base64_encoded_json>
 ```
 
 ### Configuration

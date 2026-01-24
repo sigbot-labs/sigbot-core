@@ -18,6 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod config;
-pub mod executor;
-pub mod server;
+pub mod agents;
+pub mod core;
+pub mod tools;

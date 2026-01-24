@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::executor::{strategy_llm::SigbotLLMStrategyExecutor, strategy_pycode::SigbotPythonStrategyExecutor};
+use crate::executor::strategy_pycode::SigbotPythonStrategyExecutor;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
@@ -81,15 +81,6 @@ impl SigbotStrategyExecutorFactory {
                     .register0(executor_id.clone(), py_executor.clone())
                     .map_err(|e| Error::msg(format!("Failed to register PYCODE executor: {}", e)))?;
                 py_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
-            }
-            StrategyProvider::LLM => {
-                let llm_executor = SigbotLLMStrategyExecutor::new(argument).await;
-                Self::get()
-                    .write()
-                    .unwrap()
-                    .register0(executor_id.clone(), llm_executor.clone())
-                    .map_err(|e| Error::msg(format!("Failed to register LLM executor: {}", e)))?;
-                llm_executor as Arc<dyn ISigbotStrategyExecutor + Send + Sync>
             }
         };
 

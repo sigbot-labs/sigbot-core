@@ -31,11 +31,7 @@ use std::sync::Arc;
 
 /// Helper to create a basic toolset from a vector of tools
 pub fn create_toolset(name: impl Into<String>, tools: Vec<Arc<dyn Tool>>) -> BasicToolset {
-    let mut toolset = BasicToolset::new(name);
-    for tool in tools {
-        toolset.add_tool(tool);
-    }
-    toolset
+    BasicToolset::new(name, tools)
 }
 
 #[cfg(test)]

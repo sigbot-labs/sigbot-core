@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
+// SPDX-LICENSE-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
 // Copyleft (c) 2024 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
@@ -18,6 +18,18 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod config;
-pub mod executor;
-pub mod server;
+/// Evaluator module configuration
+///
+/// Configuration has been moved to src/core/src/config/config.rs (EvaluatorProperties)
+/// Access via get_tenant_config().services.evaluator
+///
+/// Example:
+/// ```rust
+/// use sigbot_core::config::config_tenant::get_tenant_config;
+/// let config = get_tenant_config();
+/// let cron = &config.services.evaluator.inner.cron;
+/// let data_window = config.services.evaluator.data_window_hours;
+/// ```
+
+#[cfg(test)]
+mod tests {}

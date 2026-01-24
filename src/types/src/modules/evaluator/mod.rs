@@ -23,41 +23,19 @@ use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
+pub mod evaluator;
 pub mod events;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct SigbotEvaluatorManagerArgument {
+pub struct SigbotEvaluatorRunnerArgument {
     pub messager_config: Arc<MessagerConfiguration>,
     pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
 }
 
-impl SigbotEvaluatorManagerArgument {
+impl SigbotEvaluatorRunnerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
         serde_json::from_str(json).context(format!("Failed to parse evaluator manager info from JSON. - {}", json))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub enum EvaluatorMgrProvider {
-    DEFAULT,
-}
-
-impl EvaluatorMgrProvider {
-    pub fn of(provider: &str) -> Result<EvaluatorMgrProvider, anyhow::Error> {
-        match provider.to_uppercase().as_str() {
-            "DEFAULT" => Ok(EvaluatorMgrProvider::DEFAULT),
-            _ => Err(anyhow::anyhow!(
-                "Unsupported the evaluator manager provider: {}",
-                provider
-            )),
-        }
-    }
-
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            EvaluatorMgrProvider::DEFAULT => "DEFAULT",
-        }
     }
 }
 

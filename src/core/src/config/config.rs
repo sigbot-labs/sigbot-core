@@ -482,6 +482,8 @@ pub struct ServicesProperties {
     pub deployer: DeployerProperties,
     #[serde(rename = "exchanges")]
     pub exchanges: ExchangeProperties,
+    #[serde(rename = "evaluator", default = "EvaluatorProperties::default")]
+    pub evaluator: EvaluatorProperties,
     #[serde(rename = "backtest")]
     pub backtest: BacktestProperties,
 }
@@ -631,6 +633,20 @@ pub struct BinanceProperties {
     pub coin_market_api_mainnet_endpoint: String,
     #[serde(rename = "coin-market-ws-mainnet-endpoint")]
     pub coin_market_ws_mainnet_endpoint: String,
+}
+
+// Evaluator Properties.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EvaluatorProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
+    /// Data fetch window for time-driven scans (in hours)
+    #[serde(rename = "data-window-hours")]
+    pub data_window_hours: i64,
+    /// Execution timeout (in seconds)
+    #[serde(rename = "execution-timeout-secs")]
+    pub execution_timeout_secs: u64,
 }
 
 // Backtest Properties.
@@ -963,6 +979,7 @@ impl Default for ServicesProperties {
     fn default() -> Self {
         ServicesProperties {
             exchanges: ExchangeProperties::default(),
+            evaluator: EvaluatorProperties::default(),
             backtest: BacktestProperties::default(),
             deployer: DeployerProperties::default(),
         }
@@ -974,6 +991,19 @@ impl Default for ScheduledPropertiesBase {
         ScheduledPropertiesBase {
             cron: String::from("0/30 * * * * * *"), // Every half minute
             channel_size: 200,
+        }
+    }
+}
+
+impl Default for EvaluatorProperties {
+    fn default() -> Self {
+        EvaluatorProperties {
+            inner: ScheduledPropertiesBase {
+                cron: String::from("0/30 * * * * *"), // Every 30 seconds
+                channel_size: 5,
+            },
+            data_window_hours: 4,        // Last 4 hours of data
+            execution_timeout_secs: 300, // 5 minutes
         }
     }
 }

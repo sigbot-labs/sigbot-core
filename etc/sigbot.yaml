@@ -220,6 +220,8 @@ services:
         replicas: 1
   # The tenant messager component hyperparameters and default configuration.
   messager: {}
+  # The tenant logservice component hyperparameters and default configuration.
+  logservice: {}
   # The tenant exchange component hyperparameters and default configuration.
   exchanges:
     binance:
@@ -249,10 +251,21 @@ services:
       coin-market-ws-mainnet-endpoint: wss://ws-dapi.binance.com/ws-dapi/v1
   # The tenant datafeed component hyperparameters and default configuration.
   datafeed: {}
-  # The tenant logservice component hyperparameters and default configuration.
-  logservice: {}
   # The tenant evaluator component hyperparameters and default configuration.
-  evaluator: {}
+  # Evaluator runner handles ANALYSIS stage nodes with MAS (Multi-Agent System) provider
+  # for LLM-based dynamic market analysis and hyperparameter calculation
+  evaluator:
+    # Cron expression for time-driven evaluation scanning (every 30 seconds)
+    # Controls how frequently the evaluator scans TimescaleDB for latest market data
+    cron: "0/30 * * * * *"
+    # Channel size for the cron scheduler (internal queue size for scheduled jobs)
+    channel-size: 5
+    # Data fetch window for time-driven scans (in hours)
+    # Controls how much historical data to fetch from TimescaleDB
+    data-window-hours: 4
+    # Execution timeout for multi-agent orchestrator (in seconds)
+    # Prevents long-running evaluations from blocking the system
+    execution-timeout-secs: 300
   # The tenant strategy component hyperparameters and default configuration.
   strategy: {}
   # The tenant exporter component hyperparameters and default configuration.

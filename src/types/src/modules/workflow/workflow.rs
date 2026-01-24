@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::modules::datafeed::datafeed::DatafeedProvider;
+use crate::modules::evaluator::evaluator::EvaluatorProvider;
 use crate::modules::notification::notification::NotificationProvider;
 use crate::modules::order::OrderMgrProvider;
 use crate::modules::strategy::strategy::StrategyProvider;
@@ -250,9 +251,11 @@ pub struct WorkflowConnectionInfo {
 pub enum WorkflowStageWrapper {
     /// Datafeed provider (for INPUT stage)
     Datafeed(DatafeedProvider),
-    /// Strategy provider (for PROCESS stage)
+    /// Evaluator provider (for ANALYSIS stage - MAS/Multi-Agent System)
+    Evaluator(EvaluatorProvider),
+    /// Strategy provider (for ANALYSIS stage - PYCODE)
     Strategy(StrategyProvider),
-    /// Order manager provider (for OUTPUT stage)
+    /// Order manager provider (for TRANSACTION stage)
     OrderMgr(OrderMgrProvider),
     /// Notification provider (for POST stage)
     Notification(NotificationProvider),
@@ -264,6 +267,7 @@ impl WorkflowStageWrapper {
     pub fn as_str(&self) -> String {
         match self {
             WorkflowStageWrapper::Datafeed(p) => p.as_str().to_string(),
+            WorkflowStageWrapper::Evaluator(p) => p.as_str().to_string(),
             WorkflowStageWrapper::Strategy(p) => p.as_str().to_string(),
             WorkflowStageWrapper::OrderMgr(p) => p.as_str().to_string(),
             WorkflowStageWrapper::Notification(p) => p.as_str().to_string(),
@@ -280,8 +284,12 @@ impl WorkflowStageWrapper {
                     None
                 }
             }
-            "EVALUATION" => {
-                if let Ok(provider) = StrategyProvider::of(provider_str) {
+            "EVALUATION" | "ANALYSIS" => {
+                // Try Evaluator provider first (MAS)
+                if let Ok(provider) = EvaluatorProvider::of(provider_str) {
+                    Some(WorkflowStageWrapper::Evaluator(provider))
+                // Then try Strategy provider (PYCODE)
+                } else if let Ok(provider) = StrategyProvider::of(provider_str) {
                     Some(WorkflowStageWrapper::Strategy(provider))
                 } else {
                     None

@@ -24,8 +24,8 @@ use clap::{Arg, Command};
 use common_telemetry::info;
 use sigbot_core::config::config::get_config;
 use sigbot_core::mgmt::apm;
-use sigbot_evaluator::evaluator_runner::SigbotEvaluatorRunner;
-use sigbot_types::modules::evaluator::EvaluatorMgrProvider;
+use sigbot_evaluator::server::evaluator_runner::SigbotEvaluatorRunner;
+use sigbot_types::modules::evaluator::evaluator::EvaluatorProvider;
 use sigbot_types::modules::messager::messager::MessagerProvider;
 use sigbot_utils::panics::PanicHelper;
 use tokio::sync::oneshot;
@@ -45,7 +45,7 @@ impl SigbotEvaluatorRunnerStarter {
    \ \____/\ \___/ \ \__/.\_\/\____\\ \____/\ \__/.\_\\ \__\ \____/\ \_\ 
     \/___/  \/__/   \/__/\/_/\/____/ \/___/  \/__/\/_/ \/__/\/___/  \/_/ 
 
-                                                (Sigbot Evaluator)
+                                                (Sigbot Evaluator Runner)
  "#;
 
     pub fn build() -> Command {
@@ -66,24 +66,24 @@ impl SigbotEvaluatorRunnerStarter {
                     .default_value(MessagerProvider::LOCAL.as_str()),
             )
             .arg(
-                Arg::new("EVALUATOR_MANAGER_PROVIDER")
+                Arg::new("EVALUATOR_RUNNER_PROVIDER")
                     .short('p')
-                    .long("evaluator-manager-provider")
+                    .long("evaluator-runner-provider")
                     .value_parser(clap::value_parser!(String))
                     .display_order(2)
                     .help(format!(
-                        "The provider of Evaluator Manager. (supported are: {})",
-                        EvaluatorMgrProvider::DEFAULT.as_str()
+                        "The provider of Evaluator Runner. (supported are: {})",
+                        EvaluatorProvider::MAS.as_str()
                     ))
-                    .default_value(EvaluatorMgrProvider::DEFAULT.as_str()),
+                    .default_value(EvaluatorProvider::MAS.as_str()),
             )
             .arg(
-                Arg::new("EVALUATOR_MANAGER_CONFIGURATION")
+                Arg::new("EVALUATOR_RUNNER_CONFIGURATION")
                     .short('c')
-                    .long("evaluator-manager-configuration")
+                    .long("evaluator-runner-configuration")
                     .value_parser(clap::value_parser!(String))
                     .display_order(3)
-                    .help("The configuration of Evaluator Manager. (base64 encoded JSON string)"),
+                    .help("The configuration of Evaluator Runner. (base64 encoded JSON string)"),
             )
     }
 
