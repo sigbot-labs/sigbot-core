@@ -18,5 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod agent;
+pub mod agent_base;
+pub mod agent_loop;
+pub mod agent_tool;
 pub mod orchestrator;
+
+// Re-export commonly used types
+pub use agent_loop::{AgentRule, FailureCondition, SuccessCondition};

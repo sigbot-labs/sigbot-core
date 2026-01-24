@@ -192,8 +192,11 @@ llm:
       You must also providea list of rules that were not used to determine the result.
 
 services:
-  # Deploy configuration for tenant-level component deployment
+  # Deploy configuration for tenant-level component deployment.
   deployer:
+    # e.g: export SIGBOT__SERVICES__DEPLOYER__CRON="0 * * * * *"
+    cron: "0 * * * * *"
+    channel-size: 200
     images:
       postgresql: "postgres:16"
       emqx: "emqx/emqx:latest"
@@ -215,30 +218,9 @@ services:
       timescaledb:
         mode: "standalone" # Options: standalone|cluster
         replicas: 1
-  # The controller components super parameters and default configuration.
-  controllers:
-    datafeed:
-      name: "datafeed"
-      enabled: true
-      # e.g: export SIGBOT__SERVICES__CONTROLLERS[0]__CRON="0 * * * * *"
-      cron: "0 * * * * *"
-      channel-size: 200
-    messager:
-      name: "messager"
-      enabled: true
-      cron: "0 * * * * *"
-      channel-size: 200
-    notification:
-      name: "notification"
-      enabled: true
-      cron: "0 * * * * *"
-      channel-size: 200
-    strategy:
-      name: "strategy"
-      enabled: true
-      cron: "0 * * * * *"
-      channel-size: 200
-  # The exchange components super parameters and default configuration.
+  # The tenant messager component hyperparameters and default configuration.
+  messager: {}
+  # The tenant exchange component hyperparameters and default configuration.
   exchanges:
     binance:
       # Spot
@@ -265,7 +247,23 @@ services:
       # Coin-derivatives-market
       coin-market-api-mainnet-endpoint: https://dapi.binance.com/dapi/v1
       coin-market-ws-mainnet-endpoint: wss://ws-dapi.binance.com/ws-dapi/v1
-  # The backtest components super parameters and default configuration.
+  # The tenant datafeed component hyperparameters and default configuration.
+  datafeed: {}
+  # The tenant logservice component hyperparameters and default configuration.
+  logservice: {}
+  # The tenant evaluator component hyperparameters and default configuration.
+  evaluator: {}
+  # The tenant strategy component hyperparameters and default configuration.
+  strategy: {}
+  # The tenant exporter component hyperparameters and default configuration.
+  exporter: {}
+  # The tenant order manager component hyperparameters and default configuration.
+  order: {}
+  # The tenant wallet manager component hyperparameters and default configuration.
+  wallet: {}
+  # The tenant notification component hyperparameters and default configuration.
+  notification: {}
+  # The tenant backtest component hyperparameters and default configuration.
   backtest:
     name: "defaultVerifier"
     enabled: true

@@ -482,8 +482,6 @@ pub struct ServicesProperties {
     pub deployer: DeployerProperties,
     #[serde(rename = "exchanges")]
     pub exchanges: ExchangeProperties,
-    #[serde(rename = "controllers")]
-    pub controllers: ControllerProperties,
     #[serde(rename = "backtest")]
     pub backtest: BacktestProperties,
 }
@@ -492,12 +490,22 @@ pub struct ServicesProperties {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DeployerProperties {
+    #[serde(flatten)]
+    pub inner: ScheduledPropertiesBase,
     #[serde(default = "DeployImagesProperties::default")]
     pub images: DeployImagesProperties,
     #[serde(default = "DeployNetworkProperties::default")]
     pub network: DeployNetworkProperties,
     #[serde(default = "DeployMiddlewareProperties::default")]
     pub middleware: DeployMiddlewareProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScheduledPropertiesBase {
+    #[serde(rename = "cron")]
+    pub cron: String,
+    #[serde(rename = "channel-size")]
+    pub channel_size: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -625,57 +633,7 @@ pub struct BinanceProperties {
     pub coin_market_ws_mainnet_endpoint: String,
 }
 
-// Controller Properties. - The controller components super parameters and default configuration.
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ControllerProperties {
-    #[serde(rename = "datafeed", default = "DatafeedControllerProperties::default")]
-    pub datafeed: DatafeedControllerProperties,
-    #[serde(rename = "messager", default = "MessagerControllerProperties::default")]
-    pub messager: MessagerControllerProperties,
-    #[serde(rename = "notification", default = "NotificationControllerProperties::default")]
-    pub notification: NotificationControllerProperties,
-    #[serde(rename = "strategy", default = "StrategyControllerProperties::default")]
-    pub strategy: StrategyControllerProperties,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ScheduledPropertiesBase {
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "enabled")]
-    pub enabled: bool,
-    #[serde(rename = "cron")]
-    pub cron: String,
-    #[serde(rename = "channel-size")]
-    pub channel_size: usize,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DatafeedControllerProperties {
-    #[serde(flatten)]
-    pub inner: ScheduledPropertiesBase,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MessagerControllerProperties {
-    #[serde(flatten)]
-    pub inner: ScheduledPropertiesBase,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NotificationControllerProperties {
-    #[serde(flatten)]
-    pub inner: ScheduledPropertiesBase,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StrategyControllerProperties {
-    #[serde(flatten)]
-    pub inner: ScheduledPropertiesBase,
-}
-
-// Backtest Properties. - The backtest components super parameters and default configuration.
+// Backtest Properties.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BacktestProperties {
@@ -1005,9 +963,17 @@ impl Default for ServicesProperties {
     fn default() -> Self {
         ServicesProperties {
             exchanges: ExchangeProperties::default(),
-            controllers: ControllerProperties::default(),
             backtest: BacktestProperties::default(),
             deployer: DeployerProperties::default(),
+        }
+    }
+}
+
+impl Default for ScheduledPropertiesBase {
+    fn default() -> Self {
+        ScheduledPropertiesBase {
+            cron: String::from("0/30 * * * * * *"), // Every half minute
+            channel_size: 200,
         }
     }
 }
@@ -1055,60 +1021,6 @@ impl Default for BinanceProperties {
     }
 }
 
-impl Default for ControllerProperties {
-    fn default() -> Self {
-        ControllerProperties {
-            datafeed: DatafeedControllerProperties::default(),
-            messager: MessagerControllerProperties::default(),
-            notification: NotificationControllerProperties::default(),
-            strategy: StrategyControllerProperties::default(),
-        }
-    }
-}
-
-impl Default for ScheduledPropertiesBase {
-    fn default() -> Self {
-        ScheduledPropertiesBase {
-            name: String::from("default"),
-            enabled: true,
-            cron: String::from("0/30 * * * * * *"), // Every half minute
-            channel_size: 200,
-        }
-    }
-}
-
-impl Default for DatafeedControllerProperties {
-    fn default() -> Self {
-        DatafeedControllerProperties {
-            inner: ScheduledPropertiesBase::default(),
-        }
-    }
-}
-
-impl Default for MessagerControllerProperties {
-    fn default() -> Self {
-        MessagerControllerProperties {
-            inner: ScheduledPropertiesBase::default(),
-        }
-    }
-}
-
-impl Default for NotificationControllerProperties {
-    fn default() -> Self {
-        NotificationControllerProperties {
-            inner: ScheduledPropertiesBase::default(),
-        }
-    }
-}
-
-impl Default for StrategyControllerProperties {
-    fn default() -> Self {
-        StrategyControllerProperties {
-            inner: ScheduledPropertiesBase::default(),
-        }
-    }
-}
-
 impl Default for BacktestProperties {
     fn default() -> Self {
         BacktestProperties {
@@ -1122,6 +1034,7 @@ impl Default for BacktestProperties {
 impl Default for DeployerProperties {
     fn default() -> Self {
         DeployerProperties {
+            inner: ScheduledPropertiesBase::default(),
             images: DeployImagesProperties::default(),
             network: DeployNetworkProperties::default(),
             middleware: DeployMiddlewareProperties::default(),

@@ -17,6 +17,13 @@ sigbot-datafeed.workspace = true
 sigbot-messager.workspace = true
 sigbot-notification.workspace = true
 
+# ADK-Rust dependencies (standard agent framework)
+adk-core = "0.2.0"
+adk-agent = "0.2.0"
+adk-tool = "0.2.0"
+adk-model = "0.2.0"
+adk-runner = "0.2.0"
+
 # Thirdparty dependencies.
 axum.workspace = true
 hyper.workspace = true

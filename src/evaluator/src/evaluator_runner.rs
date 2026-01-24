@@ -19,13 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::agents::{
-    alpha_agent::SigbotAlphaAgent,
-    auditor_agent::SigbotAuditorAgent,
-    boot_agent::SigbotBootAgent,
+    alpha_agent::SigbotAlphaAgent, auditor_agent::SigbotAuditorAgent, boot_agent::SigbotBootAgent,
     loader_agent::SigbotLoaderAgent,
-    loop_agent::{AgentRule, SigbotLoopAgent},
 };
-use crate::core::agent::SigbotAgentContext;
+use crate::core::agent_base::SigbotAgentContext;
+use crate::core::agent_loop::{AgentRule, SigbotLoopAgent};
 use crate::core::orchestrator::SigbotOrchestrator;
 use anyhow::Error;
 use common_telemetry::{debug, error, info};
@@ -105,7 +103,7 @@ impl SigbotEvaluatorRunner {
         runner.start_cron_job(cron_expression).await;
 
         // Subscribe to market data trigger events
-        runner.subscribe_to_triggers(messager.clone()).await;
+        runner.subscribe_events(messager.clone()).await;
 
         info!("Evaluator runner started successfully.");
     }
@@ -126,24 +124,24 @@ impl SigbotEvaluatorRunner {
     async fn start_cron_job(&self, cron_expression: &str) {
         info!("Starting cron job with expression: {}", cron_expression);
 
-        let orchestrator = self.orchestrator.clone();
-        let messager = self.messager.clone();
+        let orchestrator = self.orchestrator.to_owned();
+        let messager0 = self.messager.to_owned();
         let job = Job::new_async(cron_expression, move |_uuid, _lock| {
-            let orchestrator = orchestrator.clone();
-            let messager = messager.clone();
+            let orchestrator = orchestrator.to_owned();
+            let messager1 = messager0.to_owned();
             Box::pin(async move {
                 info!("Cron job triggered. Starting evaluation...");
                 // TODO: Get tenant_id and workflow_id from configuration or database
                 let tenant_id = "default".to_string();
-                let ctx = SigbotAgentContext::new(tenant_id.clone(), None);
+                let ctx = SigbotAgentContext::new(tenant_id.to_owned(), None);
 
                 match orchestrator.execute(ctx).await {
                     Ok(result) => {
                         if result.success {
                             // Publish hyperparameters
-                            if let Some(messager_guard) = messager.lock().await.as_ref() {
+                            if let Some(messager_guard) = messager1.lock().await.as_ref() {
                                 let hyperparameter_event = SigbotHyperparameterUpdateEvent::new(
-                                    tenant_id.clone(),
+                                    tenant_id.to_owned(),
                                     "default".to_string(),          // TODO: Get from configuration
                                     "default_strategy".to_string(), // TODO: Get from configuration
                                     result.data,
@@ -178,7 +176,7 @@ impl SigbotEvaluatorRunner {
         info!("Started cron job scheduler.");
     }
 
-    async fn subscribe_to_triggers(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>) {
+    async fn subscribe_events(&self, messager: Arc<dyn ISigbotMessagerClient + Send + Sync>) {
         let orchestrator = self.orchestrator.clone();
         let messager_clone = messager.clone();
 
@@ -207,7 +205,7 @@ impl SigbotEvaluatorRunner {
                 );
 
                 tokio::spawn(async move {
-                    if let Err(e) = Self::handle_trigger_event(orchestrator, messager, event).await {
+                    if let Err(e) = Self::handle_event(orchestrator, messager, event).await {
                         error!("Failed to process trigger event: {}", e);
                     }
                 });
@@ -225,7 +223,7 @@ impl SigbotEvaluatorRunner {
         info!("Subscribed to Evaluator trigger topic.");
     }
 
-    async fn handle_trigger_event(
+    async fn handle_event(
         orchestrator: Arc<SigbotOrchestrator>,
         messager: Arc<dyn ISigbotMessagerClient + Send + Sync>,
         event: SigbotEvaluatorTriggerEvent,

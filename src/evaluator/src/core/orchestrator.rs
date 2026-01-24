@@ -18,16 +18,20 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::core::agent::{ISigbotAgent, SigbotAgentContext, SigbotAgentResult};
+use crate::core::agent_base::{ISigbotAgent, SigbotAgentContext, SigbotAgentResult};
 use anyhow::Error;
 use common_telemetry::{error, info};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 
+// Import toolset support
+use adk_tool::Toolset;
+
 /// Workflow orchestrator that coordinates multiple agents
 pub struct SigbotOrchestrator {
     agents: Vec<Arc<dyn ISigbotAgent>>,
+    toolset: Option<Arc<dyn Toolset>>,
     max_retry_attempts: u32,
     retry_timeout: Duration,
 }
@@ -36,9 +40,15 @@ impl SigbotOrchestrator {
     pub fn new(agents: Vec<Arc<dyn ISigbotAgent>>) -> Self {
         Self {
             agents,
+            toolset: None,
             max_retry_attempts: 3,
             retry_timeout: Duration::from_secs(30),
         }
+    }
+
+    pub fn with_toolset(mut self, toolset: Arc<dyn Toolset>) -> Self {
+        self.toolset = Some(toolset);
+        self
     }
 
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
@@ -60,6 +70,12 @@ impl SigbotOrchestrator {
         );
 
         let mut current_ctx = ctx;
+
+        // Add toolset to context if available
+        if let Some(toolset) = &self.toolset {
+            current_ctx = current_ctx.with_toolset(toolset.clone());
+        }
+
         let mut last_result: Option<SigbotAgentResult> = None;
 
         // Execute agents sequentially - all agents use unified execute() interface

@@ -22,7 +22,3 @@ pub mod alpha_agent;
 pub mod auditor_agent;
 pub mod boot_agent;
 pub mod loader_agent;
-pub mod loop_agent;
-
-// Re-export commonly used types
-pub use loop_agent::{AgentRule, FailureCondition, SuccessCondition};

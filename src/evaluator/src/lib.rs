@@ -21,3 +21,4 @@
 pub mod agents;
 pub mod core;
 pub mod evaluator_runner;
+pub mod tools;
