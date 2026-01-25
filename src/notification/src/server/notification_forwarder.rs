@@ -78,12 +78,12 @@ impl SigbotNotificationForwarder {
 
     pub async fn shutdown() {
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
-        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::shutdown().await;
+        info!("Shutdown Messager client.");
 
         info!("Shutting down Notification clients.");
-        SigbotNotificationClientFactory::close().await;
-        info!("Shutting down Notification clients.");
+        SigbotNotificationClientFactory::shutdown().await;
+        info!("Shutdown Notification clients.");
     }
 }
 

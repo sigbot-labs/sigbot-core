@@ -11,7 +11,7 @@ description: 工作流编排模块编码指南。相关模块：src/core/src/mod
 **工作流标准结构**：
 ```
 Input Stage (数据源节点) ->
-Evaluation Stage (评估节点) ->
+Analysis Stage (分析处理节点) ->
 Transaction Stage (交易执行节点) ->
 Output Stage (外部输出节点) ->
 Post Stage (通知节点)

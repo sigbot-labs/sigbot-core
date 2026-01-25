@@ -137,11 +137,40 @@ impl SigbotLogManagerFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotLogManagerFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific log manager by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let manager = {
+            let mut this = SigbotLogManagerFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(manager) = manager {
+            manager.close().await;
+            info!("Unregistered and shutdown Log manager: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Log manager '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all log managers
+    pub async fn shutdown() {
+        info!("Shutting down all log managers...");
+        let managers: Vec<_> = {
+            let this = SigbotLogManagerFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for manager in managers {
+            manager.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotLogManagerFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all log managers.");
     }
 }
 

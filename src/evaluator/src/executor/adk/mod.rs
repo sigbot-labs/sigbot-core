@@ -20,4 +20,5 @@
 
 pub mod agents;
 pub mod core;
+pub mod executor_mas;
 pub mod tools;

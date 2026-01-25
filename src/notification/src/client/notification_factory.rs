@@ -176,11 +176,40 @@ impl SigbotNotificationClientFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotNotificationClientFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific notification client by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let client = {
+            let mut this = SigbotNotificationClientFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(client) = client {
+            client.close().await;
+            info!("Unregistered and shutdown Notification client: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Notification client '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all notification clients
+    pub async fn shutdown() {
+        info!("Shutting down all notification clients...");
+        let clients: Vec<_> = {
+            let this = SigbotNotificationClientFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for client in clients {
+            client.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotNotificationClientFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all notification clients.");
     }
 }
 

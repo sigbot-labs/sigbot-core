@@ -129,32 +129,61 @@ impl SigbotOrderManagerFactory {
 
     fn register0(
         &mut self,
-        name: &str,
+        instance_id: &str,
         handler: Arc<dyn ISigbotOrderManager + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotOrderManager + Send + Sync>, Error> {
-        if self.implementations.contains_key(name) {
-            debug!("Already register the Order manager '{}'", name);
+        if self.implementations.contains_key(instance_id) {
+            debug!("Already register the Order manager '{}'", instance_id);
             return Ok(handler);
         }
-        self.implementations.insert(name.to_owned(), handler.clone());
+        self.implementations.insert(instance_id.to_owned(), handler.clone());
         Ok(handler)
     }
 
-    pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotOrderManager + Send + Sync>, Error> {
+    pub async fn get_implementation(instance_id: String) -> Result<Arc<dyn ISigbotOrderManager + Send + Sync>, Error> {
         // If the read lock is poisoned, the program will panic.
         let this = SigbotOrderManagerFactory::get().read().unwrap();
-        if let Some(implementation) = this.implementations.get(&name) {
+        if let Some(implementation) = this.implementations.get(&instance_id) {
             Ok(implementation.to_owned())
         } else {
-            let errmsg = format!("Could not obtain registered Sigbot Order manager '{}'.", name);
+            let errmsg = format!("Could not obtain registered Sigbot Order manager '{}'.", instance_id);
             return Err(Error::msg(errmsg));
         }
     }
 
-    pub async fn close() {
-        let this = SigbotOrderManagerFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific order manager by name
+    pub async fn close(instance_id: String) -> Result<(), Error> {
+        let manager = {
+            let mut this = SigbotOrderManagerFactory::get().write().unwrap();
+            this.implementations.remove(&instance_id)
+        };
+        if let Some(manager) = manager {
+            manager.close().await;
+            info!("Unregistered and shutdown Order manager: {}", instance_id);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Order manager '{}' not found", instance_id)))
         }
+    }
+
+    /// Shutdown all order managers
+    pub async fn shutdown() {
+        info!("Shutting down all order managers...");
+        let managers: Vec<_> = {
+            let this = SigbotOrderManagerFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for manager in managers {
+            manager.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotOrderManagerFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all order managers.");
     }
 }

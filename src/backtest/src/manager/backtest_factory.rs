@@ -149,10 +149,39 @@ impl SigbotBacktestManagerFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotBacktestManagerFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.shutdown().await;
+    /// Unregister and shutdown a specific backtest manager by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let manager = {
+            let mut this = SigbotBacktestManagerFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(manager) = manager {
+            manager.shutdown().await;
+            info!("Unregistered and shutdown Backtest manager: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Backtest manager '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all backtest managers
+    pub async fn shutdown() {
+        info!("Shutting down all backtest managers...");
+        let managers: Vec<_> = {
+            let this = SigbotBacktestManagerFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for manager in managers {
+            manager.shutdown().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotBacktestManagerFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all backtest managers.");
     }
 }

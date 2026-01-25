@@ -25,13 +25,14 @@ use serde::{Deserialize, Serialize};
 /// Represents different types of evaluator implementations for ANALYSIS stage nodes.
 /// Evaluator nodes are responsible for AI-driven market analysis and hyperparameter calculation.
 ///
-/// Architecture:
+/// Related to module Architecture:
 /// - **Evaluator Runner** (evaluator microservice): Handles ANALYSIS stage with MAS provider
+///     - MAS (Multi-Agent System): LLM-based multi-agent orchestration for dynamic analysis
 /// - **Strategy Runner** (strategy microservice): Handles ANALYSIS stage with PYCODE provider
+///     - PYCODE: Python-based static strategy code execution
 ///
-/// Both work together to execute the ANALYSIS stage of workflows, but with different approaches:
-/// - MAS (Multi-Agent System): LLM-based multi-agent orchestration for dynamic analysis
-/// - PYCODE: Python-based static strategy code execution
+/// Note: Both MAS and PYCODE work together to execute the ANALYSIS stage nodes of workflows.
+///
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum EvaluatorProvider {
     /// Multi-Agent System (MAS) provider

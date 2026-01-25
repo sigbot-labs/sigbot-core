@@ -181,11 +181,11 @@ impl SigbotLogServer {
 
     pub async fn shutdown() {
         info!("Shutting down Log Manager.");
-        SigbotLogManagerFactory::close().await;
+        SigbotLogManagerFactory::shutdown().await;
         info!("Shutdown Log Manager.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager client.");
     }
 }

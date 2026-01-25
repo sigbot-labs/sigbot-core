@@ -37,11 +37,6 @@ use std::sync::Arc;
 
 /// SigbotEvaluatorRunner manages LLM-type evaluation job lifecycle
 ///
-/// Design Philosophy: Follow strategy_runner.rs pattern
-/// - Integrates with WorkflowManager as a lifecycle bridge for LLM workflow nodes
-/// - Handles EVALUATION stage nodes with LLM provider (not PYCODE)
-/// - Registers start/stop handlers to WorkflowManager for node lifecycle management
-///
 /// Architecture (Two-Layer Design):
 /// ```text
 /// Layer 1: WorkflowManager (First Layer - Workflow Instance Scanner)
@@ -55,10 +50,10 @@ use std::sync::Arc;
 /// │       │
 /// │       └── SigbotEvaluationExecutor (Individual LLM Node Executor)
 /// │           ├── Event-Driven: Subscribe to datafeed market data (messager)
-/// │           └── Time-Driven: Periodic scan job (TimescaleDB)
+/// │           └── Time-Driven: Periodic scan job (TimescaleDB latest market data)
 /// ```
 ///
-/// Microservice Responsibility:
+/// Related Microservice Responsibility:
 /// - **Evaluator Runner**: Handles ANALYSIS stage with MAS provider (Multi-Agent System workflows)
 /// - **Strategy Runner**: Handles ANALYSIS stage with PYCODE provider (Python strategies)
 pub struct SigbotEvaluatorRunner {}
@@ -177,13 +172,13 @@ impl SigbotEvaluatorRunner {
                     workflow_id0.clone(),
                     node_id.to_string(),
                     evaluator_provider,
-                    argument1,
+                    argument1.clone(),
                 )
                 .await
                 {
                     Ok(executor) => {
-                        // Start the executor with messager
-                        executor.startup(messager1).await;
+                        // Start the executor with argument and messager
+                        executor.startup(argument1.clone(), messager1).await;
                         info!(
                             "Started evaluation executor {} for workflow {} node {}",
                             provider_str, workflow_id0, node_id
@@ -257,11 +252,11 @@ impl SigbotEvaluatorRunner {
         info!("Shutdown Evaluation Executor Factory.");
 
         info!("Shutting down Messager Client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager Client.");
 
         // Shutdown WorkflowManager (uses global singleton)
-        SigbotWorkflowManager::shutdown_global().await;
+        SigbotWorkflowManager::shutdown().await;
     }
 }
 

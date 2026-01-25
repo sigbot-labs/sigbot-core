@@ -205,11 +205,11 @@ impl SigbotStrategyRunner {
         info!("Shutdown Strategy Executor.");
 
         info!("Shutting down Messager Client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager Client.");
 
         // Shutdown WorkflowManager (uses global singleton)
-        SigbotWorkflowManager::shutdown_global().await;
+        SigbotWorkflowManager::shutdown().await;
     }
 }
 

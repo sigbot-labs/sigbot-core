@@ -165,10 +165,39 @@ impl SigbotWalletManagerFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotWalletManagerFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific wallet manager by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let manager = {
+            let mut this = SigbotWalletManagerFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(manager) = manager {
+            manager.close().await;
+            info!("Unregistered and shutdown Wallet manager: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Wallet manager '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all wallet managers
+    pub async fn shutdown() {
+        info!("Shutting down all wallet managers...");
+        let managers: Vec<_> = {
+            let this = SigbotWalletManagerFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for manager in managers {
+            manager.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotWalletManagerFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all wallet managers.");
     }
 }

@@ -180,10 +180,39 @@ impl SigbotDatafeedClientFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotDatafeedClientFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific datafeed client by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let client = {
+            let mut this = SigbotDatafeedClientFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(client) = client {
+            client.close().await;
+            info!("Unregistered and shutdown Datafeed client: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Datafeed client '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all datafeed clients
+    pub async fn shutdown() {
+        info!("Shutting down all datafeed clients...");
+        let clients: Vec<_> = {
+            let this = SigbotDatafeedClientFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for client in clients {
+            client.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotDatafeedClientFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all datafeed clients.");
     }
 }

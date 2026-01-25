@@ -54,11 +54,11 @@ impl SigbotExporterServer {
 
     pub async fn shutdown() {
         info!("Shutting down Exporter manager.");
-        SigbotExporterManagerFactory::close().await;
+        SigbotExporterManagerFactory::shutdown().await;
         info!("Shutdown Exporter manager.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager client.");
     }
 }

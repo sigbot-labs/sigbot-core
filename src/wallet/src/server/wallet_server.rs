@@ -93,11 +93,11 @@ impl SigbotWalletServer {
 
     pub async fn shutdown() {
         info!("Shutting down Wallet manager.");
-        SigbotWalletManagerFactory::close().await;
+        SigbotWalletManagerFactory::shutdown().await;
         info!("Shutdown Wallet manager.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager client.");
     }
 }

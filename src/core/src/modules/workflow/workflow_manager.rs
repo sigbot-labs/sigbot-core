@@ -116,7 +116,7 @@ impl SigbotWorkflowManager {
         schedule_channels: Option<usize>,
     ) -> Result<Arc<Self>, Error> {
         // Update schedule config if provided
-        let cron_expression = schedule_cron
+        let cron_expr = schedule_cron
             .as_deref()
             .or(self.schedule_cron.as_deref())
             .unwrap_or(Self::DEFAULT_CRON_EXPRESSION);
@@ -125,12 +125,12 @@ impl SigbotWorkflowManager {
             .unwrap_or(Self::DEFAULT_CHANNELS);
 
         // Validate the cron expression
-        let cron = match Job::new_async(cron_expression, |_uuid, _lock| Box::pin(async {})) {
-            Ok(_) => cron_expression,
+        let cron = match Job::new_async(cron_expr, |_uuid, _lock| Box::pin(async {})) {
+            Ok(_) => cron_expr,
             Err(e) => {
                 warn!(
                     "Invalid cron expression '{}': {}. Using default '{}'",
-                    cron_expression,
+                    cron_expr,
                     e,
                     Self::DEFAULT_CRON_EXPRESSION
                 );
@@ -656,10 +656,18 @@ impl SigbotWorkflowManager {
         result
     }
 
+    /// Shutdown the global singleton instance
+    pub async fn shutdown() {
+        if let Some(manager) = SINGLETON_INSTANCE.write().await.take() {
+            manager.shutdown0().await;
+            info!("Shutdown Workflow Manager.");
+        }
+    }
+
     /// Shutdown the workflow manager: stop cron job first, then stop all workflow jobs
-    pub async fn shutdown(&self) {
+    async fn shutdown0(&self) {
         info!(
-            "Closing workflow manager with cron '{}', channels '{}'",
+            "Shutting down workflow manager with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );
@@ -682,18 +690,10 @@ impl SigbotWorkflowManager {
         info!("Stopped all workflow jobs.");
 
         info!(
-            "Closed workflow manager with cron '{}', channels '{}'",
+            "Shutdown workflow manager with cron '{}', channels '{}'",
             self.schedule_cron.as_deref().unwrap_or(Self::DEFAULT_CRON_EXPRESSION),
             self.schedule_channels.unwrap_or(Self::DEFAULT_CHANNELS)
         );
-    }
-
-    /// Shutdown the global singleton instance
-    pub async fn shutdown_global() {
-        if let Some(manager) = SINGLETON_INSTANCE.write().await.take() {
-            manager.shutdown().await;
-            info!("Shutdown Workflow Manager.");
-        }
     }
 }
 

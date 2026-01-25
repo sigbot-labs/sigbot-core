@@ -24,7 +24,7 @@ use crate::client::{
 };
 use anyhow::{Context, Error};
 use async_trait::async_trait;
-use common_telemetry::debug;
+use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::messager::messager::{MessagerConfiguration, MessagerProvider};
 use std::{
@@ -139,11 +139,40 @@ impl SigbotMessagerClientFactory {
         }
     }
 
-    pub async fn close() {
-        let this = SigbotMessagerClientFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+    /// Unregister and shutdown a specific messager client by name
+    pub async fn close(name: String) -> Result<(), Error> {
+        let client = {
+            let mut this = SigbotMessagerClientFactory::get().write().unwrap();
+            this.implementations.remove(&name)
+        };
+        if let Some(client) = client {
+            client.close().await;
+            info!("Unregistered and shutdown Messager client: {}", name);
+            Ok(())
+        } else {
+            Err(Error::msg(format!("Messager client '{}' not found", name)))
         }
+    }
+
+    /// Shutdown all messager clients
+    pub async fn shutdown() {
+        info!("Shutting down all messager clients...");
+        let clients: Vec<_> = {
+            let this = SigbotMessagerClientFactory::get().read().unwrap();
+            this.implementations.values().cloned().collect()
+        };
+
+        for client in clients {
+            client.close().await;
+        }
+
+        // Clear all implementations
+        {
+            let mut this = SigbotMessagerClientFactory::get().write().unwrap();
+            this.implementations.clear();
+        }
+
+        info!("Shutdown all messager clients.");
     }
 }
 

@@ -49,11 +49,11 @@ impl SigbotBacktestServer {
 
     pub async fn shutdown() {
         info!("Shutting down Backtest manager.");
-        SigbotBacktestManagerFactory::close().await;
+        SigbotBacktestManagerFactory::shutdown().await;
         info!("Shutdown Backtest manager.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager client.");
     }
 }

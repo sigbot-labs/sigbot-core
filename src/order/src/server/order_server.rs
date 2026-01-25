@@ -94,11 +94,11 @@ impl SigbotOrderServer {
 
     pub async fn shutdown() {
         info!("Shutting down Order manager.");
-        SigbotOrderManagerFactory::close().await;
+        SigbotOrderManagerFactory::shutdown().await;
         info!("Shutdown Order manager.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
+        SigbotMessagerClientFactory::shutdown().await;
         info!("Shutdown Messager client.");
     }
 }

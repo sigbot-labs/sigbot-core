@@ -70,12 +70,12 @@ impl SigbotDatafeedIngestor {
 
     pub async fn shutdown() {
         info!("Shutting down Datafeed clients.");
-        SigbotDatafeedClientFactory::close().await;
-        info!("Shutting down Datafeed clients.");
+        SigbotDatafeedClientFactory::shutdown().await;
+        info!("Shutdown Datafeed clients.");
 
         info!("Shutting down Messager client.");
-        SigbotMessagerClientFactory::close().await;
-        info!("Shutting down Messager client.");
+        SigbotMessagerClientFactory::shutdown().await;
+        info!("Shutdown Messager client.");
     }
 }
 

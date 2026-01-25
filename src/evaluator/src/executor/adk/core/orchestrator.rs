@@ -161,8 +161,11 @@ impl SigbotMultiAgentOrchestrator {
     pub async fn execute(&self, ctx: SigbotAgentContext) -> Result<SigbotAgentResult, Error> {
         let start_time = Instant::now();
         info!(
-            "GenericOrchestrator: Starting workflow for tenant_id={}, workflow_id={:?}, datafeed_agents={}, strategy_agents={}",
-            ctx.tenant_id, ctx.workflow_id, self.datafeed_agents.len(), self.strategy_agents.len()
+            "Starting workflow for tenant_id={}, workflow_id={:?}, datafeed_agents={}, strategy_agents={}",
+            ctx.tenant_id,
+            ctx.workflow_id,
+            self.datafeed_agents.len(),
+            self.strategy_agents.len()
         );
 
         let mut current_ctx = ctx;
@@ -174,10 +177,7 @@ impl SigbotMultiAgentOrchestrator {
 
         // Step 1: Execute datafeed agents in parallel
         if !self.datafeed_agents.is_empty() {
-            info!(
-                "GenericOrchestrator: Executing {} datafeed agents in parallel",
-                self.datafeed_agents.len()
-            );
+            info!("Executing {} datafeed agents in parallel", self.datafeed_agents.len());
 
             let mut handles = Vec::new();
             for (idx, agent) in self.datafeed_agents.iter().enumerate() {
@@ -224,7 +224,7 @@ impl SigbotMultiAgentOrchestrator {
                 current_ctx = current_ctx.with_data(result.data);
             }
 
-            info!("GenericOrchestrator: All parallel datafeed agents completed successfully");
+            info!("All parallel datafeed agents completed successfully");
         }
 
         // Step 2: Execute strategy agents sequentially
@@ -232,7 +232,7 @@ impl SigbotMultiAgentOrchestrator {
 
         for (idx, agent) in self.strategy_agents.iter().enumerate() {
             info!(
-                "GenericOrchestrator: Executing sequential strategy agent {}/{}: {}",
+                "Executing sequential strategy agent {}/{}: {}",
                 idx + 1,
                 self.strategy_agents.len(),
                 agent.name()
@@ -261,17 +261,11 @@ impl SigbotMultiAgentOrchestrator {
         }
 
         if let Some(result) = last_result {
-            info!(
-                "GenericOrchestrator: Workflow completed successfully in {:?}",
-                start_time.elapsed()
-            );
+            info!("Workflow completed successfully in {:?}", start_time.elapsed());
             Ok(result)
         } else {
             // If no strategy agents, return success with merged datafeed data
-            info!(
-                "GenericOrchestrator: Workflow completed (datafeed only) in {:?}",
-                start_time.elapsed()
-            );
+            info!("Workflow completed (datafeed only) in {:?}", start_time.elapsed());
             Ok(SigbotAgentResult {
                 success: true,
                 data: current_ctx.data,
@@ -282,7 +276,7 @@ impl SigbotMultiAgentOrchestrator {
 
     /// Stop the orchestrator (for future use with cancellation support)
     pub fn stop(&self) {
-        info!("GenericOrchestrator: Stopping workflow: {}", self.workflow_id);
+        info!("Stopping workflow: {}", self.workflow_id);
         // TODO: Implement cancellation logic if needed
     }
 

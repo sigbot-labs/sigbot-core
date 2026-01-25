@@ -36,7 +36,7 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug)]
 pub struct GoogleSheetsWriterConfig {
     pub spreadsheet_id: Option<String>,
-    pub credentials: Option<HashMap<String, String>>,
+    pub secrets: Option<HashMap<String, String>>,
     pub properties: Option<HashMap<String, String>>,
 }
 
@@ -87,8 +87,8 @@ impl SigbotGoogleSheetsExporterManager {
         );
 
         // Write to Google Sheets (batch mode for now)
-        let writer_guard = self.writer.lock().await;
-        if let Some(ref writer) = *writer_guard {
+        let guard = self.writer.lock().await;
+        if let Some(ref writer) = *guard {
             writer.write_to_sheets(data).await?;
         } else {
             warn!("GoogleSheets writer not configured, skipping export");
@@ -113,7 +113,7 @@ impl ISigbotExporterManager for SigbotGoogleSheetsExporterManager {
                 .properties
                 .as_ref()
                 .and_then(|p| p.get("spreadsheet_id").cloned()),
-            credentials: argument.secrets.clone(),
+            secrets: argument.secrets.clone(),
             properties: argument.properties.clone(),
         };
 
