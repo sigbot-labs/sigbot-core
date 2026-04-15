@@ -13,18 +13,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
-//
-// IMPORTANT: Any software that fully or partially contains or uses materials
-// covered by this license must also be released under the GNU GPL license.
-// This includes modifications and derived works.
 
 mod admin_fn;
 mod aggr_func;
+mod audit_log;
 mod print_caller;
 mod range_fn;
 mod stack_trace_debug;
 mod utils;
+
 use aggr_func::{ impl_aggr_func_type_store, impl_as_aggr_func_creator };
+use audit_log::process_audit_log;
 use print_caller::process_print_caller;
 use proc_macro::TokenStream;
 use range_fn::process_range_fn;
@@ -135,4 +134,42 @@ pub fn print_caller(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn stack_trace_debug(args: TokenStream, input: TokenStream) -> TokenStream {
     stack_trace_debug::stack_trace_style_impl(args.into(), input.into()).into()
+}
+
+/// Attribute macro for automatic audit logging of function execution.
+///
+/// This macro wraps the annotated function to automatically log:
+/// - Function entry with arguments (at INFO level by default)
+/// - Function exit/return (at INFO level)
+/// - Any errors (at ERROR level, if function returns Result)
+///
+/// # Arguments
+/// - `service`: The service name for the audit log (required)
+/// - `level`: Log level for entry/exit (optional, defaults to "info")
+/// - `skip_args`: Comma-separated indices of arguments to skip logging (optional)
+/// - `metadata`: Additional metadata to include (optional, JSON string)
+///
+/// # Example
+/// ```rust, ignore
+/// /// Log function execution with default INFO level
+/// #[audit_log(service = "order-service")]
+/// async fn process_order(order_id: String, quantity: u32) -> Result<Order, Error> {
+///     // Function body
+/// }
+///
+/// /// Log with WARN level and skip sensitive arguments
+/// #[audit_log(service = "wallet-service", level = "warn", skip_args = "1")]
+/// async fn transfer_funds(wallet_id: i64, _secret_key: &str, amount: f64) -> Result<(), Error> {
+///     // Function body
+/// }
+///
+/// /// Log with additional metadata
+/// #[audit_log(service = "strategy-service", metadata = "{\"strategy_id\": \"momentum_001\"}")]
+/// fn calculate_signal(price: f64, rsi: f64) -> Signal {
+///     // Function body
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
+    process_audit_log(args, input)
 }

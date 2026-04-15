@@ -486,6 +486,10 @@ pub struct ServicesProperties {
     pub evaluator: EvaluatorProperties,
     #[serde(rename = "backtest")]
     pub backtest: BacktestProperties,
+    #[serde(rename = "api", default = "ApiProperties::default")]
+    pub api: ApiProperties,
+    #[serde(rename = "a2a", default = "A2AProperties::default")]
+    pub a2a: A2AProperties,
 }
 
 // Deploy Properties.
@@ -647,6 +651,59 @@ pub struct EvaluatorProperties {
     /// Execution timeout (in seconds)
     #[serde(rename = "execution-timeout-secs")]
     pub execution_timeout_secs: u64,
+    /// MCP servers configuration for evaluator to call external services
+    #[serde(rename = "mcp-servers", default)]
+    pub mcp_servers: Vec<EvaluatorMcpServerConfig>,
+}
+
+/// External MCP server configuration for Evaluator
+/// Used when evaluator needs to call external MCP services (e.g., Binance, Bitget)
+/// to fetch market data for dynamic parameter adjustment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluatorMcpServerConfig {
+    /// Service name (e.g., "binance-mcp", "bitget-mcp")
+    #[serde(rename = "name")]
+    pub name: String,
+    /// Service URL (SSE endpoint or STDIO command)
+    #[serde(rename = "url")]
+    pub url: String,
+    /// Transport type: "sse", "stdio"
+    #[serde(rename = "transport")]
+    pub transport: String,
+    /// Authentication token (if required)
+    #[serde(rename = "auth-token")]
+    pub auth_token: Option<String>,
+    /// API key (for exchange MCP services)
+    #[serde(rename = "api-key")]
+    pub api_key: Option<String>,
+    /// API secret (for exchange MCP services)
+    #[serde(rename = "api-secret")]
+    pub api_secret: Option<String>,
+    /// Enabled tools from this service
+    #[serde(rename = "enabled-tools")]
+    pub enabled_tools: Vec<String>,
+    /// Timeout in seconds for MCP calls
+    #[serde(rename = "timeout-secs", default = "default_mcp_timeout")]
+    pub timeout_secs: u64,
+}
+
+fn default_mcp_timeout() -> u64 {
+    30
+}
+
+impl Default for EvaluatorMcpServerConfig {
+    fn default() -> Self {
+        Self {
+            name: "".to_string(),
+            url: "".to_string(),
+            transport: "sse".to_string(),
+            auth_token: None,
+            api_key: None,
+            api_secret: None,
+            enabled_tools: vec![],
+            timeout_secs: 30,
+        }
+    }
 }
 
 // Backtest Properties.
@@ -655,6 +712,134 @@ pub struct EvaluatorProperties {
 pub struct BacktestProperties {
     #[serde(flatten)]
     pub inner: ScheduledPropertiesBase,
+}
+
+// API Properties with MCP integration.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiProperties {
+    /// Enable MCP server wrapping RESTful API
+    #[serde(rename = "mcp", default = "ApiMcpProperties::default")]
+    pub mcp: ApiMcpProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiMcpProperties {
+    /// Enable MCP server for API exposure
+    #[serde(rename = "enabled")]
+    pub enabled: bool,
+    /// MCP server name
+    #[serde(rename = "name")]
+    pub name: String,
+    /// Transport type: "sse", "stdio", "streamable-http"
+    #[serde(rename = "transport")]
+    pub transport: String,
+    /// Bind address for SSE transport
+    #[serde(rename = "bind-address")]
+    pub bind_address: String,
+    /// Exposed API capabilities via MCP
+    #[serde(rename = "capabilities")]
+    pub capabilities: Vec<String>,
+    /// Authentication enabled
+    #[serde(rename = "auth-enabled")]
+    pub auth_enabled: bool,
+}
+
+impl Default for ApiMcpProperties {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            name: "sigbot-api-mcp-server".to_string(),
+            transport: "sse".to_string(),
+            bind_address: "0.0.0.0:8080".to_string(),
+            capabilities: vec![
+                "trading".to_string(),
+                "market-data".to_string(),
+                "backtest".to_string(),
+                "strategy".to_string(),
+            ],
+            auth_enabled: true,
+        }
+    }
+}
+
+impl Default for ApiProperties {
+    fn default() -> Self {
+        Self {
+            mcp: ApiMcpProperties::default(),
+        }
+    }
+}
+
+// A2A (Agent-to-Agent) Properties.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct A2AProperties {
+    /// Enable A2A server for agent collaboration
+    #[serde(rename = "enabled")]
+    pub enabled: bool,
+    /// Gateway bind address
+    #[serde(rename = "bind-address")]
+    pub bind_address: String,
+    /// Authentication enabled
+    #[serde(rename = "auth-enabled")]
+    pub auth_enabled: bool,
+    /// Rate limiting (requests per second)
+    #[serde(rename = "rate-limit")]
+    pub rate_limit: Option<u32>,
+    /// Registered local agents
+    #[serde(rename = "agents")]
+    pub agents: Vec<AgentConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AgentConfig {
+    /// Agent unique identifier
+    #[serde(rename = "agent-id")]
+    pub agent_id: String,
+    /// Agent display name
+    #[serde(rename = "name")]
+    pub name: String,
+    /// Agent description
+    #[serde(rename = "description")]
+    pub description: String,
+    /// Agent version
+    #[serde(rename = "version")]
+    pub version: String,
+    /// Agent capabilities
+    #[serde(rename = "capabilities")]
+    pub capabilities: Vec<AgentCapabilityConfig>,
+    /// Agent endpoint (for remote agents)
+    #[serde(rename = "endpoint")]
+    pub endpoint: Option<String>,
+    /// Agent tags for discovery
+    #[serde(rename = "tags")]
+    pub tags: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AgentCapabilityConfig {
+    /// Capability name
+    #[serde(rename = "name")]
+    pub name: String,
+    /// Capability description
+    #[serde(rename = "description")]
+    pub description: String,
+    /// Capability input schema (JSON Schema)
+    #[serde(rename = "input-schema")]
+    pub input_schema: Option<serde_json::Value>,
+}
+
+impl Default for A2AProperties {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: "0.0.0.0:8081".to_string(),
+            auth_enabled: true,
+            rate_limit: Some(100),
+            agents: vec![],
+        }
+    }
 }
 
 // App Properties impls.
@@ -982,6 +1167,8 @@ impl Default for ServicesProperties {
             evaluator: EvaluatorProperties::default(),
             backtest: BacktestProperties::default(),
             deployer: DeployerProperties::default(),
+            api: ApiProperties::default(),
+            a2a: A2AProperties::default(),
         }
     }
 }
@@ -1004,6 +1191,7 @@ impl Default for EvaluatorProperties {
             },
             data_window_hours: 4,        // Last 4 hours of data
             execution_timeout_secs: 300, // 5 minutes
+            mcp_servers: vec![],
         }
     }
 }

@@ -24,6 +24,11 @@ members = [
     "src/logservice",
     "src/exporter",
     "src/evaluator",
+    "tests",
+]
+default-members = [
+    "src/cmd",
+    "tests",
 ]
 resolver = "2"
 
@@ -70,10 +75,12 @@ sigbot-notification = { path = "src/notification" }
 sigbot-logservice = { path = "src/logservice" }
 sigbot-exporter = { path = "src/exporter" }
 sigbot-evaluator = { path = "src/evaluator" }
+sigbot-mcp = { path = "src/agents/mcp" }
+sigbot-a2a = { path = "src/agents/a2a" }
 
 # Lang libs
 regex = "1.11.1"
-chrono = "0.4.40"
+chrono = { version = "0.4.40", features = ["serde"] }
 uuid = "1.9.1"
 thiserror = "2.0.12"
 anyhow = "1.0.97"
@@ -135,6 +142,7 @@ tokio = { version = "1.43.0", features = ["full", "signal"] }
 tokio-cron-scheduler = { version = "0.13.0" }
 async-trait = "0.1.88"
 futures = "0.3"
+parking_lot = "0.12"
 
 # Web HTTP libs.
 axum = { version = "0.8.3", features = ["multipart"] }
@@ -195,9 +203,11 @@ bollard = "0.18"
 
 # Build dependencies.
 criterion = "0.4"
+rand = "0.8"
 
 # Thirdparty Instant Messaging libs.
 lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-native-tls", "smtp-transport", "builder"] } # email clients
+rumqttc = "0.25.1" # MQTT client for messager module
 
 # [workspace.dev-dependencies]
 #clippy = "0.1.85" # 0.0.302

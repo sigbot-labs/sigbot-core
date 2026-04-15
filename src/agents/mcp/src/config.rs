@@ -11,14 +11,30 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
-//
 // IMPORTANT: Any software that fully or partially contains or uses materials
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod comparison;
-pub mod test_ema;
-pub mod test_rsi;
-pub mod test_sma;
+//! MCP Module Configuration
+//!
+//! Configuration is now centralized in sigbot-core:
+//! - API MCP Server: `services.api.mcp`
+//! - Evaluator MCP Clients: `services.evaluator.mcp_servers`
+//! - A2A Server: `services.a2a`
+//!
+//! Access via:
+//! ```rust
+//! use sigbot_core::config::config::get_config;
+//! let config = get_config();
+//! let api_mcp_enabled = config.services.api.mcp.enabled;
+//! let evaluator_mcp_servers = &config.services.evaluator.mcp_servers;
+//! let a2a_config = &config.services.a2a;
+//! ```
+
+pub use sigbot_core::config::config::{
+    ApiMcpProperties,
+    EvaluatorMcpServerConfig,
+    A2AProperties,
+    AgentConfig,
+    AgentCapabilityConfig,
+};

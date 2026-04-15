@@ -26,6 +26,7 @@ pub mod evaluator_starter;
 pub mod exporter_starter;
 pub mod internal;
 pub mod logservice_starter;
+pub mod mcp_server_starter;
 pub mod notification_starter;
 pub mod order_starter;
 pub mod standalone_starter;
@@ -44,8 +45,9 @@ use strategy_starter::SigbotStrategyRunnerStarter;
 use crate::cmd::{
     datafeed_starter::SigbotDatafeedIngestorStarter, deployer_starter::SigbotDeployerManagerStarter,
     evaluator_starter::SigbotEvaluatorRunnerStarter, exporter_starter::SigbotExporterManagerStarter,
-    logservice_starter::SigbotLogServiceStarter, notification_starter::SigbotNotificationForwarderStarter,
-    order_starter::SigbotOrderManagerStarter, wallet_starter::SigbotWalletManagerStarter,
+    logservice_starter::SigbotLogServiceStarter, mcp_server_starter::SigbotMCPServer,
+    notification_starter::SigbotNotificationForwarderStarter, order_starter::SigbotOrderManagerStarter,
+    wallet_starter::SigbotWalletManagerStarter,
 };
 
 type SubcommandBuildFn = fn() -> Command;
@@ -150,6 +152,14 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
                 // Type inference error, forced conversion need.
                 SigbotEvaluatorRunnerStarter::build as SubcommandBuildFn,
                 SigbotEvaluatorRunnerStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            SigbotMCPServer::COMMAND_NAME,
+            (
+                // Type inference error, forced conversion need.
+                SigbotMCPServer::build as SubcommandBuildFn,
+                SigbotMCPServer::run as SubcommandHandleFn,
             ),
         ));
         vec

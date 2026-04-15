@@ -1,0 +1,47 @@
+[package]
+name = "sigbot-integration-tests"
+version = "1.0.0"
+edition = "2021"
+description = "Integration Tests for SigBot"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+uuid = { workspace = true, features = ["v4"] }
+rand = { workspace = true }
+log = "0.4"
+sqlx = { workspace = true, features = ["runtime-tokio", "chrono", "postgres"] }
+redis = "0.24"
+reqwest = { workspace = true, features = ["blocking"] }
+rumqttc = { workspace = true }
+tempfile = "3.10"
+clap = { workspace = true }
+futures = "0.3"
+
+# SigBot workspace members - for testing actual business logic
+# Note: Direct dependencies on sigbot-* modules that have compilation issues
+# (like sigbot-mcp) should be avoided. Tests can still use these services
+# through the service runner pattern which initializes them at runtime.
+sigbot-core = { workspace = true }
+sigbot-types = { workspace = true }
+sigbot-datafeed = { workspace = true }
+sigbot-strategy-runner = { workspace = true }
+sigbot-evaluator = { workspace = true }
+sigbot-order = { workspace = true }
+sigbot-logservice = { workspace = true }
+sigbot-exporter = { workspace = true }
+sigbot-messager = { workspace = true }
+common-telemetry = { workspace = true }
+
+[lib]
+path = "integration/mod.rs"
+name = "sigbot_integration_tests"
+
+[[test]]
+name = "integration_all"
+path = "integration/integration_all.rs"
