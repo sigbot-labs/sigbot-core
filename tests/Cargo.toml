@@ -33,8 +33,11 @@ sigbot-datafeed = { workspace = true }
 sigbot-strategy-runner = { workspace = true }
 sigbot-evaluator = { workspace = true }
 sigbot-order = { workspace = true }
+sigbot-wallet = { workspace = true }
 sigbot-logservice = { workspace = true }
 sigbot-exporter = { workspace = true }
+sigbot-notification = { workspace = true }
+sigbot-backtest = { workspace = true }
 sigbot-messager = { workspace = true }
 common-telemetry = { workspace = true }
 

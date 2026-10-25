@@ -57,4 +57,8 @@ pub use service_runner::{
     LogServiceRunner,
     ExportServiceRunner,
     NotificationServiceRunner,
+    BacktestServiceRunner,
 };
+
+// Re-export commonly used types from sigbot_types
+pub use sigbot_types::modules::order::events::{SigbotTradeEvent, SigbotTradeSignal};

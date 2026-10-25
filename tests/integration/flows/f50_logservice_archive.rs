@@ -24,6 +24,12 @@
 //! These tests use the real LogServiceRunner which wraps
 //! SigbotLogManagerFactory from src/logservice.
 
+use crate::common::{
+    MiddlewareE2EContext,
+    init_database_schema, get_logs,
+    LogServiceRunner,
+};
+use log::info;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -61,7 +67,7 @@ pub async fn test_log_archive_basic() {
     assert!(!logs.is_empty());
     assert_eq!(logs[0].service_name, "test-service");
     assert_eq!(logs[0].level, "INFO");
-    assert_eq!(logs[0].message, "Test log message");
+    assert_eq!(logs[0].content, "Test log message");
 
     ctx.teardown();
 }

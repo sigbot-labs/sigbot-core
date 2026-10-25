@@ -21,6 +21,14 @@
 //! The order service subscribes to trading signals, executes orders on
 //! exchanges, and publishes trade results to EMQX for wallet processing.
 
+use crate::common::{
+    MiddlewareE2EContext,
+    init_database_schema,
+    LogServiceRunner, OrderServiceRunner, WalletServiceRunner,
+    MockExchangeClient, MockExchangeConfig,
+    SigbotTradeEvent, SigbotTradeSignal,
+};
+use sigbot_types::modules::exchange::models::trade_position::PlaceTradeSignal;
 use std::time::Duration;
 use tokio::time::sleep;
 use serde_json::json;
@@ -210,12 +218,14 @@ pub async fn test_order_process_signal() {
     let signal = SigbotTradeSignal {
         signal_id: "sig-test-001".to_string(),
         tenant_id: "test-tenant".to_string(),
-        workflow_id: "test-workflow".to_string(),
-        symbol: "BTCUSDT".to_string(),
-        action: "BUY".to_string(),
-        quantity: 0.1,
-        price: Some(50000.0),
-        ..Default::default()
+        wallet_id: 1001,
+        exchange: "mock".to_string(),
+        signal: PlaceTradeSignal {
+            symbol: "BTCUSDT".to_string(),
+            action: "BUY".to_string(),
+            quantity: 0.1,
+            price: Some(50000.0),
+        },
     };
 
     log::info!("Created trading signal: {:?}", signal);

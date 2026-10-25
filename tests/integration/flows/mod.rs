@@ -49,3 +49,5 @@ pub mod f40_wallet_ledger_balance; // Wallet service updates ledger & balance
 pub mod f50_logservice_archive;    // Log service archives logs to DB
 pub mod f60_export_external;       // Export service sends data to external systems
 pub mod f70_logservice_audit;      // Audit log across all services (compliance trail)
+pub mod f80_notification_forward;  // Notification service forwards to external channels
+pub mod f90_backtest_historical;   // Backtest publishes historical data from TimescaleDB

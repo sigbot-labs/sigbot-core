@@ -19,15 +19,15 @@
 //! This test runner executes all E2E integration tests.
 
 // Use crate modules
-use crate::common::*;
-use crate::flows::*;
+use sigbot_integration_tests::common::*;
+use sigbot_integration_tests::flows::*;
 
 // ============================================================================
 // Flow 00: Full Pipeline Tests
 // ============================================================================
 #[cfg(test)]
 mod f00_full_pipeline {
-    use crate::flows::f00_full_pipeline;
+    use sigbot_integration_tests::flows::f00_full_pipeline;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -47,7 +47,7 @@ mod f00_full_pipeline {
 // ============================================================================
 #[cfg(test)]
 mod f10_datafeed_ingest_pub {
-    use crate::flows::f10_datafeed_ingest_pub;
+    use sigbot_integration_tests::flows::f10_datafeed_ingest_pub;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -73,7 +73,7 @@ mod f10_datafeed_ingest_pub {
 // ============================================================================
 #[cfg(test)]
 mod f20_strategy_signal_calc_pub {
-    use crate::flows::f20_strategy_signal_calc_pub;
+    use sigbot_integration_tests::flows::f20_strategy_signal_calc_pub;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -99,7 +99,7 @@ mod f20_strategy_signal_calc_pub {
 // ============================================================================
 #[cfg(test)]
 mod f21_evaluator_hyperparam_pub {
-    use crate::flows::f21_evaluator_hyperparam_pub;
+    use sigbot_integration_tests::flows::f21_evaluator_hyperparam_pub;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -125,7 +125,7 @@ mod f21_evaluator_hyperparam_pub {
 // ============================================================================
 #[cfg(test)]
 mod f30_order_trade_exec_pub {
-    use crate::flows::f30_order_trade_exec_pub;
+    use sigbot_integration_tests::flows::f30_order_trade_exec_pub;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -151,7 +151,7 @@ mod f30_order_trade_exec_pub {
 // ============================================================================
 #[cfg(test)]
 mod f40_wallet_ledger_balance {
-    use crate::flows::f40_wallet_ledger_balance;
+    use sigbot_integration_tests::flows::f40_wallet_ledger_balance;
 
     #[tokio::test]
     #[ignore = "Requires Docker environment"]
@@ -177,7 +177,7 @@ mod f40_wallet_ledger_balance {
 // ============================================================================
 #[cfg(test)]
 mod f50_logservice_archive {
-    use crate::flows::f50_logservice_archive;
+    use sigbot_integration_tests::flows::f50_logservice_archive;
 
     #[tokio::test]
     #[ignore = "Requires Docker and EMQX environment"]
@@ -203,7 +203,7 @@ mod f50_logservice_archive {
 // ============================================================================
 #[cfg(test)]
 mod f60_export_external {
-    use crate::flows::f60_export_external;
+    use sigbot_integration_tests::flows::f60_export_external;
 
     #[tokio::test]
     #[ignore = "Requires Docker and Kafka environment"]
@@ -235,7 +235,7 @@ mod f60_export_external {
 // ============================================================================
 #[cfg(test)]
 mod f70_logservice_audit {
-    use crate::flows::f70_logservice_audit;
+    use sigbot_integration_tests::flows::f70_logservice_audit;
 
     #[tokio::test]
     #[ignore = "Requires Docker environment"]

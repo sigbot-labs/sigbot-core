@@ -25,9 +25,16 @@
 //! - Wallet: Balance updates, ledger entries (using REAL business logic)
 //! - Export: External system exports (Kafka, HTTP, Google Sheets)
 
+use crate::common::{
+    MiddlewareE2EContext,
+    init_database_schema, get_logs, get_balance, get_ledgers_by_wallet, get_logs_by_service,
+    LogServiceRunner, WalletServiceRunner,
+    SigbotTradeEvent,
+};
+use log::info;
+use serde_json::json;
 use std::time::Duration;
 use tokio::time::sleep;
-use serde_json::json;
 
 /// Test audit log for Trump tweet news impact on crypto market
 ///
@@ -286,8 +293,8 @@ pub async fn test_audit_log_wallet_update() {
         .unwrap();
 
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id: 7001,
         order_id: 70001,
         trade_id: 700001,
@@ -429,7 +436,7 @@ pub async fn test_audit_log_complete_trade_lifecycle() {
         .unwrap();
 
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
+        
         lifecycle_id: trade_lifecycle_id.to_string(),
         wallet_id: 7011,
         order_id: 70011,
@@ -477,7 +484,7 @@ pub async fn test_audit_log_complete_trade_lifecycle() {
     // Verify complete audit trail
     let all_logs = get_logs(&pool, 100).await.unwrap();
     let lifecycle_logs: Vec<_> = all_logs.iter()
-        .filter(|l| l.message.contains("lifecycle_001"))
+        .filter(|l| l.content.contains("lifecycle_001"))
         .collect();
     assert!(!lifecycle_logs.is_empty(), "Should have log entries for complete lifecycle");
 

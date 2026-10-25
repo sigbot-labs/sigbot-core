@@ -131,6 +131,41 @@ pub async fn init_database_schema(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// Initialize TimescaleDB schema for market data
+pub async fn init_timescaledb_schema(pool: &PgPool) -> Result<()> {
+    // Enable TimescaleDB extension
+    sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+        .execute(pool)
+        .await?;
+
+    // Create market kline hypertable
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS t_market_kline (
+            id BIGINT NOT NULL,
+            symbol VARCHAR(50) NOT NULL,
+            interval VARCHAR(20) NOT NULL,
+            "time" TIMESTAMPTZ NOT NULL,
+            open DECIMAL NOT NULL,
+            high DECIMAL NOT NULL,
+            low DECIMAL NOT NULL,
+            close DECIMAL NOT NULL,
+            volume DECIMAL NOT NULL,
+            PRIMARY KEY (id, "time")
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Convert to hypertable (TimescaleDB specific)
+    sqlx::query("SELECT create_hypertable('t_market_kline', 'time', if_not_exists => TRUE)")
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
 /// Get next ID from sequence (auto-increment simulation)
 pub async fn next_id(pool: &PgPool, sequence_name: &str) -> Result<i64> {
     sqlx::query_scalar::<_, i64>(
@@ -374,4 +409,41 @@ pub async fn clear_all_tables(pool: &PgPool) -> Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Insert kline record into TimescaleDB
+pub async fn insert_kline(
+    pool: &PgPool,
+    symbol: &str,
+    interval: &str,
+    timestamp: i64,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+    volume: f64,
+) -> Result<i64> {
+    let id = next_id(pool, "klines").await?;
+    let ts = chrono::DateTime::from_timestamp(timestamp, 0)
+        .ok_or_else(|| anyhow::anyhow!("Invalid timestamp"))?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO t_market_kline (id, symbol, interval, "time", open, high, low, close, volume)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "#,
+    )
+    .bind(id)
+    .bind(symbol)
+    .bind(interval)
+    .bind(ts)
+    .bind(open)
+    .bind(high)
+    .bind(low)
+    .bind(close)
+    .bind(volume)
+    .execute(pool)
+    .await?;
+
+    Ok(id)
 }

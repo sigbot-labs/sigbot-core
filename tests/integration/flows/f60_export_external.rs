@@ -23,6 +23,15 @@
 //! - HTTP/Webhook: Third-party integrations
 //! - Google Street/Sheets: Compliance and reporting
 
+use crate::common::{
+    MiddlewareE2EContext,
+    init_database_schema, init_balance, get_balance, get_ledgers_by_wallet,
+    create_kafka_utils,
+    LogServiceRunner, ExportServiceRunner, WalletServiceRunner,
+    SigbotTradeEvent,
+};
+use log::info;
+use serde_json::json;
 
 /// Test export trade results to Kafka
 ///
@@ -45,8 +54,8 @@ pub async fn test_export_trade_to_kafka() {
 
     // Create test trade event
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id: 6001,
         order_id: 60001,
         trade_id: 600001,
@@ -119,8 +128,8 @@ pub async fn test_export_trade_via_http_webhook() {
 
     // Create test trade event
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id: 6002,
         order_id: 60002,
         trade_id: 600002,
@@ -189,8 +198,8 @@ pub async fn test_export_trade_to_google_sheets() {
 
     // Create test trade event
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id: 6003,
         order_id: 60003,
         trade_id: 600003,
@@ -267,8 +276,8 @@ pub async fn test_export_balance_snapshot() {
 
     for (i, &wallet_id) in wallets.iter().enumerate() {
         let trade_event = SigbotTradeEvent {
-            id: uuid::Uuid::new_v4().to_string(),
-            lifecycle_id: uuid::Uuid::new_v4().to_string(),
+            
+            signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
             wallet_id,
             order_id: 60000 + i as i64,
             trade_id: 600000 + i as i64,

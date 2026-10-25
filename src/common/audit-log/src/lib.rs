@@ -765,3 +765,7 @@ pub use providers::FileAuditLogProvider;
 
 #[cfg(feature = "mqtt-provider")]
 pub use providers::MqttAuditLogProvider;
+
+// Re-export audit_log attribute macro for convenience
+// This allows users to import audit_log from common_audit_log directly
+pub use common_macro::audit_log;

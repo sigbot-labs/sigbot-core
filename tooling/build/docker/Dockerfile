@@ -60,7 +60,11 @@ ARG PROJECT_NAME=sigbot
 # Copy only files needed for dependency resolution. (Excluded: 'rust-toolchain.toml' due to containing dev components.)
 COPY benchmarks ./benchmarks
 COPY src ./src
+COPY tests/Cargo.toml ./tests/Cargo.toml
+COPY tooling/build/deps/swagger-ui-5.17.14.zip ./tooling/build/deps/swagger-ui-5.17.14.zip
 COPY Cargo.toml Cargo.lock ./
+
+ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/tooling/build/deps/swagger-ui-5.17.14.zip
 
 # Setup dependency caching structure
 RUN find src -type f -not -name "Cargo.toml" -delete && \
@@ -69,13 +73,13 @@ RUN find src -type f -not -name "Cargo.toml" -delete && \
     find benchmarks -type d -name src -o -path "*/src" | xargs -I{} mkdir -p {} && \
     find src -type d -name src | xargs -I{} touch {}/lib.rs && \
     find benchmarks -type d -name src | xargs -I{} touch {}/lib.rs && \
+    mkdir -p tests/integration && \
+    touch tests/integration/mod.rs tests/integration/integration_all.rs && \
     mkdir -p src/cmd/src/bin && \
-    echo "fn main() {}" > src/cmd/src/bin/${PROJECT_NAME}.rs && \
-    ls -R /usr/src/app
+    echo "fn main() {}" > src/cmd/src/bin/${PROJECT_NAME}.rs
 
 # Build dependencies only
-RUN cargo build --release && \
-    find . -name "*.rs" -delete
+RUN cargo build --locked --release -p sigbot-cmd --bin ${PROJECT_NAME}
 
 ################################################
 ### STAGE 3: Build Application Binary        ###
@@ -91,14 +95,18 @@ COPY --from=deps /usr/local/cargo /usr/local/cargo
 
 # Copy all source code and project files
 COPY benchmarks ./benchmarks
+COPY build ./build
 COPY etc ./etc
 COPY src ./src
 COPY static ./static
 COPY tooling ./tooling
+COPY tests ./tests
 COPY Cargo.toml Cargo.lock ./
 
+ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/tooling/build/deps/swagger-ui-5.17.14.zip
+
 # Check toolchain and build the application
-RUN cargo install ${BUILD_ARGS} --path src/cmd
+RUN cargo install ${BUILD_ARGS} --path src/cmd --bin ${PROJECT_NAME}
 
 #################################################
 ### STAGE 4: Runtime Image                    ###

@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Sigbot is a lightweight, Rust-based AI-driven trading bot that dynamically generates strategy code via LLM. It consists of multiple components - **api-server**, **deployer**, **datafeed-ingestor**, **strategy-runner**, **backtest-runner**,**notification-forwarder**, **order-manager**, **wallet-manager** - working together to provide a robust, multi-tenant trading platform.
+Sigbot is a lightweight, Rust-based AI-driven trading bot that dynamically generates strategy code via LLM. It consists of multiple components - **APIServer**, **deployer**, **datafeed-ingestor**, **strategy-runner**, **backtest-runner**, **notification-forwarder**, **order-manager**, **wallet-manager** - working together to provide a robust, multi-tenant trading platform.
 
 ## Features
 
@@ -18,10 +18,11 @@ Sigbot is a lightweight, Rust-based AI-driven trading bot that dynamically gener
 
 ## Development
 
-- [Prerequisites for locally Development](./docs/devel/1.prerequisites-for-dev.md)
-- [Build and Test for locally Development](./docs/devel/2.build-and-test-for-dev.md)
+- [Documentation index](./docs/index.md)
+- [Development prerequisites](./docs/runbooks/development-prerequisites.md)
+- [Build and test](./docs/runbooks/build-and-test.md)
 
 ## Deployment
 
-- [Deploy on Docker](./docs/deploy/build-and-deploy-on-docker.md)
-- [Deploy on Kubernetes](./docs/deploy/deploy-on-kubernetes.md)
+- [Deploy on Docker](./docs/runbooks/build-and-deploy-docker.md)
+- [Deploy on Kubernetes](./docs/runbooks/deploy-kubernetes.md)

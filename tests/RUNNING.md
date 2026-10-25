@@ -46,9 +46,14 @@ Tests organized by data flow stages:
   | `f50_logservice_archive` | ⑦ | Log service archives logs to DB |
   | `f60_export_external` | ⑧ | Export to external systems (Kafka, HTTP, Google Sheets) |
   | `f70_logservice_audit` | ⑨ | Cross-service audit trail (compliance) |
+  | `f80_notification_forward` | ⑩ | Notification routing and channel forwarding |
+  | `f90_backtest_historical` | ⑪ | Historical replay and simulated backtest execution |
 
 #### 2. Scenario Tests (`scenarios/`)
-Specific integration scenarios:
+These scenario suites are reserved but currently disabled in
+`tests/integration/mod.rs` because they do not compile against the current test
+support API. They are not part of `make test-it`:
+
 - **s10_error_handling**: Error scenarios and recovery
 - **s20_concurrent_signals**: High volume and concurrent processing
 - **s30_message_idempotency**: Duplicate detection and exactly-once semantics
@@ -78,61 +83,72 @@ Specific integration scenarios:
 ## Running Tests
 
 ### Run All Tests
+
 ```bash
-cargo test --package sigbot-e2e-tests --test e2e_all -- --nocapture
+make test-it
+
+# Short alias
+make it
+```
+
+The Makefile invokes the `sigbot-integration-tests` library test target with
+ignored E2E tests enabled. It runs suites serially because they share fixed
+host ports. The equivalent low-level command is:
+
+```bash
+cargo test --locked -p sigbot-integration-tests --lib -- \
+  --include-ignored --nocapture --test-threads=1
 ```
 
 ### Run Integration Tests
 
 #### Flow Tests
+
 ```bash
 # Flow 00: Full pipeline (datafeed -> strategy -> order -> wallet -> DB -> export)
-cargo test --package sigbot-e2e-tests f00_full_pipeline -- --nocapture
+make it IT_FILTER=f00_full_pipeline
 
 # Flow 10: Datafeed ingests & publishes market data/news
-cargo test --package sigbot-e2e-tests f10_datafeed_ingest_pub -- --nocapture
+make it IT_FILTER=f10_datafeed_ingest_pub
 
 # Flow 20: Strategy calculates & publishes trading signals to EMQX
-cargo test --package sigbot-e2e-tests f20_strategy_signal_calc_pub -- --nocapture
+make it IT_FILTER=f20_strategy_signal_calc_pub
 
 # Flow 21: Evaluator calculates & publishes hyperparameters (parallel with strategy)
-cargo test --package sigbot-e2e-tests f21_evaluator_hyperparam_pub -- --nocapture
+make it IT_FILTER=f21_evaluator_hyperparam_pub
 
 # Flow 30: Order service executes trades & publishes results
-cargo test --package sigbot-e2e-tests f30_order_trade_exec_pub -- --nocapture
+make it IT_FILTER=f30_order_trade_exec_pub
 
 # Flow 40: Wallet service updates ledger & balance
-cargo test --package sigbot-e2e-tests f40_wallet_ledger_balance -- --nocapture
+make it IT_FILTER=f40_wallet_ledger_balance
 
 # Flow 50: Log service archives logs to DB
-cargo test --package sigbot-e2e-tests f50_logservice_archive -- --nocapture
+make it IT_FILTER=f50_logservice_archive
 
 # Flow 60: Export to external systems (Kafka, HTTP, Google Sheets)
-cargo test --package sigbot-e2e-tests f60_export_external -- --nocapture
+make it IT_FILTER=f60_export_external
 
 # Flow 70: Cross-service audit trail (compliance)
-cargo test --package sigbot-e2e-tests f70_logservice_audit -- --nocapture
+make it IT_FILTER=f70_logservice_audit
+
+# Flow 80: Notification routing and forwarding
+make it IT_FILTER=f80_notification_forward
+
+# Flow 90: Historical backtest replay
+make it IT_FILTER=f90_backtest_historical
 ```
 
 ### Run Scenario Tests
-```bash
-# Error handling
-cargo test --package sigbot-e2e-tests scenario_error_handling -- --nocapture
 
-# Concurrent signals
-cargo test --package sigbot-e2e-tests scenario_concurrent_signals -- --nocapture
-
-# Message idempotency
-cargo test --package sigbot-e2e-tests scenario_message_idempotency -- --nocapture
-
-# Middleware integration
-cargo test --package sigbot-e2e-tests scenario_middleware_integration -- --nocapture
-```
+Scenario tests have no supported command until the `scenarios` module is
+re-enabled. Use the corresponding flow tests for current integration coverage.
 
 ### Run Single Test
+
 ```bash
-cargo test --package sigbot-e2e-tests test_complete_workflow_datafeed_to_database -- --nocapture
-cargo test --package sigbot-e2e-tests test_middleware_all_containers_integration -- --nocapture
+make it IT_FILTER=test_complete_workflow_datafeed_to_database
+make it IT_FILTER=test_notification_forward_basic
 ```
 
 ## Verify Container Status

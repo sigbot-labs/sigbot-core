@@ -20,6 +20,14 @@
 //!
 //! These tests use the real PostgresWalletUpdater from src/core/src/modules/wallet/store/transaction/trade_postgres.rs
 
+use crate::common::{
+    MiddlewareE2EContext,
+    init_database_schema, init_balance, update_balance, get_balance,
+    insert_ledger, get_ledgers_by_wallet,
+    LogServiceRunner, WalletServiceRunner,
+    SigbotTradeEvent,
+};
+use log::info;
 
 /// Test wallet ledger and balance update for single trade using real business logic
 ///
@@ -42,8 +50,8 @@ pub async fn test_wallet_ledger_balance_single() {
 
     // Create test trade event
     let trade_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id: 4001,
         order_id: 40011,
         trade_id: 400111,
@@ -111,8 +119,8 @@ pub async fn test_wallet_ledger_balance_multiple() {
 
     for (trade_id, side, qty, price, fee) in &trades {
         let trade_event = SigbotTradeEvent {
-            id: uuid::Uuid::new_v4().to_string(),
-            lifecycle_id: uuid::Uuid::new_v4().to_string(),
+            
+            signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
             wallet_id,
             order_id: *trade_id,
             trade_id: *trade_id,
@@ -175,8 +183,8 @@ pub async fn test_wallet_ledger_balance_with_position() {
 
     // BUY trade: Acquire BTC
     let buy_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id,
         order_id: 40031,
         trade_id: 40031,
@@ -199,8 +207,8 @@ pub async fn test_wallet_ledger_balance_with_position() {
 
     // SELL trade: Dispose BTC
     let sell_event = SigbotTradeEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        lifecycle_id: uuid::Uuid::new_v4().to_string(),
+        
+        signal_id: format!("sig-{}", uuid::Uuid::new_v4()),
         wallet_id,
         order_id: 40032,
         trade_id: 40032,

@@ -273,7 +273,7 @@ pub async fn create_timescaledb_utils(ctx: &crate::common::MiddlewareE2EContext)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::MiddlewareE2EContext;
+    use crate::common::MiddlewareE2EContext;
 
     #[tokio::test]
     #[ignore = "Requires Docker environment"]

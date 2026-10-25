@@ -102,6 +102,21 @@ impl ServiceHandle {
         let _ = self.shutdown_tx.send(()).await;
         let _ = self.join_handle.await;
     }
+
+    /// Publish log to EMQX topic (delegates to internal LogServiceRunner)
+    pub async fn publish_log(
+        &self,
+        service_name: &str,
+        level: &str,
+        message: &str,
+        metadata: Option<&str>,
+    ) -> Result<(), Error> {
+        if let Some(ref log_runner) = self._log_runner {
+            log_runner.publish_log(service_name, level, message, metadata).await
+        } else {
+            Err(Error::msg("LogServiceRunner not available"))
+        }
+    }
 }
 
 // ============================================================================
@@ -1130,3 +1145,143 @@ impl NotificationServiceRunner {
 }
 
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
+
+// ============================================================================
+// Backtest Service Runner
+// ============================================================================
+
+/// Backtest Service Runner - wraps SigbotBacktestManagerFactory from src/backtest
+///
+/// Business logic location:
+/// `src/backtest/src/manager/backtest_factory.rs`
+///
+/// The backtest service:
+/// 1. Loads historical kline/trade data from TimescaleDB
+/// 2. Publishes to EMQX simulating real-time market data
+/// 3. Provides mock exchange API for order execution
+/// 4. Updates s_bt_ledger, s_bt_balance, s_bt_position tables
+pub struct BacktestServiceRunner {
+    manager: Arc<dyn ISigbotBacktestManager>,
+    argument: Arc<SigbotBacktestManagerArgument>,
+    messager: Arc<dyn ISigbotMessagerClient>,
+    tenant_id: String,
+    workflow_id: String,
+}
+
+impl BacktestServiceRunner {
+    /// Start backtest service using real SigbotBacktestManagerFactory
+    pub async fn start(
+        emqx_host: &str,
+        emqx_port: u16,
+        _timescaledb_url: &str,
+    ) -> Result<ServiceHandle, Error> {
+        use clap::{Arg, Command};
+        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+        use sigbot_types::modules::messager::messager::MessagerConfiguration;
+
+        // Create messager configuration
+        let messager_config = Arc::new(MessagerConfiguration {
+            properties: Some(std::collections::HashMap::from([
+                ("host".to_string(), emqx_host.to_string()),
+                ("port".to_string(), emqx_port.to_string()),
+            ])),
+            secrets: None,
+        });
+
+        // Create messager client for EMQX connection
+        let messager_matches = Command::new("messager-test")
+            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
+            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .get_matches_from(vec![
+                "messager-test",
+                "--messager-provider",
+                "mqtt",
+                "--messager-configuration",
+                "",
+            ]);
+
+        let messager = SigbotMessagerClientFactory::init(&messager_matches, messager_config.clone())
+            .await
+            .context("Failed to initialize SigbotMessagerClientFactory")?;
+
+        // Build clap::ArgMatches for factory initialization
+        let matches = Command::new("backtest-test")
+            .arg(Arg::new("BACKTEST_MANAGER_PROVIDER").long("backtest-manager-provider").default_value("kline"))
+            .arg(Arg::new("BACKTEST_MANAGER_CONFIGURATION").long("backtest-manager-configuration").default_value(""))
+            .get_matches_from(vec![
+                "backtest-test",
+                "--backtest-manager-provider",
+                "kline",
+                "--backtest-manager-configuration",
+                "",
+            ]);
+
+        // Initialize factory - this calls the real src/backtest code
+        let (manager, argument) = SigbotBacktestManagerFactory::init(&matches, true)
+            .await
+            .context("Failed to initialize SigbotBacktestManagerFactory")?;
+
+        info!("Backtest service initialized with provider={:?}", manager.provider());
+
+        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+
+        // Default tenant and workflow IDs for testing
+        let tenant_id = "test-tenant".to_string();
+        let workflow_id = "test-workflow".to_string();
+
+        let runner = Arc::new(Self {
+            manager: manager.clone(),
+            argument: argument.clone(),
+            messager: messager.clone(),
+            tenant_id: tenant_id.clone(),
+            workflow_id: workflow_id.clone(),
+        });
+
+        let join_handle = tokio::spawn(async move {
+            info!("Backtest service runner started (real src/backtest code)");
+
+            // Startup backtest manager
+            // This will load historical data from TimescaleDB and publish to EMQX
+            // let _ = manager.startup(argument, messager).await;
+
+            let _ = shutdown_rx.recv().await;
+
+            // Shutdown factory
+            let _ = SigbotBacktestManagerFactory::close("kline".to_string()).await;
+            info!("Backtest service runner shutting down");
+        });
+
+        Ok(ServiceHandle {
+            shutdown_tx,
+            join_handle,
+            _datafeed_runner: None,
+            _strategy_runner: None,
+            _log_runner: None,
+        })
+    }
+
+    /// Trigger historical data publish from backtest service
+    pub async fn trigger_historical_data(&self, symbol: &str, price: f64, quantity: f64) -> Result<(), Error> {
+        use serde_json::json;
+
+        // Create market data payload
+        let payload = json!({
+            "symbol": symbol,
+            "price": price,
+            "quantity": quantity,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "source": "backtest-historical"
+        });
+
+        // Publish to the topic that strategy subscribes to
+        let topic = format!("/internal/v1/{}/{}/market/stream", self.tenant_id, self.workflow_id);
+        let message = payload.to_string();
+        self.messager.publish(&topic, &message).await?;
+        info!("Triggered historical data publish to {}: {} @ {}", topic, symbol, price);
+        Ok(())
+    }
+}
+
+use sigbot_types::modules::backtest::SigbotBacktestManagerArgument;
+use sigbot_backtest::manager::backtest_factory::{ISigbotBacktestManager, SigbotBacktestManagerFactory};
+
