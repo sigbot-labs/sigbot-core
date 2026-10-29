@@ -31,6 +31,26 @@ impl SigbotExporterServer {
     }
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
+        if let Some(encoded) = matches.get_one::<String>("EXPORTER_MANAGER_CONFIGURATION") {
+            let decoded =
+                sigbot_types::modules::decode_arg_config(encoded).expect("invalid exporter configuration encoding");
+            let argument = sigbot_types::modules::exporter::SigbotExporterManagerArgument::from_json(&decoded)
+                .expect("invalid exporter configuration");
+            if let Some(properties) = argument
+                .properties
+                .as_ref()
+                .filter(|p| p.get("runtime_v2").is_some_and(|value| value == "true"))
+            {
+                let runtime = super::export_runtime::ExportRuntime::from_properties(properties)
+                    .await
+                    .expect("invalid v2 exporter configuration");
+                let messager = SigbotMessagerClientFactory::init(matches, argument.messager_config)
+                    .await
+                    .expect("exporter broker connection failed");
+                runtime.start(messager).await.expect("exporter subscription failed");
+                return;
+            }
+        }
         debug!("Initializing Exporter manager.");
         let (manager, argument) = SigbotExporterManagerFactory::init(matches, verbose)
             .await

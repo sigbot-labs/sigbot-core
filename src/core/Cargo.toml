@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+authguard-adapter-rust = { git = "https://github.com/wl4g/authguard.git", rev = "56f00ee51a33136dae7e83beba558cdbf05c4a85" }
 # Other modules dependencies.
 common-audit-log.workspace = true
 common-telemetry.workspace = true
@@ -37,6 +38,7 @@ anyhow.workspace = true
 dotenv.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
+serde_path_to_error = "0.1.20"
 regex.workspace = true
 openapi.workspace = true
 utoipa = { workspace = true, features = ["axum_extras"] }
@@ -52,6 +54,7 @@ hex = { workspace = true}
 
 # Database libs
 mongodb = { workspace = true }
+rust_decimal.workspace = true
 sqlx = { workspace = true, features = [
     "runtime-tokio-rustls",
     "sqlite",
@@ -65,11 +68,7 @@ openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true
 # OAuth2 libs
-oauth2.workspace = true
-openidconnect.workspace = true
-jsonwebtoken.workspace = true
 url.workspace = true
-globset.workspace = true
 # Encrypt libs
 openssl = { workspace = true }
 rsa = { workspace = true }
@@ -78,7 +77,6 @@ sha2 = { workspace = true }
 moka = { workspace = true, features = ["future"] }
 redis = { workspace = true, features = ["tokio-comp", "cluster-async"] }
 # Ethers libs
-ethers = { workspace = true, features = ["abigen", "ws", "rustls"] }
 eyre = { workspace = true }
 # APM libs
 prometheus.workspace = true
@@ -112,4 +110,25 @@ path = "benches/bench_main.rs"
 harness = false
 
 [dev-dependencies]
+percent-encoding = "2.3.1"
 criterion.workspace = true
+
+[[test]]
+name = "authguard_integration"
+path = "tests/sys/handler/auth_handler_test.rs"
+
+[[test]]
+name = "scoped_query"
+path = "tests/store/scoped_query_test.rs"
+
+[[test]]
+name = "config_loader"
+path = "tests/config/config_loader_test.rs"
+
+[[test]]
+name = "authenticated_workflow_api"
+path = "tests/modules/workflow/authenticated_api_test.rs"
+
+[[test]]
+name = "mgmt_health"
+path = "tests/mgmt/health_test.rs"

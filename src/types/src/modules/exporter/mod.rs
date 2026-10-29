@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::modules::messager::messager::MessagerConfiguration;
+pub mod request;
 use anyhow::{Context, Error};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -32,7 +33,7 @@ pub struct SigbotExporterManagerArgument {
 
 impl SigbotExporterManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse exporter manager info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse exporter manager info from JSON")
     }
 }
 

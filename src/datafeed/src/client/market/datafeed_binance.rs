@@ -1,39 +1,92 @@
-// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
-//
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
-// is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the
-// Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// James Wong is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
-//
-// IMPORTANT: Any software that fully or partially contains or uses materials
-// covered by this license must also be released under the GNU GPL license.
-// This includes modifications and derived works.
-
-use crate::client::datafeed_factory::ISigbotDatafeedClient;
-use anyhow::{Context, Error};
+// SPDX-License-Identifier: GPL-3.0-only
+//! Bounded public Binance snapshots; all prices originate in the exchange response.
+use crate::client::{datafeed_factory::ISigbotDatafeedClient, news::social_feed::FeedHandler};
+use anyhow::{ensure, Context, Result};
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
-use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::modules::{datafeed::SigbotDatefeedArgument, exchange::exchange::ExchangeInfo};
-use std::{future::Future, pin::Pin, sync::Arc};
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use serde_json::{json, Value};
+use sigbot_types::modules::datafeed::{datafeed::DatafeedProvider, event::DatafeedEvent, SigbotDatefeedArgument};
+use std::{sync::Arc, time::Duration};
+use tokio::{sync::Mutex, task::JoinHandle};
 
 #[derive(Clone)]
+struct BinanceSource {
+    endpoint: String,
+    symbol: String,
+    interval: Duration,
+    client: reqwest::Client,
+}
+
 pub struct SigbotBinanceDatafeedClient {
-    // config: Arc<DatafeedInfo>,
+    source: Mutex<Option<BinanceSource>>,
+    task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl SigbotBinanceDatafeedClient {
     pub async fn new() -> Arc<Self> {
-        Arc::new(Self {})
+        Arc::new(Self {
+            source: Mutex::new(None),
+            task: Mutex::new(None),
+        })
+    }
+
+    pub async fn snapshot(endpoint: &str, symbol: &str, client: &reqwest::Client) -> Result<DatafeedEvent> {
+        ensure!(
+            !symbol.is_empty()
+                && symbol.len() <= 32
+                && symbol.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()),
+            "invalid Binance symbol"
+        );
+        let mut response = client
+            .get(format!("{}/api/v3/ticker/24hr", endpoint.trim_end_matches('/')))
+            .query(&[("symbol", symbol), ("type", "MINI")])
+            .send()
+            .await?
+            .error_for_status()?;
+        ensure!(
+            response.content_length().unwrap_or(0) <= 65_536,
+            "Binance snapshot too large"
+        );
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            ensure!(bytes.len() + chunk.len() <= 65_536, "response exceeds bounded buffer");
+            bytes.extend_from_slice(&chunk);
+        }
+        ensure!(bytes.len() <= 65_536, "Binance snapshot too large");
+        let raw: Value = serde_json::from_slice(&bytes)?;
+        let price = raw
+            .get("lastPrice")
+            .and_then(Value::as_str)
+            .context("Binance lastPrice missing")?;
+        ensure!(price.parse::<Decimal>()? > Decimal::ZERO, "invalid Binance price");
+        ensure!(
+            raw.get("symbol").and_then(Value::as_str) == Some(symbol),
+            "Binance snapshot symbol mismatch"
+        );
+        let seq = raw
+            .get("closeTime")
+            .and_then(Value::as_i64)
+            .context("Binance closeTime missing")?;
+        let event_time = DateTime::from_timestamp_millis(seq).context("invalid Binance closeTime")?;
+        let available_time = Utc::now();
+        ensure!(
+            event_time <= available_time,
+            "Binance clock is ahead; reject unverified future snapshot"
+        );
+        let payload = json!({"price": price, "source_payload": raw});
+        Ok(DatafeedEvent {
+            source: "binance".to_owned(),
+            source_event_id: format!("{symbol}:{seq}"),
+            symbol: symbol.to_owned(),
+            event_type: "market".to_owned(),
+            event_time,
+            available_time,
+            seq,
+            revision: 0,
+            content: None,
+            raw: payload,
+        })
     }
 }
 
@@ -43,57 +96,80 @@ impl ISigbotDatafeedClient for SigbotBinanceDatafeedClient {
         DatafeedProvider::BINANCE
     }
 
-    async fn init(&self, argument: Arc<SigbotDatefeedArgument>) {
-        debug!("Initializing Binance Datafeed ...");
-        // TODO: Implement the logic to execute Binance market gateway.
-        // TODO: 1. Start the Binance market websocket subscription and pushing to EMQx(hot data cache).
-        // TODO: 2. Start the consumer to market data to database(cold data persist) from EMQx.
-
-        // TODO: create from datafeed configuration.
-        let _ = Arc::new(ExchangeInfo::default());
-
-        let kline_params = argument
+    async fn init(&self, argument: Arc<SigbotDatefeedArgument>) -> Result<()> {
+        let properties = argument
             .datafeed_config
             .properties
             .as_ref()
-            .context("Datafeed config is required")
-            .map(|config| {
-                (
-                    config
-                        .get("symbol")
-                        .context("Symbol is required")
-                        .map(|s| s.clone())
-                        .unwrap_or(String::from("BTCUSDC")),
-                    config
-                        .get("interval")
-                        .context("Interval is required")
-                        .map(|s| s.clone())
-                        .unwrap_or(String::from("1m")),
-                )
-            })
-            .expect("Failed to get kline params from datafeed config");
+            .context("Binance source properties required")?;
+        let endpoint = properties
+            .get("binance_endpoint")
+            .cloned()
+            .unwrap_or_else(|| "https://api.binance.com".to_owned());
+        let parsed = url::Url::parse(&endpoint)?;
+        ensure!(
+            parsed.scheme() == "https" && parsed.username().is_empty() && parsed.password().is_none(),
+            "public Binance source requires HTTPS"
+        );
+        let symbol = properties.get("symbol").context("Binance symbol required")?.clone();
+        let interval_ms = properties
+            .get("poll_interval_ms")
+            .map(String::as_str)
+            .unwrap_or("5000")
+            .parse::<u64>()?;
+        ensure!(
+            (1000..=300_000).contains(&interval_ms),
+            "Binance poll interval out of bounds"
+        );
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
+        *self.source.lock().await = Some(BinanceSource {
+            endpoint,
+            symbol,
+            interval: Duration::from_millis(interval_ms),
+            client,
+        });
+        Ok(())
+    }
 
-        // let exchange_client = SigbotExchangeClientFactory::init(exchange)
-        //     .await
-        //     .expect("Failed to initialize Exchange client.");
-        // let klines = exchange_client
-        //     .get_klines(&kline_params.0, &kline_params.1, None, None, 100)
-        //     .await
-        //     .expect("Failed to get klines");
-
-        // info!("Klines: {:?}", klines);
-
-        info!("Initialized Binance Datafeed.");
+    async fn subscribe(&self, handler: FeedHandler) -> Result<()> {
+        let source = self
+            .source
+            .lock()
+            .await
+            .clone()
+            .context("Binance source not initialized")?;
+        let mut task = self.task.lock().await;
+        ensure!(task.is_none(), "Binance source already subscribed");
+        let first = Self::snapshot(&source.endpoint, &source.symbol, &source.client).await?;
+        handler(serde_json::to_vec(&first)?).await?;
+        *task = Some(tokio::spawn(async move {
+            let mut delay = source.interval;
+            loop {
+                tokio::time::sleep(delay).await;
+                let result = async {
+                    let event = Self::snapshot(&source.endpoint, &source.symbol, &source.client).await?;
+                    handler(serde_json::to_vec(&event)?).await?;
+                    anyhow::Ok(())
+                }
+                .await;
+                if let Err(error) = result {
+                    tracing::warn!(%error, "Binance snapshot failed; backing off without invented data");
+                    delay = (delay * 2).min(Duration::from_secs(60));
+                } else {
+                    delay = source.interval;
+                }
+            }
+        }));
+        Ok(())
     }
 
     async fn close(&self) {
-        info!("Shut down Binance Datafeed.");
-    }
-
-    async fn subscribe(
-        &self,
-        handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
-    ) {
-        info!("Subscribed to Binance Datafeed with handler.");
+        if let Some(task) = self.task.lock().await.take() {
+            task.abort();
+            let _ = task.await;
+        }
     }
 }

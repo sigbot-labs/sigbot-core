@@ -53,6 +53,21 @@ pub struct SigbotNotificationClientFactory {
 }
 
 impl SigbotNotificationClientFactory {
+    pub async fn create(
+        info: Arc<sigbot_types::modules::notification::notification::NotificationInfo>,
+    ) -> Result<Arc<dyn ISigbotNotificationClient>, Error> {
+        let client: Arc<dyn ISigbotNotificationClient> =
+            match info.provider.as_ref().context("notification provider required")? {
+                NotificationProvider::EMAIL => {
+                    SigbotEmailClient::new(Some(SigbotEmailClientConfig::from_config(info))).await
+                }
+                NotificationProvider::TELEGRAM => {
+                    SigbotTelegramClient::new(Some(SigbotTelegramConfig::from_config(info))).await
+                }
+            };
+        client.init().await;
+        Ok(client)
+    }
     fn new() -> Self {
         SigbotNotificationClientFactory {
             implementations: HashMap::new(),
@@ -97,10 +112,9 @@ impl SigbotNotificationClientFactory {
 
         let argument = Arc::new(
             SigbotNotificationArgument::from_json(
-                &decode_arg_config(&configuration)
-                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+                &decode_arg_config(&configuration).context("Failed to decode the configuration")?,
             )
-            .context(format!("Failed to parse the configuration: {}", configuration))?,
+            .context("Failed to parse the configuration")?,
         );
 
         let mut notifications: Vec<Arc<dyn ISigbotNotificationClient + Send + Sync>> = Vec::new();
@@ -215,3 +229,21 @@ impl SigbotNotificationClientFactory {
 
 #[cfg(test)]
 mod tests {}
+
+/// Only an explicit provider rejection may be retried automatically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationDeliveryError {
+    Retryable,
+    Rejected,
+    Unknown,
+}
+impl std::fmt::Display for NotificationDeliveryError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Retryable => "notification provider rejected temporarily",
+            Self::Rejected => "notification provider rejected permanently",
+            Self::Unknown => "notification provider acceptance is unknown",
+        })
+    }
+}
+impl std::error::Error for NotificationDeliveryError {}

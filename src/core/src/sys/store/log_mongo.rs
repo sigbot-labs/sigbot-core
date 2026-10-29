@@ -79,8 +79,7 @@ impl IAsyncRepository<LogInfo> for LogMongoRepository {
 impl ILogRepository for LogMongoRepository {
     async fn append(&self, mut log: LogInfo) -> Result<i64, Error> {
         // Logs are append-only, use insert instead of upsert
-        use crate::util::auths::SecurityContext;
-        let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+        let insert_by = log.base.created_by.clone();
         let id = log.base.pre_insert(insert_by).await;
 
         let result = self.collection.insert_one(&log).await?;

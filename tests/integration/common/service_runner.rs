@@ -28,10 +28,7 @@
 use anyhow::{Context, Error};
 use common_telemetry::info;
 use sigbot_core::config::config::{PostgresAppDBProperties, PostgresPropertiesBase};
-use sigbot_core::modules::wallet::store::transaction::{
-    trade_postgres::PostgresWalletUpdater,
-    IWalletUpdater,
-};
+use sigbot_core::modules::wallet::store::transaction::{trade_postgres::PostgresWalletUpdater, IWalletUpdater};
 use sigbot_types::modules::order::events::SigbotTradeEvent;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -42,13 +39,18 @@ use tokio::sync::mpsc;
 
 /// Parse postgres URL into PostgresAppDBProperties
 fn parse_postgres_url(url: &str) -> Result<PostgresAppDBProperties, Error> {
-    let url = url.trim_start_matches("postgres://").trim_start_matches("postgresql://");
+    let url = url
+        .trim_start_matches("postgres://")
+        .trim_start_matches("postgresql://");
     let at_pos = url.find('@').unwrap_or(0);
     let before_at = &url[..at_pos];
     let after_at = &url[at_pos + 1..];
 
     let (username, password) = if let Some(colon_pos) = before_at.find(':') {
-        (before_at[..colon_pos].to_string(), Some(before_at[colon_pos + 1..].to_string()))
+        (
+            before_at[..colon_pos].to_string(),
+            Some(before_at[colon_pos + 1..].to_string()),
+        )
     } else {
         (before_at.to_string(), None)
     };
@@ -149,11 +151,7 @@ impl WalletServiceRunner {
     }
 
     /// Start service (subscription mode - placeholder for full integration)
-    pub async fn start(
-        _emqx_host: &str,
-        _emqx_port: u16,
-        postgres_url: &str,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(_emqx_host: &str, _emqx_port: u16, postgres_url: &str) -> Result<ServiceHandle, Error> {
         let _wallet_runner = Self::new(postgres_url).await?;
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
 
@@ -193,18 +191,14 @@ pub struct OrderServiceRunner {
 
 impl OrderServiceRunner {
     /// Start order service using real SigbotOrderManagerFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-        _postgres_url: &str,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16, _postgres_url: &str) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
-        use sigbot_types::modules::order::OrderMgrProvider;
+        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+        use sigbot_types::modules::messager::messager::MessagerConfiguration;
         use sigbot_types::modules::order::events::SigbotTradeSignal;
+        use sigbot_types::modules::order::OrderMgrProvider;
         use std::future::Future;
         use std::pin::Pin;
-        use sigbot_types::modules::messager::messager::MessagerConfiguration;
-        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
 
         // Create messager configuration
         let messager_config = Arc::new(MessagerConfiguration {
@@ -217,8 +211,16 @@ impl OrderServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -233,8 +235,16 @@ impl OrderServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("order-test")
-            .arg(Arg::new("ORDER_MANAGER_PROVIDER").long("order-manager-provider").default_value("default"))
-            .arg(Arg::new("ORDER_MANAGER_CONFIGURATION").long("order-manager-configuration").default_value(""))
+            .arg(
+                Arg::new("ORDER_MANAGER_PROVIDER")
+                    .long("order-manager-provider")
+                    .default_value("default"),
+            )
+            .arg(
+                Arg::new("ORDER_MANAGER_CONFIGURATION")
+                    .long("order-manager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "order-test",
                 "--order-manager-provider",
@@ -278,8 +288,8 @@ impl OrderServiceRunner {
     }
 }
 
-use sigbot_types::modules::order::{SigbotOrderManagerArgument, events::SigbotTradeSignal, OrderMgrProvider};
 use sigbot_order::manager::order_factory::{ISigbotOrderManager, SigbotOrderManagerFactory};
+use sigbot_types::modules::order::{events::SigbotTradeSignal, OrderMgrProvider, SigbotOrderManagerArgument};
 
 // ============================================================================
 // Datafeed Service Runner
@@ -299,14 +309,11 @@ pub struct DatafeedServiceRunner {
 
 impl DatafeedServiceRunner {
     /// Start datafeed service using real SigbotDatafeedClientFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
+        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
         use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
         use sigbot_types::modules::messager::messager::MessagerConfiguration;
-        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
 
         // Create messager configuration
         let messager_config = Arc::new(MessagerConfiguration {
@@ -319,8 +326,16 @@ impl DatafeedServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -335,8 +350,16 @@ impl DatafeedServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("datafeed-test")
-            .arg(Arg::new("DATAFEED_PROVIDERS").long("datafeed-providers").default_value("binance"))
-            .arg(Arg::new("DATAFEED_CONFIGURATION").long("datafeed-configuration").default_value(""))
+            .arg(
+                Arg::new("DATAFEED_PROVIDERS")
+                    .long("datafeed-providers")
+                    .default_value("binance"),
+            )
+            .arg(
+                Arg::new("DATAFEED_CONFIGURATION")
+                    .long("datafeed-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "datafeed-test",
                 "--datafeed-providers",
@@ -350,10 +373,7 @@ impl DatafeedServiceRunner {
             .await
             .context("Failed to initialize SigbotDatafeedClientFactory")?;
 
-        info!(
-            "Datafeed service initialized with {} clients",
-            clients.len()
-        );
+        info!("Datafeed service initialized with {} clients", clients.len());
 
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
 
@@ -383,23 +403,28 @@ impl DatafeedServiceRunner {
                 let messager = messager_clone.clone();
                 let tenant_id = tenant_id_clone.clone();
                 let workflow_id = workflow_id_clone.clone();
-                let handler = Arc::new(move |payload: Vec<u8>| -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, Error>> + Send>> {
-                    let messager = messager.clone();
-                    let tenant_id = tenant_id.clone();
-                    let workflow_id = workflow_id.clone();
-                    Box::pin(async move {
-                        info!("Datafeed received message: {:?}", payload);
-                        // Publish to the correct topic that strategy service subscribes to
-                        // Topic format: /internal/v1/{tenant_id}/{workflow_id}/market/stream
-                        let topic = format!("/internal/v1/{}/{}/market/stream", tenant_id, workflow_id);
-                        let message = String::from_utf8_lossy(&payload).to_string();
-                        match messager.publish(&topic, &message).await {
-                            Ok(msg_id) => info!("Published to EMQX topic {} with msg_id: {}", topic, msg_id),
-                            Err(e) => info!("Failed to publish to EMQX: {}", e),
-                        }
-                        Ok(payload)
-                    })
-                });
+                let handler =
+                    Arc::new(
+                        move |payload: Vec<u8>| -> std::pin::Pin<
+                            Box<dyn std::future::Future<Output = Result<Vec<u8>, Error>> + Send>,
+                        > {
+                            let messager = messager.clone();
+                            let tenant_id = tenant_id.clone();
+                            let workflow_id = workflow_id.clone();
+                            Box::pin(async move {
+                                info!("Datafeed received message: {:?}", payload);
+                                // Publish to the correct topic that strategy service subscribes to
+                                // Topic format: /internal/v1/{tenant_id}/{workflow_id}/market/stream
+                                let topic = format!("/internal/v1/{}/{}/market/stream", tenant_id, workflow_id);
+                                let message = String::from_utf8_lossy(&payload).to_string();
+                                match messager.publish(&topic, &message).await {
+                                    Ok(msg_id) => info!("Published to EMQX topic {} with msg_id: {}", topic, msg_id),
+                                    Err(e) => info!("Failed to publish to EMQX: {}", e),
+                                }
+                                Ok(payload)
+                            })
+                        },
+                    );
                 client.subscribe(handler).await;
             }
 
@@ -442,8 +467,8 @@ impl DatafeedServiceRunner {
     }
 }
 
-use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
 use sigbot_datafeed::client::datafeed_factory::{ISigbotDatafeedClient, SigbotDatafeedClientFactory};
+use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
 
 // ============================================================================
 // Strategy Runner Service
@@ -463,16 +488,12 @@ pub struct StrategyServiceRunner {
 
 impl StrategyServiceRunner {
     /// Start strategy service using real SigbotStrategyExecutorFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-        _postgres_url: &str,
-    ) -> Result<ServiceHandle, Error> {
-        use sigbot_types::modules::strategy::strategy::StrategyProvider;
-        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-        use sigbot_types::modules::messager::messager::MessagerConfiguration;
+    pub async fn start(emqx_host: &str, emqx_port: u16, _postgres_url: &str) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
         use serde_json::json;
+        use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
+        use sigbot_types::modules::messager::messager::MessagerConfiguration;
+        use sigbot_types::modules::strategy::strategy::StrategyProvider;
 
         // Create messager configuration
         let messager_config = Arc::new(MessagerConfiguration {
@@ -485,8 +506,16 @@ impl StrategyServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -506,6 +535,7 @@ impl StrategyServiceRunner {
         let tenant_id = "test-tenant".to_string();
 
         let strategy_arg = Arc::new(SigbotStrategyArgument {
+            properties: None,
             messager_config: messager_config.clone(),
             sys_environment: None,
             run_mode: "STREAMING".to_string(),
@@ -566,7 +596,10 @@ def on_process(context):
         if let Err(e) = messager.publish(&config_topic, &config_message).await {
             info!("Failed to publish strategy config: {}", e);
         } else {
-            info!("Published strategy config to {}, executor should now subscribe to market data", config_topic);
+            info!(
+                "Published strategy config to {}, executor should now subscribe to market data",
+                config_topic
+            );
         }
 
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
@@ -623,8 +656,8 @@ def on_process(context):
     }
 }
 
-use sigbot_types::modules::strategy::SigbotStrategyArgument;
 use sigbot_strategy_runner::executor::strategy_factory::{ISigbotStrategyExecutor, SigbotStrategyExecutorFactory};
+use sigbot_types::modules::strategy::SigbotStrategyArgument;
 
 // ============================================================================
 // Evaluator Service Runner
@@ -641,11 +674,7 @@ pub struct EvaluatorServiceRunner {
 
 impl EvaluatorServiceRunner {
     /// Start evaluator service using real SigbotEvaluationExecutorFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-        _postgres_url: &str,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16, _postgres_url: &str) -> Result<ServiceHandle, Error> {
         use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
         use sigbot_types::modules::evaluator::evaluator::EvaluatorProvider;
         use sigbot_types::modules::messager::messager::MessagerConfiguration;
@@ -661,8 +690,16 @@ impl EvaluatorServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = clap::Command::new("messager-test")
-            .arg(clap::Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(clap::Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                clap::Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                clap::Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -687,14 +724,10 @@ impl EvaluatorServiceRunner {
         });
         let evaluator_arg_clone = evaluator_arg.clone();
 
-        let executor = SigbotEvaluationExecutorFactory::init(
-            workflow_id,
-            node_id,
-            EvaluatorProvider::MAS,
-            evaluator_arg,
-        )
-        .await
-        .context("Failed to initialize SigbotEvaluationExecutorFactory")?;
+        let executor =
+            SigbotEvaluationExecutorFactory::init(workflow_id, node_id, EvaluatorProvider::MAS, evaluator_arg)
+                .await
+                .context("Failed to initialize SigbotEvaluationExecutorFactory")?;
 
         // Startup executor with messager
         executor.startup(evaluator_arg_clone, messager.clone()).await;
@@ -723,14 +756,19 @@ impl EvaluatorServiceRunner {
     }
 
     /// Calculate hyperparameters using real evaluator business logic
-    pub async fn calculate_hyperparameters(&self, _performance_data: &serde_json::Value) -> Result<serde_json::Value, Error> {
+    pub async fn calculate_hyperparameters(
+        &self,
+        _performance_data: &serde_json::Value,
+    ) -> Result<serde_json::Value, Error> {
         // TODO: Call evaluator executor calculate method
-        Err(Error::msg("Hyperparameter calculation requires executor-specific implementation"))
+        Err(Error::msg(
+            "Hyperparameter calculation requires executor-specific implementation",
+        ))
     }
 }
 
-use sigbot_types::modules::evaluator::SigbotEvaluatorRunnerArgument;
 use sigbot_evaluator::executor::evaluator_factory::{ISigbotEvaluationExecutor, SigbotEvaluationExecutorFactory};
+use sigbot_types::modules::evaluator::SigbotEvaluatorRunnerArgument;
 
 // ============================================================================
 // Log Service Runner
@@ -791,7 +829,9 @@ impl LogServiceRunner {
         message: &str,
         metadata: Option<&str>,
     ) -> Result<(), Error> {
-        let messager = self.messager.as_ref()
+        let messager = self
+            .messager
+            .as_ref()
             .ok_or_else(|| Error::msg("Messager not initialized"))?;
 
         // Create log content with level and metadata
@@ -808,12 +848,15 @@ impl LogServiceRunner {
             content: vec![log_content],
         };
 
-        let topic = format!("/internal/v1/{}/{}/{}/log",
-            self.tenant_id, self.workflow_id, self.node_id);
-        let payload = serde_json::to_string(&log_entry)
-            .context("Failed to serialize WorkflowLogEntry")?;
+        let topic = format!(
+            "/internal/v1/{}/{}/{}/log",
+            self.tenant_id, self.workflow_id, self.node_id
+        );
+        let payload = serde_json::to_string(&log_entry).context("Failed to serialize WorkflowLogEntry")?;
 
-        messager.publish(&topic, &payload).await
+        messager
+            .publish(&topic, &payload)
+            .await
             .context("Failed to publish log to EMQX")?;
 
         info!("Published log to EMQX topic {}: [{}] {}", topic, level, message);
@@ -841,8 +884,16 @@ impl LogServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -857,8 +908,16 @@ impl LogServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("log-test")
-            .arg(Arg::new("LOG_MANAGER_PROVIDER").long("log-manager-provider").default_value("default"))
-            .arg(Arg::new("LOG_MANAGER_CONFIGURATION").long("log-manager-configuration").default_value(""))
+            .arg(
+                Arg::new("LOG_MANAGER_PROVIDER")
+                    .long("log-manager-provider")
+                    .default_value("default"),
+            )
+            .arg(
+                Arg::new("LOG_MANAGER_CONFIGURATION")
+                    .long("log-manager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "log-test",
                 "--log-manager-provider",
@@ -879,7 +938,9 @@ impl LogServiceRunner {
         let argument = Arc::new(log_manager_arg);
 
         // Start archiving logs from EMQX
-        manager.start_archiving(messager.clone()).await
+        manager
+            .start_archiving(messager.clone())
+            .await
             .context("Failed to start log archiving")?;
 
         info!("Log service initialized - subscribing to logs from EMQX");
@@ -894,8 +955,11 @@ impl LogServiceRunner {
         let runner = Arc::new(Self {
             manager: manager.clone(),
             argument: argument.clone(),
-            pool: Some(sqlx::PgPool::connect(postgres_url).await
-                .context("Failed to connect to PostgreSQL")?),
+            pool: Some(
+                sqlx::PgPool::connect(postgres_url)
+                    .await
+                    .context("Failed to connect to PostgreSQL")?,
+            ),
             messager: Some(messager.clone()),
             tenant_id: tenant_id.clone(),
             workflow_id: workflow_id.clone(),
@@ -922,9 +986,9 @@ impl LogServiceRunner {
     }
 }
 
-use sigbot_types::sys::log::LogManagerArgument;
-use sigbot_logservice::manager::logmanager_factory::{ISigbotLogManager, SigbotLogManagerFactory};
 use sigbot_logservice::manager::logmanager_default::SigbotDefaultLogManager;
+use sigbot_logservice::manager::logmanager_factory::{ISigbotLogManager, SigbotLogManagerFactory};
+use sigbot_types::sys::log::LogManagerArgument;
 
 // ============================================================================
 // Export Service Runner
@@ -946,8 +1010,16 @@ impl ExportServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("export-test")
-            .arg(Arg::new("EXPORTER_MANAGER_PROVIDER").long("exporter-manager-provider").default_value("kafka"))
-            .arg(Arg::new("EXPORTER_MANAGER_CONFIGURATION").long("exporter-manager-configuration").default_value(""))
+            .arg(
+                Arg::new("EXPORTER_MANAGER_PROVIDER")
+                    .long("exporter-manager-provider")
+                    .default_value("kafka"),
+            )
+            .arg(
+                Arg::new("EXPORTER_MANAGER_CONFIGURATION")
+                    .long("exporter-manager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "export-test",
                 "--exporter-manager-provider",
@@ -973,7 +1045,8 @@ impl ExportServiceRunner {
     /// Export trade data via HTTP webhook using real exporter business logic
     pub async fn export_via_http(&self, trade_data: &serde_json::Value, webhook_url: &str) -> Result<(), Error> {
         let client = reqwest::Client::new();
-        client.post(webhook_url)
+        client
+            .post(webhook_url)
             .json(trade_data)
             .send()
             .await
@@ -982,11 +1055,7 @@ impl ExportServiceRunner {
     }
 
     /// Start export service using real SigbotExporterManagerFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-        _postgres_url: &str,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16, _postgres_url: &str) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
         use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
         use sigbot_types::modules::messager::messager::MessagerConfiguration;
@@ -1002,8 +1071,16 @@ impl ExportServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -1018,8 +1095,16 @@ impl ExportServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("export-test")
-            .arg(Arg::new("EXPORTER_MANAGER_PROVIDER").long("exporter-manager-provider").default_value("kafka"))
-            .arg(Arg::new("EXPORTER_MANAGER_CONFIGURATION").long("exporter-manager-configuration").default_value(""))
+            .arg(
+                Arg::new("EXPORTER_MANAGER_PROVIDER")
+                    .long("exporter-manager-provider")
+                    .default_value("kafka"),
+            )
+            .arg(
+                Arg::new("EXPORTER_MANAGER_CONFIGURATION")
+                    .long("exporter-manager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "export-test",
                 "--exporter-manager-provider",
@@ -1034,7 +1119,9 @@ impl ExportServiceRunner {
             .context("Failed to initialize SigbotExporterManagerFactory")?;
 
         // Subscribe to exporter topics
-        manager.subscribe(messager.clone()).await
+        manager
+            .subscribe(messager.clone())
+            .await
             .context("Failed to subscribe to exporter topics")?;
 
         info!("Export service initialized");
@@ -1061,8 +1148,8 @@ impl ExportServiceRunner {
     }
 }
 
-use sigbot_types::modules::exporter::SigbotExporterManagerArgument;
 use sigbot_exporter::manager::exporter_factory::{ISigbotExporterManager, SigbotExporterManagerFactory};
+use sigbot_types::modules::exporter::SigbotExporterManagerArgument;
 
 // ============================================================================
 // Notification Service Runner
@@ -1078,10 +1165,7 @@ pub struct NotificationServiceRunner {
 
 impl NotificationServiceRunner {
     /// Start notification service
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
         use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
         use sigbot_types::modules::messager::messager::MessagerConfiguration;
@@ -1097,8 +1181,16 @@ impl NotificationServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -1138,7 +1230,9 @@ impl NotificationServiceRunner {
     /// Send notification using real notification business logic
     pub async fn send_notification(&self, message: &serde_json::Value) -> Result<(), Error> {
         let payload = message.to_string();
-        self.messager.publish("notification/default", &payload).await
+        self.messager
+            .publish("notification/default", &payload)
+            .await
             .map_err(|e| Error::msg(format!("Failed to send notification: {}", e)))?;
         Ok(())
     }
@@ -1170,11 +1264,7 @@ pub struct BacktestServiceRunner {
 
 impl BacktestServiceRunner {
     /// Start backtest service using real SigbotBacktestManagerFactory
-    pub async fn start(
-        emqx_host: &str,
-        emqx_port: u16,
-        _timescaledb_url: &str,
-    ) -> Result<ServiceHandle, Error> {
+    pub async fn start(emqx_host: &str, emqx_port: u16, _timescaledb_url: &str) -> Result<ServiceHandle, Error> {
         use clap::{Arg, Command};
         use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
         use sigbot_types::modules::messager::messager::MessagerConfiguration;
@@ -1190,8 +1280,16 @@ impl BacktestServiceRunner {
 
         // Create messager client for EMQX connection
         let messager_matches = Command::new("messager-test")
-            .arg(Arg::new("MESSAGER_PROVIDER").long("messager-provider").default_value("mqtt"))
-            .arg(Arg::new("MESSAGER_CONFIGURATION").long("messager-configuration").default_value(""))
+            .arg(
+                Arg::new("MESSAGER_PROVIDER")
+                    .long("messager-provider")
+                    .default_value("mqtt"),
+            )
+            .arg(
+                Arg::new("MESSAGER_CONFIGURATION")
+                    .long("messager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "messager-test",
                 "--messager-provider",
@@ -1206,8 +1304,16 @@ impl BacktestServiceRunner {
 
         // Build clap::ArgMatches for factory initialization
         let matches = Command::new("backtest-test")
-            .arg(Arg::new("BACKTEST_MANAGER_PROVIDER").long("backtest-manager-provider").default_value("kline"))
-            .arg(Arg::new("BACKTEST_MANAGER_CONFIGURATION").long("backtest-manager-configuration").default_value(""))
+            .arg(
+                Arg::new("BACKTEST_MANAGER_PROVIDER")
+                    .long("backtest-manager-provider")
+                    .default_value("kline"),
+            )
+            .arg(
+                Arg::new("BACKTEST_MANAGER_CONFIGURATION")
+                    .long("backtest-manager-configuration")
+                    .default_value(""),
+            )
             .get_matches_from(vec![
                 "backtest-test",
                 "--backtest-manager-provider",
@@ -1282,6 +1388,5 @@ impl BacktestServiceRunner {
     }
 }
 
-use sigbot_types::modules::backtest::SigbotBacktestManagerArgument;
 use sigbot_backtest::manager::backtest_factory::{ISigbotBacktestManager, SigbotBacktestManagerFactory};
-
+use sigbot_types::modules::backtest::SigbotBacktestManagerArgument;

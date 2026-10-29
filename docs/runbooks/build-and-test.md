@@ -16,6 +16,14 @@ so the project has one explicit build and test interface.
 
 ## Build the Native Binary
 
+The Kafka exporter builds librdkafka from source. Native builds need CMake,
+a C/C++ compiler, pkg-config, OpenSSL and libcurl development headers, in
+addition to the existing Python development headers. On Debian/Ubuntu these
+include `cmake libssl-dev libcurl4-openssl-dev python3-dev`. Build the isolated
+Python host alongside the service with
+`cargo build -p sigbot-cmd -p sigbot-strategy-runner --bins`; deploy
+`sigbot-strategy-worker` next to `sigbot`.
+
 ```bash
 # Development profile
 make build

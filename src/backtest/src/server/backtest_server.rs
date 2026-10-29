@@ -21,7 +21,9 @@
 use crate::manager::backtest_factory::SigbotBacktestManagerFactory;
 use common_telemetry::{debug, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static REPLAY_RUNTIME: OnceLock<Arc<super::replay_runtime::ReplayRuntime>> = OnceLock::new();
 
 pub struct SigbotBacktestServer {}
 
@@ -43,11 +45,32 @@ impl SigbotBacktestServer {
             .expect("Failed to initialize Messager client.");
         info!("Initialized Messager client. {}", messager.provider().as_str());
 
+        if let Some(properties) = argument
+            .properties
+            .as_ref()
+            .filter(|p| p.get("runtime_v2").is_some_and(|value| value == "true"))
+        {
+            super::execution_runtime::ExecutionRuntime::start(properties, messager.clone())
+                .await
+                .expect("failed to start v2 backtest execution runtime");
+            if properties.get("replay_v2").is_some_and(|value| value == "true") {
+                let runtime = super::replay_runtime::ReplayRuntime::start(properties, messager)
+                    .await
+                    .expect("failed to start historical replay");
+                if REPLAY_RUNTIME.set(runtime).is_err() {
+                    panic!("historical replay runtime already started");
+                }
+            }
+            return;
+        }
         manager.startup(argument, messager).await;
         info!("Started Backtest manager. {}", manager.provider().as_str());
     }
 
     pub async fn shutdown() {
+        if let Some(runtime) = REPLAY_RUNTIME.get() {
+            runtime.close();
+        }
         info!("Shutting down Backtest manager.");
         SigbotBacktestManagerFactory::shutdown().await;
         info!("Shutdown Backtest manager.");

@@ -22,6 +22,8 @@ use anyhow::Error;
 use async_trait::async_trait;
 use sigbot_types::modules::order::events::SigbotTradeEvent;
 
+pub mod projection;
+pub mod reservation_postgres;
 pub mod trade_mongo;
 pub mod trade_postgres;
 pub mod trade_sqlite;

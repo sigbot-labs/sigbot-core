@@ -25,3 +25,11 @@ anyhow.workspace = true
 tokio.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 lettre.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+chrono.workspace = true
+minijinja = { version = "2", features = ["builtins"] }
+
+[[test]]
+name = "notification_runtime"
+path = "tests/server/notification_runtime_test.rs"

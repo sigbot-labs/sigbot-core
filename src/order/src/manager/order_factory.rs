@@ -100,10 +100,9 @@ impl SigbotOrderManagerFactory {
 
         let argument = Arc::new(
             SigbotOrderManagerArgument::from_json(
-                &decode_arg_config(&configuration)
-                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+                &decode_arg_config(&configuration).context("Failed to decode the configuration")?,
             )
-            .context(format!("Failed to parse the configuration: {}", configuration))?,
+            .context("Failed to parse the configuration")?,
         );
 
         match provider {

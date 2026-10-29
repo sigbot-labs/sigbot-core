@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 pub mod core;
+pub mod runtime;
 
 // Register sigbot_sdk module at initialization time
 // This makes it available when Python code imports it

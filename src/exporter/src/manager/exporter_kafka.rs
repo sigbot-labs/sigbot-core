@@ -21,7 +21,7 @@
 use crate::manager::exporter_factory::ISigbotExporterManager;
 use anyhow::Error;
 use async_trait::async_trait;
-use common_telemetry::{debug, info, warn};
+use common_telemetry::{debug, info};
 use sigbot_messager::client::messager_factory::ISigbotMessagerClient;
 use sigbot_types::modules::{
     exporter::{ExporterMgrProvider, SigbotExporterManagerArgument},
@@ -40,25 +40,44 @@ pub struct KafkaWriterConfig {
     pub properties: Option<HashMap<String, String>>,
 }
 
-/// Kafka writer (placeholder for future implementation)
+/// Kafka producer with broker delivery acknowledgement and bounded buffering.
 pub struct KafkaWriter {
-    config: KafkaWriterConfig,
+    sink: Arc<dyn super::sink::IExportSink>,
 }
 
 impl KafkaWriter {
-    pub fn new(config: KafkaWriterConfig) -> Self {
-        Self { config }
+    pub fn new(config: KafkaWriterConfig) -> Result<Self, Error> {
+        let values = config.properties.unwrap_or_default();
+        let secret_env = values
+            .iter()
+            .filter_map(|(key, value)| {
+                key.strip_prefix("kafka_secret_env.")
+                    .map(|key| (key.to_owned(), value.clone()))
+            })
+            .collect();
+        let properties = values
+            .into_iter()
+            .filter_map(|(key, value)| key.strip_prefix("kafka_property.").map(|key| (key.to_owned(), value)))
+            .collect();
+        Ok(Self {
+            sink: super::sink::ExportSinkFactory::create(&super::sink::ExportSinkConfig::Kafka {
+                brokers: config.brokers.join(","),
+                topic: config.topic.ok_or_else(|| Error::msg("kafka_topic required"))?,
+                properties,
+                secret_env,
+            })?,
+        })
     }
 
     async fn write_to_kafka(&self, data: Vec<u8>) -> Result<(), Error> {
-        // TODO: Implement Kafka producer integration
-        // For now, just log the data
-        let text = String::from_utf8_lossy(&data);
-        info!(
-            "[KafkaWriter] Would write to brokers={:?}, topic={:?}: {}",
-            self.config.brokers, self.config.topic, text
-        );
-        Ok(())
+        let event: SigbotTradeEvent = serde_json::from_slice(&data)?;
+        self.sink
+            .write(&super::sink::ExportBatch {
+                key: event.idempotency_key(),
+                range: String::new(),
+                rows: vec![vec![serde_json::to_value(event)?]],
+            })
+            .await
     }
 }
 
@@ -91,7 +110,7 @@ impl SigbotKafkaExporterManager {
         if let Some(ref writer) = *writer_guard {
             writer.write_to_kafka(data).await?;
         } else {
-            warn!("Kafka writer not configured, skipping export");
+            return Err(Error::msg("Kafka writer not configured"));
         }
 
         Ok(())
@@ -121,7 +140,7 @@ impl ISigbotExporterManager for SigbotKafkaExporterManager {
             properties: argument.properties.clone(),
         };
 
-        let writer = KafkaWriter::new(config);
+        let writer = KafkaWriter::new(config).expect("invalid Kafka exporter configuration");
         *self.writer.lock().await = Some(writer);
 
         info!("Kafka Exporter manager initialized");
@@ -149,9 +168,7 @@ impl ISigbotExporterManager for SigbotKafkaExporterManager {
             let manager0 = manager.clone();
             Box::pin(async move {
                 // Export to Kafka
-                if let Err(e) = manager0.export_data_internal(data.clone()).await {
-                    warn!("Failed to export to Kafka: {}", e);
-                }
+                manager0.export_data_internal(data.clone()).await?;
                 Ok(String::from_utf8_lossy(&data).to_string())
             })
         });

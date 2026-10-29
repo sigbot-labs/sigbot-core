@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod envelope;
 pub mod messager;
+pub mod topic;
 
 /// This topic for strategy runner to receive workflow's configuration push.
 /// phy-data-flow: from api-server to strategy-runner.

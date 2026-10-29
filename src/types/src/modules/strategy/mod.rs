@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 pub mod models;
+pub mod runtime;
 pub mod strategy;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -34,11 +35,13 @@ pub struct SigbotStrategyArgument {
     pub sys_environment: Option<HashMap<String, String>>,
     /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
     pub run_mode: String,
+    #[serde(default)]
+    pub properties: Option<HashMap<String, String>>,
 }
 
 impl SigbotStrategyArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse strategy info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse strategy info from JSON")
     }
 }
 

@@ -16,6 +16,7 @@ sigbot-core.workspace = true
 sigbot-strategy-sdk.workspace = true
 sigbot-messager.workspace = true
 sigbot-exchange.workspace = true
+sigbot-logservice.workspace = true
 
 # Thirdparty dependencies.
 axum.workspace = true
@@ -37,6 +38,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
+rust_decimal.workspace = true
 regex.workspace = true
 moka.workspace = true
 redis.workspace = true
@@ -46,6 +48,12 @@ langchain-rust.workspace = true
 pgvector.workspace = true
 url.workspace = true
 pyo3.workspace = true
+tempfile = "3.23"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4.7"
+seccompiler = "0.5.0"
+libc = "0.2"
 
 [build-dependencies]
 chrono.workspace = true

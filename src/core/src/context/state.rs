@@ -21,7 +21,6 @@
 use crate::{
     cache::{CacheContainer, ICache},
     config::config::{AppConfig, AppDBType},
-    mgmt::health::{MongoChecker, RedisClusterChecker, SQLiteChecker},
     modules::{
         backtest::store::{
             backtest_case_mongo::BacktestCaseInfoMongoRepository,
@@ -60,12 +59,10 @@ use crate::{
     },
     store::RepositoryContainer,
     sys::store::{
-        dlock_postgres::DLockPostgresRepository, LogRepositoryContainer, tenant_mongo::TenantMongoRepository,
-        tenant_postgres::TenantPostgresRepository, tenant_sqlite::TenantSQLiteRepository,
-        user_mongo::UserMongoRepository, user_postgres::UserPostgresRepository, user_sqlite::UserSQLiteRepository,
+        dlock_postgres::DLockPostgresRepository, tenant_mongo::TenantMongoRepository,
+        tenant_postgres::TenantPostgresRepository, tenant_sqlite::TenantSQLiteRepository, LogRepositoryContainer,
     },
 };
-use oauth2::basic::BasicClient;
 use sigbot_types::{
     modules::{
         backtest::backtest_case::BacktestCaseInfo,
@@ -76,7 +73,7 @@ use sigbot_types::{
         wallet::{balance::BalanceInfo, ledger::LedgerInfo, position::PositionInfo, wallet::WalletInfo},
         workflow::workflow::WorkflowInfo,
     },
-    sys::{dlock::DLockInfo, tenant::TenantInfo, user::UserInfo},
+    sys::{dlock::DLockInfo, tenant::TenantInfo},
 };
 use sigbot_utils::httpclients;
 use std::sync::Arc;
@@ -87,15 +84,9 @@ pub struct SigbotState {
     pub config: Arc<AppConfig>,
     // The Basic operators.
     pub string_cache: Arc<Box<dyn ICache<String>>>,
-    pub oidc_client: Option<Arc<openidconnect::core::CoreClient>>,
-    pub github_client: Option<Arc<BasicClient>>,
+    pub authguard: Arc<crate::sys::handler::auth_handler::AuthguardProvider>,
     pub default_http_client: Arc<reqwest::Client>,
-    // The Health checker.
-    pub sqlite_checker: SQLiteChecker,
-    pub mongo_checker: MongoChecker,
-    pub redis_cluster_checker: RedisClusterChecker,
     // The System module repositories.
-    pub user_repo: Arc<Mutex<RepositoryContainer<UserInfo>>>,
     pub tenant_repo: Arc<Mutex<RepositoryContainer<TenantInfo>>>,
     pub lock_repo: Arc<Mutex<RepositoryContainer<DLockInfo>>>,
     pub log_repo: Arc<Mutex<LogRepositoryContainer>>,
@@ -114,40 +105,24 @@ pub struct SigbotState {
 }
 
 impl SigbotState {
-    pub async fn new(config: &Arc<AppConfig>) -> Self {
-        // Build auth clients.
-        let auth_clients = (
-            crate::util::oidcs::create_oidc_client(&config.auth.oidc)
-                .await
-                .map(|client| Arc::new(client)),
-            crate::util::oauth2::create_oauth2_client(&config.auth.github)
-                .await
-                .map(|client| Arc::new(client)),
+    pub async fn postgres_pool(&self) -> anyhow::Result<sqlx::PgPool> {
+        anyhow::ensure!(
+            matches!(self.config.appdb.db_type, AppDBType::POSTGRESQL),
+            "runtime projections require PostgreSQL"
         );
+        let repository =
+            crate::store::postgres::PostgresRepository::<WorkflowInfo>::get_or_init(&self.config.appdb.postgres)
+                .await?;
+        Ok(repository.get_pool().clone())
+    }
 
+    pub async fn new(config: &Arc<AppConfig>) -> Self {
         // Build tooling http client.
         let http_client = httpclients::build_default();
 
         // --- The System module repositories. ---
 
         let db_config = &config.appdb;
-        let user_repo = RepositoryContainer::new(
-            match db_config.db_type {
-                AppDBType::SQLITE => Some(Box::new(UserSQLiteRepository::new(&db_config.sqlite).await.unwrap())),
-                _ => None,
-            },
-            match db_config.db_type {
-                AppDBType::POSTGRESQL => Some(Box::new(
-                    UserPostgresRepository::new(&db_config.postgres).await.unwrap(),
-                )),
-                _ => None,
-            },
-            match db_config.db_type {
-                AppDBType::MONGODB => Some(Box::new(UserMongoRepository::new(&db_config.mongodb).await.unwrap())),
-                _ => None,
-            },
-            None,
-        );
         let tenant_repo = RepositoryContainer::new(
             match db_config.db_type {
                 AppDBType::SQLITE => Some(Box::new(TenantSQLiteRepository::new(&db_config.sqlite).await.unwrap())),
@@ -402,15 +377,13 @@ impl SigbotState {
             config: config.clone(),
             // The basic operators.
             string_cache: Arc::new(CacheContainer::<String>::new()),
-            oidc_client: auth_clients.0,
-            github_client: auth_clients.1,
+            authguard: Arc::new(
+                crate::sys::handler::auth_handler::AuthguardProvider::from_config(&config.authguard).unwrap_or_else(
+                    |_| crate::sys::handler::auth_handler::AuthguardProvider::deny_all(config.authguard.clone()),
+                ),
+            ),
             default_http_client: Arc::new(http_client),
-            // The Health checker.
-            sqlite_checker: SQLiteChecker::new(),
-            mongo_checker: MongoChecker::new(),
-            redis_cluster_checker: RedisClusterChecker::new(),
             // The System repositories.
-            user_repo: Arc::new(Mutex::new(user_repo)),
             tenant_repo: Arc::new(Mutex::new(tenant_repo)),
             lock_repo: Arc::new(Mutex::new(lock_repo)),
             log_repo: Arc::new(Mutex::new(log_repo)),

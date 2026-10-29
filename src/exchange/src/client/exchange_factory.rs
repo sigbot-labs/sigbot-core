@@ -22,11 +22,10 @@ use crate::client::cex::exchange_binance::SigbotBinanceClient;
 use crate::client::stock::exchange_ibkr::SigbotIBKRClient;
 use anyhow::{Context, Error};
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_types::modules::exchange::exchange::{ExchangeInfo, ExchangeProvider};
-use sigbot_types::modules::exchange::models::trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo};
-use sigbot_types::modules::exchange::models::trade_position::{PlaceTradeSignal, ExitTradePosition, TradeResult};
+use sigbot_types::modules::exchange::models::trade_market::{OrderInfo, SymbolInfo};
+use sigbot_types::modules::exchange::models::trade_position::{ExitTradePosition, PlaceTradeSignal, TradeResult};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -75,54 +74,61 @@ impl SigbotExchangeClientFactory {
         &SINGLE_INSTANCE
     }
 
-    #[allow(unused_variables)]
     pub async fn init(exchange: Arc<ExchangeInfo>) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
-        let provider = exchange.provider.to_owned().context("Exchange provider is required")?;
-        info!("Registering exchange with provider: {:?}", &provider);
-
-        match provider {
-            ExchangeProvider::BINANCE => {
-                Self::get()
-                    .write()
-                    .unwrap()
-                    .register0(
-                        ExchangeProvider::BINANCE.as_str(),
-                        SigbotBinanceClient::new(exchange).await, // TODO: set up run configuration?
-                    )
-                    .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
+        let provider = exchange.provider.clone().context("Exchange provider is required")?;
+        let properties = exchange.properties.as_ref().context("exchange scope is required")?;
+        let env = properties.get("env").context("exchange env is required")?;
+        let tenant_id = properties.get("tenant_id").context("exchange tenant_id is required")?;
+        let account_id = properties
+            .get("account_id")
+            .context("exchange account_id is required")?;
+        let key = Self::scope_key(env, tenant_id, account_id, provider.as_str())?;
+        if let Some(client) = Self::get()
+            .read()
+            .map_err(|_| Error::msg("exchange registry poisoned"))?
+            .implementations
+            .get(&key)
+            .cloned()
+        {
+            return Ok(client);
+        }
+        let client: Arc<dyn ISigbotExchangeClient + Send + Sync> = match provider {
+            ExchangeProvider::BINANCE => SigbotBinanceClient::new(exchange).await,
+            ExchangeProvider::IBKR => SigbotIBKRClient::new(exchange).await,
+            _ => {
+                return Err(Error::msg(
+                    "exchange provider is not configured with a supported SDK adapter",
+                ))
             }
-            ExchangeProvider::IBKR => {
-                Self::get()
-                    .write()
-                    .unwrap()
-                    .register0(ExchangeProvider::IBKR.as_str(), SigbotIBKRClient::new(exchange).await)
-                    .expect(&format!("Failed to register the exchange with provider: {:?}.", &provider).as_str());
-            }
-            _ => panic!("Unsupported exchange provider : '{:?}'.", &provider),
         };
-
-        let registered = Self::get_implementation(provider.as_str())
-            .await
-            .expect(&format!("Failed to get the registered exchange with provider: {:?}.", &provider).as_str());
-
-        info!("Initializing the exchange with provider: {:?}", &provider);
-        registered.init().await;
-        info!("Initialized the exchange with provider: {:?}.", &provider);
-
+        client.init().await;
+        let registered = {
+            let mut registry = Self::get()
+                .write()
+                .map_err(|_| Error::msg("exchange registry poisoned"))?;
+            registry
+                .implementations
+                .entry(key)
+                .or_insert_with(|| client.clone())
+                .clone()
+        };
+        if !Arc::ptr_eq(&client, &registered) {
+            client.close().await;
+        }
         Ok(registered)
     }
 
-    fn register0(
-        &mut self,
-        name: &str,
-        handler: Arc<dyn ISigbotExchangeClient + Send + Sync>,
-    ) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
-        if self.implementations.contains_key(name) {
-            debug!("Already register the sigbot exchange client '{}'", name);
-            return Ok(handler);
+    pub fn scope_key(env: &str, tenant_id: &str, account_id: &str, provider: &str) -> Result<String, Error> {
+        for value in [env, tenant_id, account_id, provider] {
+            anyhow::ensure!(
+                !value.is_empty()
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'),
+                "invalid exchange isolation key"
+            );
         }
-        self.implementations.insert(name.to_owned(), handler.to_owned());
-        Ok(handler)
+        Ok(format!("{env}:{tenant_id}:{account_id}:{provider}"))
     }
 
     pub async fn get_implementation(name: &str) -> Result<Arc<dyn ISigbotExchangeClient + Send + Sync>, Error> {
@@ -137,9 +143,12 @@ impl SigbotExchangeClientFactory {
     }
 
     pub async fn close() {
-        let this = SigbotExchangeClientFactory::get().read().unwrap();
-        for implementation in this.implementations.values() {
-            implementation.close().await;
+        let clients: Vec<_> = {
+            let mut registry = Self::get().write().expect("exchange registry poisoned");
+            registry.implementations.drain().map(|(_, client)| client).collect()
+        };
+        for client in clients {
+            client.close().await;
         }
     }
 }

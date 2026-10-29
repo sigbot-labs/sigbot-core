@@ -1,67 +1,62 @@
-# Default values for sigbot
-# This is a YAML-formatted file.
-
+# Authguard is installed explicitly in its own release. Secret values never belong here.
 global:
-  imageRegistry: ""
+  imageRegistry: ''
   imagePullSecrets: []
-  storageClass: ""
-
-# Image configuration
+  storageClass: ''
 image:
   registry: registry.cn-shenzhen.aliyuncs.com/wl4g
   repository: sigbot
   tag: latest
   pullPolicy: IfNotPresent
-
-# System database configuration
 systemdb:
   enabled: true
   image:
-    registry: registry.cn-shenzhen.aliyuncs.com/wl4g
-    repository: pgvector_pgvector
+    registry: docker.io
+    repository: timescale/timescaledb-ha
     tag: pg16
+    digest: sha256:98f88217cb7be56655f842d9920f90d0b4893b67b3463f93084548b433ed5c93
   persistence:
     enabled: true
-    storageClass: ""
+    storageClass: ''
     accessMode: ReadWriteOnce
     size: 20Gi
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: 512Mi
+      cpu: 250m
     limits:
-      memory: "2Gi"
-      cpu: "1000m"
+      memory: 2Gi
+      cpu: 1000m
   auth:
-    postgresUser: postgres
-    postgresPassword: changeit
-    postgresDatabase: sigbot_sysdb
-
-# Vector database configuration
+    postgresUser: sigbot
+    postgresDatabase: sigbot
+    existing_secret: sigbot-runtime
+    password_key: POSTGRES_PASSWORD
+  extensions:
+  - timescaledb
+  - vector
 pgvector:
-  enabled: true
+  enabled: false
   image:
     registry: registry.cn-shenzhen.aliyuncs.com/wl4g
     repository: pgvector_pgvector
     tag: pg16
   persistence:
     enabled: true
-    storageClass: ""
+    storageClass: ''
     accessMode: ReadWriteOnce
     size: 20Gi
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: 512Mi
+      cpu: 250m
     limits:
-      memory: "2Gi"
-      cpu: "1000m"
+      memory: 2Gi
+      cpu: 1000m
   auth:
     postgresUser: postgres
     postgresPassword: changeit
     postgresDatabase: sigbot_vecdb
-
-# Redis configuration
 redis:
   enabled: true
   image:
@@ -70,43 +65,47 @@ redis:
     tag: 7-alpine
   persistence:
     enabled: true
-    storageClass: ""
+    storageClass: ''
     accessMode: ReadWriteOnce
     size: 10Gi
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "100m"
+      memory: 256Mi
+      cpu: 100m
     limits:
-      memory: "1Gi"
-      cpu: "500m"
+      memory: 1Gi
+      cpu: 500m
   auth:
-    password: ""
-
-# Deployer configuration
+    existing_secret: sigbot-runtime
+    password_key: REDIS_PASSWORD
 deployer:
-  enabled: true
+  # Enable the shared controller inside the API host; no separate deployer Deployment.
+  enabled: false
+  scope: {env: "", tenant_id: null, space_id: null, principal_id: "workflow-controller"}
+  worker_resources: {cpu_millis: 1000, memory_mb: 512, pids_limit: 64}
+  # Existing per-worker PVC: prefix + deterministic worker name; required for log_archive.
+  worker_log_pvc_prefix: ""
+  egress_cidrs: []
+  egress_ports: [1883, 5432, 6379, 443]
   replicaCount: 1
   image:
     registry: registry.cn-shenzhen.aliyuncs.com/wl4g
     repository: sigbot
     tag: latest
-  mode: kubernetes  # kubernetes, docker, standalone
+  mode: kubernetes
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "100m"
+      memory: 256Mi
+      cpu: 100m
     limits:
-      memory: "1Gi"
-      cpu: "500m"
+      memory: 1Gi
+      cpu: 500m
   serviceAccount:
     create: true
     annotations: {}
-    name: ""
+    name: ''
   rbac:
     create: true
-
-# API Server configuration
 server:
   enabled: true
   replicaCount: 1
@@ -115,86 +114,101 @@ server:
     port: 9000
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: 512Mi
+      cpu: 250m
     limits:
-      memory: "2Gi"
-      cpu: "1000m"
+      memory: 2Gi
+      cpu: 1000m
   ingress:
     enabled: false
-    className: ""
+    className: ''
     annotations: {}
-    hosts:
-      - host: sigbot.local
-        paths:
-          - path: /
-            pathType: Prefix
+    hosts: []
     tls: []
-
-# Executor configuration
+  gateway:
+    enabled: false
+    name: authguard
+    namespace: ''
+    hostnames: []
 executor:
-  enabled: true
+  enabled: false
   replicaCount: 1
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      memory: 512Mi
+      cpu: 250m
     limits:
-      memory: "2Gi"
-      cpu: "1000m"
-
-# Common environment variables
+      memory: 2Gi
+      cpu: 1000m
 env:
-  rustBacktrace: full
+  rustBacktrace: '1'
   swaggerEnabled: true
   loggingMode: JSON
-  loggingLevel: DEBUG
-  cacheProvider: Redis
-  redisNodes: redis://redis:6379
-  redisPassword: ""
-  databaseSystemdbHost: systemdb
-  databaseSystemdbPort: 5432
-  databaseSystemdbUser: postgres
-  databaseSystemdbPassword: changeit
-  databaseSystemdbDatabase: sigbot
-  databaseSystemdbMinConnection: 1
-  databaseSystemdbMaxConnection: 10
-  databasePgvectorHost: pgvector
-  databasePgvectorPort: 5432
-  databasePgvectorUser: postgres
-  databasePgvectorPassword: changeit
-  databasePgvectorDatabase: sigbot
-  databasePgvectorMinConnection: 1
-  databasePgvectorMaxConnection: 10
-
-# Storage configuration
+  loggingLevel: INFO
 persistence:
-  storageClass: ""
+  storageClass: ''
   accessMode: ReadWriteOnce
   size: 10Gi
-
-# Security context
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-
-# Pod security context
 podSecurityContext:
   fsGroup: 1000
-
-# Node selector
 nodeSelector: {}
-
-# Tolerations
 tolerations: []
-
-# Affinity
 affinity: {}
-
-# Annotations
 podAnnotations: {}
-
-# Labels
 podLabels: {}
-
+secrets:
+  worker_existing_secret: sigbot-workers
+  existing_secret: sigbot-runtime
+  revision: '1'
+minio:
+  enabled: true
+  image:
+    repository: quay.io/minio/minio
+    tag: RELEASE.2025-04-22T22-12-26Z
+  persistence:
+    enabled: true
+    storageClass: ''
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  existing_secret: sigbot-runtime
+authguard-middleware:
+  enabled: false
+  envoy_gateway:
+    enabled: false
+    ext_authz:
+      gateway:
+        create: false
+      authnRoute:
+        hostnames: []
+  authguard:
+    authn:
+      enabled: true
+      applications: {}
+    authz:
+      enabled: true
+    web:
+      enabled: true
+  secrets:
+    provider: kubernetes
+    kubernetes:
+      existingSecret: authguard-secrets
+web:
+  enabled: false
+  replica_count: 1
+  image:
+    repository: registry.cn-shenzhen.aliyuncs.com/wl4g/sigbot-web
+    tag: '1.0.0'
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}

@@ -326,25 +326,16 @@ impl SigbotPolymarketClient {
         headers
     }
 
-    async fn execute_with_retry<F, Fut>(&self, mut request_fn: F) -> Result<reqwest::Response, Error>
+    async fn execute_once<F, Fut>(&self, mut request_fn: F) -> Result<reqwest::Response, Error>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
     {
-        let mut last_error = None;
-        for attempt in 0..=self.config.api_retries {
-            match request_fn().await {
-                Ok(response) => return Ok(response),
-                Err(e) => {
-                    last_error = Some(e);
-                    if attempt < self.config.api_retries {
-                        let delay = Duration::from_millis(self.config.api_backoff as u64 * (attempt + 1) as u64 * 100);
-                        tokio::time::sleep(delay).await;
-                    }
-                }
-            }
-        }
-        Err(Error::from(last_error.unwrap()).context("Request failed after retries"))
+        // A transport failure after POST may mean the exchange accepted the order.
+        // Reconciliation belongs to order; resubmitting here can duplicate exposure.
+        request_fn()
+            .await
+            .context("Exchange outcome may be unknown; reconcile before retry")
     }
 
     // Get maker's exchange nonce from Polymarket API
@@ -355,7 +346,7 @@ impl SigbotPolymarketClient {
         let headers = self.build_auth_headers();
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .get(&url)
                     .headers(headers.clone())
@@ -551,7 +542,7 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
         );
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .post(&url)
                     .headers(headers.clone())
@@ -622,7 +613,7 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
         };
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .delete(&cancel_url)
                     .headers(headers.clone())
@@ -681,7 +672,7 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
         };
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .delete(&cancel_url)
                     .headers(headers.clone())
@@ -729,7 +720,7 @@ impl ISigbotExchangeClient for SigbotPolymarketClient {
         let headers = self.build_auth_headers();
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .get(&url)
                     .headers(headers.clone())

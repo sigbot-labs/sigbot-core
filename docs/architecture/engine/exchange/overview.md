@@ -86,17 +86,67 @@ quantity, fee, and balance values use explicit decimal semantics.
 
 ## Implementation Alignment
 
-Current source exposes `ISigbotExchangeClient` plus CEX, DEX, stock,
-prediction-market, and order-book subtraits. Source adapters exist for Binance,
-Hyperliquid, IBKR, Polymarket, and Kalshi, but the factory currently constructs
-only Binance and IBKR paths. Binance support is primarily USD-M futures; spot
-must not be claimed complete. Bitget, Coinbase, and Schwab are target adapters,
-not current implementations. Several configured providers can currently reach
-unimplemented or panic paths.
+Live orders use `ExecutionAdapterFactory` and `LiveExecutionFactory`, selecting
+the official Binance Spot SDK, the mature `ibapi` TWS/Gateway SDK, or the official
+Polymarket V2/V3 SDK. Paper and simulated execution select the backtest adapter;
+they never rewrite a production exchange URL. Existing market-source interfaces
+remain under their original directories and are not these live order paths.
 
-Required alignment is capability discovery, typed unsupported behavior,
-complete REST/WebSocket normalization, shared rate limits, stable external
-idempotency, and contract tests per provider/product combination.
+Binance disables SDK submission retries and derives its client order ID from the
+existing business key. IBKR and Polymarket require `prepare`, durable persistence
+by Order after Wallet reservation, and one claimed submission attempt. Recovery
+only reconciles the persisted venue ID. IBKR preparation retains the SDK Order
+and Contract; Polymarket retains the official Solidity ABI bytes, signature and
+EIP-712 order hash, so restart cannot silently regenerate salts or signatures.
+
+OpenSSL AES-256-GCM seals the prepared payload. Authenticated data binds scope,
+account, workflow, node, run/sequence, intent, provider and venue order ID. Configure
+`prepared_keys.active_key` and a `prepared_keys.keys` mapping from key versions to
+host environment variable names containing 32-byte hex keys. Keep old key versions
+while any nonterminal order still references them. Neither these keys nor trading
+credentials enter the strategy process.
+
+IBKR requires an explicit gateway, exclusive API client ID, broker-account
+environment reference and resolved SDK Contracts with positive contract IDs.
+Connections verify account ownership; SDK reconnection is disabled for submissions.
+Decimal values that cannot round-trip through its f64 boundary are rejected.
+Polymarket uses GTC for limit orders and FOK for market intents, with fixed shares
+and a price ceiling/floor from the risk-checked market evidence. Its `matched`
+status is acceptance, not confirmed on-chain settlement.
+
+Order polls these adapters for actual execution facts, with the venue cursor,
+deduplication record and MQTT Outbox committed together. Binance uses official
+`myTrades` amounts and commissions; IBKR joins execution IDs to official commission
+reports and supports stock/ETF contracts. A missing commission or an execution
+correction requires reconciliation rather than a fabricated zero fee.
+
+Polymarket requires `settlement: {rpc_url_env: POLYGON_RPC_URL, min_confirmations: 64}`.
+The environment variable contains an HTTPS Polygon RPC URL. Missing configuration
+prevents adapter construction. Before any order POST the adapter checks chain 137,
+the official exchange contract, collateral decimals and finalized-block support.
+The prepared submission also seals the initial block number. Recovery scans
+bounded block ranges using the exact persisted order hash, at most 32 receipts per
+page so a busy order can advance its cursor within the RPC timeout. Each log must
+belong to a successful receipt on a canonical finalized block with the required
+confirmation depth. The event maker, token, side and exchange must match the order.
+The instrument identifies `base_asset: outcome:<token_id>` and `quote_asset: pUSD`.
+An old prepared order without a scan boundary requires manual reconciliation.
+
+Actual gross collateral and fee come from the official
+[OrderFilled ABI](https://github.com/Polymarket/ctf-exchange-v2/blob/ccc0596074f4dfd62c944fbca4de252893b82b4b/src/exchange/interfaces/ITrading.sol)
+and its [collateral fee definition](https://github.com/Polymarket/ctf-exchange-v2/blob/ccc0596074f4dfd62c944fbca4de252893b82b4b/src/exchange/mixins/Fees.sol).
+`ExecutionFact.quote_quantity` preserves this exact amount when the displayed unit
+price is a repeating decimal; Wallet uses it before the legacy price-times-quantity
+fallback. An execution's natural identity is its transaction hash and log index.
+Order status alone cannot release a reservation until the corresponding actual
+executions and commissions have been recorded.
+
+The settlement tests use explicitly synthetic external RPC receipt fixtures and
+cover decoding, exact cash amounts, reverts, finality and identity rejection. A real
+Alloy HTTP client also talks to a local Axum fixture to verify preflight, pagination,
+repeatable execution identities and refusal of a different chain.
+These tests, SDK round trips and database tests do not demonstrate live financial
+execution. No real order is submitted by the test suite.
 
 ## Source Map
 

@@ -26,10 +26,6 @@ use crate::modules::exchange::route::exchange_router::{
 use crate::modules::strategy::route::strategy_router::{
     __path_handle_delete_strategy, __path_handle_query_strategys, __path_handle_save_strategy,
 };
-use crate::sys::route::user_router::{
-    __path_handle_delete_user, __path_handle_get_current_user, __path_handle_post_current_user,
-    __path_handle_query_users, __path_handle_save_user,
-};
 use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
 use std::collections::BTreeMap;
 use utoipa::openapi::{PathItem, Paths};
@@ -53,11 +49,6 @@ use utoipa_swagger_ui::SwaggerUi;
     external_docs(url = "https://github.com/wl4g/sigbot", description = "More about Sigbot APIs"),
     paths(
         // System modules
-        handle_query_users,
-        handle_get_current_user,
-        handle_post_current_user,
-        handle_save_user,
-        handle_delete_user,
         // Service modules
         // LLM
         handle_knowledge_upload,

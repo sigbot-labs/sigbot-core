@@ -19,5 +19,6 @@
 // This includes modifications and derived works.
 
 pub mod pyexec;
+pub mod runtime_postgres;
 pub mod strategy_factory;
 pub mod strategy_pycode;

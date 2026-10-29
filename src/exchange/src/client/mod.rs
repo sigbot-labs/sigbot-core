@@ -21,7 +21,14 @@
 pub mod cex;
 pub mod dex;
 pub mod exchange_factory;
+pub mod execution_adapter;
+pub mod ibkr_execution;
+pub mod live_execution;
+pub mod polymarket_execution;
+pub mod polymarket_settlement;
 pub mod predict;
+pub mod prepared_payload;
+pub mod public_market;
 pub mod stock;
 
 use crate::client::exchange_factory::ISigbotExchangeClient;

@@ -18,4 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod strategy_node;
 pub mod strategy_runner;
+pub mod strategy_runtime;

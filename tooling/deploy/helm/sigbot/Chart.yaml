@@ -13,3 +13,10 @@ maintainers:
   - name: SigBot Team
     email: jameswong1376@gmail.com
 
+
+dependencies:
+  - name: authguard
+    alias: authguard-middleware
+    version: "1.0.2"
+    repository: oci://ghcr.io/wl4g/charts
+    condition: authguard-middleware.enabled

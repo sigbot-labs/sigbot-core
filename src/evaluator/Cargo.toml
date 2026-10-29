@@ -39,7 +39,7 @@ tower.workspace = true
 config.workspace = true
 chrono.workspace = true
 async-trait.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 anyhow.workspace = true
 dotenv.workspace = true
 tracing.workspace = true

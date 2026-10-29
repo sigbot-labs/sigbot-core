@@ -18,12 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::apm;
 use axum::{routing::get, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use common_telemetry::debug;
 use prometheus::{Encoder, TextEncoder};
 use sigbot_core::config::config::get_config;
+use sigbot_core::{context::state::SigbotState, mgmt::health::HealthRouter};
 use sigbot_utils::tokio_signal::tokio_graceful_shutdown_handler;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -66,24 +66,25 @@ impl SigbotManagementServer {
             }
         };
 
+        let state = SigbotState::new(&config).await;
         let app: Router = Router::new()
             .route("/metrics", get(handler))
             .layer(prometheus_layer)
-            .merge(apm::debug_router());
+            .merge(HealthRouter::routes().with_state(state));
 
         let bind_addr = config.mgmt.get_bind_addr();
         debug!("Starting Management server on {}", bind_addr);
 
         tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::bind(&bind_addr)
+                .await
+                .expect("management listener bind failed");
             // When started call to signal sender.
             let _ = signal_s.send(());
-            axum::serve(
-                tokio::net::TcpListener::bind(&bind_addr).await.unwrap(),
-                app.into_make_service(),
-            )
-            .with_graceful_shutdown(tokio_graceful_shutdown_handler())
-            .await
-            .unwrap_or_else(|e| panic!("Error starting Management server: {}", e));
+            axum::serve(listener, app.into_make_service())
+                .with_graceful_shutdown(tokio_graceful_shutdown_handler())
+                .await
+                .unwrap_or_else(|e| panic!("Error starting Management server: {}", e));
         })
     }
 }

@@ -19,7 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_otlp::{new_exporter, ExportConfig, Protocol};
 use opentelemetry_sdk::runtime::Tokio;
@@ -59,8 +59,7 @@ pub async fn create_otel_tracer(config: &Arc<AppConfig>) -> Option<Tracer> {
         tracer = Some(_tracer);
         //tracer = Some(TracerProvider::tracer(&tracer_provider, "default_tracer"));
 
-        // Make sure all trace data is refreshed.
-        global::shutdown_tracer_provider();
+        // The provider stays alive until application shutdown.
     }
 
     tracer

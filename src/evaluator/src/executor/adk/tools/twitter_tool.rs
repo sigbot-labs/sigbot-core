@@ -25,7 +25,6 @@
 
 use adk_core::{Result as AdkResult, Tool, ToolContext};
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -81,40 +80,12 @@ impl Tool for TwitterSearchTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let query = args["query"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'query' parameter"))?;
-        let max_results = args["max_results"].as_u64().unwrap_or(10) as u32;
-
-        info!(
-            "TwitterSearchTool: Searching for query='{}', max_results={}",
-            query, max_results
-        );
-
-        // In a real implementation, we would use a Twitter client
-        // For now, return mock data
-        let tweets = vec![
-            json!({
-                "id": "1234567890",
-                "text": format!("Analysis of {} market trends suggests bullish momentum", query),
-                "author_id": "9876543210",
-                "created_at": "2023-10-25T10:00:00Z"
-            }),
-            json!({
-                "id": "1234567891",
-                "text": format!("Breaking news regarding {}", query),
-                "author_id": "9876543211",
-                "created_at": "2023-10-25T11:00:00Z"
-            }),
-        ];
-
-        Ok(json!({
-            "query": query,
-            "count": tweets.len(),
-            "tweets": tweets,
-            "source": "twitter"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }
 
@@ -161,22 +132,12 @@ impl Tool for TwitterUserTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let username = args["username"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'username' parameter"))?;
-        let limit = args["limit"].as_u64().unwrap_or(10) as u32;
-
-        info!(
-            "TwitterUserTool: Fetching tweets for user='{}', limit={}",
-            username, limit
-        );
-
-        Ok(json!({
-            "username": username,
-            "tweets": [],
-            "source": "twitter"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }
 
@@ -218,16 +179,11 @@ impl Tool for TwitterTrendsTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
-        // In a real implementation, we would use a Twitter client
-        // For now, return mock data
-        Ok(json!({
-            "trends": [
-                {"name": "#Bitcoin", "volume": 100000},
-                {"name": "#Crypto", "volume": 50000},
-                {"name": "BullRun", "volume": 20000}
-            ],
-            "source": "twitter"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, __args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }

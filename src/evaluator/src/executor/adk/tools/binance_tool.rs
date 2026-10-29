@@ -25,9 +25,7 @@
 
 use adk_core::{Result as AdkResult, Tool, ToolContext};
 use async_trait::async_trait;
-use common_telemetry::{debug, info};
 use serde_json::{json, Value};
-use sigbot_exchange::client::exchange_factory::SigbotExchangeClientFactory;
 use std::sync::Arc;
 
 /// Tool for fetching current market price from Binance
@@ -69,42 +67,12 @@ impl Tool for BinanceMarketDataTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let symbol = args["symbol"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'symbol' parameter"))?;
-
-        info!("BinanceMarketDataTool: Fetching price for symbol={}", symbol);
-
-        // Mock response for now to satisfy trait constraints and avoid compilation errors with private traits
-        // or missing methods.
-        // In a real scenario with full source access, we would fix the trait visibility or imports.
-        // TODO: Re-enable actual client call when ISigbotExchangeClient visibility is fixed.
-        /*
-        let client = SigbotExchangeClientFactory::get_implementation("BINANCE")
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to get Binance client: {}", e)))?;
-
-        let price_model = client
-            .get_current_price(symbol)
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to fetch price: {}", e)))?;
-        */
-
-        let price_model = json!({"price": 50000.0, "time": chrono::Utc::now().timestamp_millis()});
-
-        debug!(
-            "BinanceMarketDataTool: Got price={} for symbol={}",
-            price_model["price"], symbol
-        );
-
-        Ok(json!({
-            "symbol": symbol,
-            "price": price_model["price"],
-            "timestamp": price_model["time"],
-            "source": "binance",
-            "note": "Mock data returned due to compilation constraints"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }
 
@@ -165,43 +133,12 @@ impl Tool for BinanceKlineTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let symbol = args["symbol"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'symbol' parameter"))?;
-        let interval = args["interval"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'interval' parameter"))?;
-        let limit = args["limit"].as_u64().unwrap_or(100) as u32;
-
-        info!(
-            "BinanceKlineTool: Fetching klines for symbol={}, interval={}, limit={}",
-            symbol, interval, limit
-        );
-
-        // Mock response
-        // TODO: Re-enable actual client call when ISigbotExchangeClient visibility is fixed.
-        /*
-        let client = SigbotExchangeClientFactory::get_implementation("BINANCE")
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to get Binance client: {}", e)))?;
-
-        let klines = client
-            .get_klines(symbol, interval, None, None, limit)
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to fetch klines: {}", e)))?;
-        */
-
-        let klines_json: Vec<Value> = vec![];
-
-        Ok(json!({
-            "symbol": symbol,
-            "interval": interval,
-            "klines": klines_json,
-            "count": 0,
-            "source": "binance",
-            "note": "Mock data returned due to compilation constraints"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }
 
@@ -254,30 +191,12 @@ impl Tool for BinanceVolumeTool {
         }))
     }
 
-    async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let symbol = args["symbol"]
-            .as_str()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Missing 'symbol' parameter"))?;
-        let interval = args["interval"].as_str().unwrap_or("1h");
-        let limit = args["limit"].as_u64().unwrap_or(24) as u32;
-
-        info!(
-            "BinanceVolumeTool: Analyzing volume for symbol={}, interval={}, limit={}",
-            symbol, interval, limit
-        );
-
-        // Mock response
-        Ok(json!({
-            "symbol": symbol,
-            "interval": interval,
-            "periods_analyzed": 0,
-            "total_volume": 0.0,
-            "average_volume": 0.0,
-            "volume_trend_percent": 0.0,
-            "trend_direction": "stable",
-            "source": "binance",
-            "note": "Mock data returned due to compilation constraints"
-        }))
+    async fn execute(&self, _ctx: Arc<dyn ToolContext>, _args: Value) -> AdkResult<Value> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Direct evaluator data tools are disabled; consume persisted Datafeed facts with an as_of boundary",
+        )
+        .into())
     }
 }
 

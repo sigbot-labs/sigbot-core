@@ -149,8 +149,9 @@ impl ISigbotMessagerClient for SigbotLocalMessagerClient {
 
     async fn publish(&self, topic: &str, message: &str) -> Result<String, Error> {
         debug!(
-            "Publishing Local Queue message to topic={} with message={}",
-            topic, message
+            "Publishing Local Queue message to topic={}, bytes={}",
+            topic,
+            message.len()
         );
 
         // Get or create queue for the given topic
@@ -199,12 +200,17 @@ impl ISigbotMessagerClient for SigbotLocalMessagerClient {
                 match guard.recv().await {
                     Some(data) => {
                         debug!("Received Local Queue message for topic={}, size={}", topic0, data.len());
-                        let handler_fn = handler0.to_owned();
-                        tokio::spawn(async move {
-                            if let Err(e) = handler_fn(data).await {
-                                warn!("Error handling Local Queue message: {:?}", e);
+                        let mut delay = std::time::Duration::from_millis(100);
+                        loop {
+                            match handler0(data.clone()).await {
+                                Ok(_) => break,
+                                Err(error) => {
+                                    warn!("Local consumer failed; applying serial retry/backpressure: {}", error);
+                                    tokio::time::sleep(delay).await;
+                                    delay = (delay * 2).min(std::time::Duration::from_secs(30));
+                                }
                             }
-                        });
+                        }
                     }
                     None => {
                         // Sender closed, exit loop

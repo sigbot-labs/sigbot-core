@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS s_wallets (
 
 -- 不可变账本，原始事实表（仅追加写入，不允许update/delete；回测 & 实盘统一）
 CREATE TABLE IF NOT EXISTS s_ledger (
-    wallet_id BIGINT NOT NULL REFERENCES s_wallets(wallet_id),
+    wallet_id BIGINT NOT NULL REFERENCES s_wallets(id),
     order_id BIGINT NOT NULL,
     trade_id BIGINT NOT NULL,
     symbol VARCHAR(50) NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS s_ledger (
 
 -- 派生状态（来源：SUM(trades) + funding + deposit - withdraw）
 CREATE TABLE IF NOT EXISTS s_balances (
-    wallet_id BIGINT NOT NULL REFERENCES s_wallets(wallet_id),
+    wallet_id BIGINT NOT NULL REFERENCES s_wallets(id),
     asset VARCHAR(20) NOT NULL,
     available DECIMAL(30, 8) NOT NULL DEFAULT 0,
     locked DECIMAL(30, 8) NOT NULL DEFAULT 0,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS s_balances (
 
 -- 派生状态（来源：GROUP BY symbol + side FROM trades）
 CREATE TABLE IF NOT EXISTS s_positions (
-    wallet_id BIGINT NOT NULL REFERENCES s_wallets(wallet_id),
+    wallet_id BIGINT NOT NULL REFERENCES s_wallets(id),
     symbol VARCHAR(50) NOT NULL,
     side VARCHAR(10) NOT NULL CHECK (side IN ('LONG', 'SHORT')),
     size DECIMAL(30, 8) NOT NULL DEFAULT 0,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS s_positions (
 
 -- 资金快照（用于指标；可定期生成；不影响核心正确性）
 CREATE TABLE IF NOT EXISTS equity_snapshots (
-    wallet_id BIGINT NOT NULL REFERENCES s_wallets(wallet_id),
+    wallet_id BIGINT NOT NULL REFERENCES s_wallets(id),
     equity DECIMAL(30, 8) NOT NULL,
     ts TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );

@@ -1,47 +1,20 @@
-// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
-//
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
-// is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the
-// Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// James Wong is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
-//
-// IMPORTANT: Any software that fully or partially contains or uses materials
-// covered by this license must also be released under the GNU GPL license.
-// This includes modifications and derived works.
-
+// SPDX-License-Identifier: GPL-3.0-only
+use super::social_feed::{FeedHandler, SocialFeed};
 use crate::client::datafeed_factory::ISigbotDatafeedClient;
-use anyhow::Error;
+use anyhow::Result;
 use async_trait::async_trait;
-use common_telemetry::info;
-use sigbot_types::modules::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::modules::datafeed::SigbotDatefeedArgument;
-use std::{future::Future, pin::Pin, sync::Arc};
+use sigbot_types::modules::datafeed::{datafeed::DatafeedProvider, SigbotDatefeedArgument};
+use std::sync::Arc;
 
-#[derive(Clone)]
 pub struct SigbotTwitterDatafeedClient {
-    // config: Arc<DatafeedInfo>,
+    feed: SocialFeed,
 }
 
 impl SigbotTwitterDatafeedClient {
     pub async fn new() -> Arc<Self> {
-        Arc::new(Self {})
-    }
-
-    pub(super) async fn process(&self) {
-        info!("Processing Twitter data feed ...");
-        // TODO: Implement the logic to process Twitter data feed.
-        // TODO: 1. Start the Twitter websocket subscription and pushing to EMQx(hot data cache).
-        // TODO: 2. Start the consumer to Twitter data to database(cold data persist) from EMQx.
-        unimplemented!()
+        Arc::new(Self {
+            feed: SocialFeed::new("twitter"),
+        })
     }
 }
 
@@ -50,22 +23,13 @@ impl ISigbotDatafeedClient for SigbotTwitterDatafeedClient {
     fn provider(&self) -> DatafeedProvider {
         DatafeedProvider::TWITTER
     }
-
-    async fn init(&self, _: Arc<SigbotDatefeedArgument>) {
-        info!("Started Twitter data feed.");
+    async fn init(&self, argument: Arc<SigbotDatefeedArgument>) -> Result<()> {
+        self.feed.init(argument).await
     }
-
     async fn close(&self) {
-        info!("Shut down Twitter data feed.");
+        self.feed.close().await;
     }
-
-    async fn subscribe(
-        &self,
-        _: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
-    ) {
-        info!("Subscribed to Twitter data feed.");
+    async fn subscribe(&self, handler: FeedHandler) -> Result<()> {
+        self.feed.subscribe(handler).await
     }
 }
-
-#[cfg(test)]
-mod tests {}

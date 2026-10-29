@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod datafeed;
+pub mod event;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotDatefeedArgument {
@@ -33,7 +34,7 @@ pub struct SigbotDatefeedArgument {
 
 impl SigbotDatefeedArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse datafeed info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse datafeed info from JSON")
     }
 }
 

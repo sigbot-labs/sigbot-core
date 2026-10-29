@@ -23,4 +23,5 @@
 // use serde::{Deserialize, Serialize};
 
 pub mod exchange;
+pub mod instrument;
 pub mod models;

@@ -22,10 +22,10 @@ use super::IAsyncRepository;
 use crate::config::config::PostgresAppDBProperties;
 use anyhow::Error;
 use async_trait::async_trait;
-use common_telemetry::{debug, error, info};
+use common_telemetry::info;
 use sigbot_types::{PageRequest, PageResponse};
-use sqlx::migrate::MigrateDatabase;
-use sqlx::{PgPool, Postgres};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
+use sqlx::PgPool;
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -39,48 +39,37 @@ static POOL_MANAGER: OnceCell<Arc<PostgresPoolManager>> = OnceCell::const_new();
 
 impl PostgresPoolManager {
     async fn init(config: &PostgresAppDBProperties) -> Result<Arc<Self>, Error> {
-        let db_url = format!(
-            "postgres://{}:{}@{}:{}/{}",
-            config.username,
-            config.password.as_deref().unwrap_or(""),
-            config.host,
-            config.port,
-            config.database
+        let min = config.min_connections.unwrap_or(1);
+        let max = config.max_connections.unwrap_or(10);
+        anyhow::ensure!(max > 0 && min <= max, "invalid PostgreSQL pool bounds");
+        let options = PgConnectOptions::new()
+            .host(&config.host)
+            .port(config.port)
+            .username(&config.username)
+            .password(config.password.as_deref().unwrap_or(""))
+            .database(&config.database)
+            .options([("search_path", config.schema.as_str())])
+            .ssl_mode(if config.use_ssl {
+                PgSslMode::Require
+            } else {
+                PgSslMode::Disable
+            });
+        let pool = PgPoolOptions::new()
+            .min_connections(min)
+            .max_connections(max)
+            .connect_with(options)
+            .await
+            .map_err(|_| Error::msg("configured PostgreSQL connection failed"))?;
+        // DDL has one owner: tooling/deploy/migrations/migrate.py. Application
+        // credentials need DML only and must never create a database or schema.
+        let ready: bool = sqlx::query_scalar("SELECT to_regclass('schema_migration') IS NOT NULL AND to_regclass('s_workflow') IS NOT NULL AND to_regclass('workflow_run') IS NOT NULL")
+            .fetch_one(&pool).await?;
+        anyhow::ensure!(
+            ready,
+            "PostgreSQL schema is not migrated; run tooling/deploy/migrations/migrate.py before startup"
         );
-
-        if !Postgres::database_exists(&db_url).await.unwrap_or(false) {
-            info!("Creating database {}", db_url);
-            match Postgres::create_database(&db_url).await {
-                Ok(_) => info!("Create db success"),
-                Err(error) => panic!("Error to create db: {}", error),
-            }
-        } else {
-            debug!("The postgres database already exists, skip migration.");
-        }
-
-        match PgPool::connect(&db_url).await {
-            Ok(pool) => {
-                info!("Connected to the postgres database to migration ...");
-                let pool = Self::run_migration(pool).await;
-                Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
-            }
-            Err(e) => {
-                error!("Failed to connect to the postgres database to migration: {}", e);
-                Err(e.into())
-            }
-        }
-    }
-
-    async fn run_migration(pool: PgPool) -> PgPool {
-        let results = sqlx::migrate!("../../tooling/deploy/migrations").run(&pool).await;
-        info!("The postgres database migration result: {:?}", results);
-        match results {
-            Ok(_) => info!("The postgres database migration successfully."),
-            Err(error) => {
-                panic!("Error to migrate the postgres database: {}", error);
-            }
-        }
-        pool
+        info!("Connected to the migrated PostgreSQL schema");
+        Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
     }
 }
 
@@ -150,27 +139,23 @@ macro_rules! dynamic_postgres_query {
             let obj = serialized.as_object().unwrap();
             let mut fields = Vec::new();
             let mut params = Vec::new();
-            let mut index = 0;
             for (key, value) in obj {
-                if !value.is_null() {
-                    let v = value.as_str().unwrap_or("");
-                    if !v.is_empty() {
-                        index += 1;
-                        // Notice: Must use $x expression? otherwise, the sqlx will not work.
-                        // e.g: "SELECT COUNT(1) as count FROM my_table WHERE created_at = $1 AND updated_at = $2"
-                        fields.push(format!("{} = ${}", key, index));
+                let param = match value {
+                    serde_json::Value::String(value) if !value.is_empty() => {
                         if key == "created_at" || key == "updated_at" {
-                            let dt = DateTime::parse_from_rfc3339(v)?;
-                            params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
-                        } else {
-                            params.push(GenericValue::String(v.to_string()));
-                        }
+                            GenericValue::DateTime(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+                        } else { GenericValue::String(value.clone()) }
                     }
-                }
-            }
-            if let Some(id) = $bean.base.id {
-                fields.push("id = ?".to_string());
-                params.push(GenericValue::Int64(id));
+                    serde_json::Value::Number(value) => {
+                        if let Some(value) = value.as_i64() { GenericValue::Int64(value) }
+                        else if let Some(value) = value.as_f64() { GenericValue::Float64(value) }
+                        else { continue; }
+                    }
+                    serde_json::Value::Bool(value) => GenericValue::Bool(*value),
+                    _ => continue,
+                };
+                fields.push(format!("{} = ${}", key, params.len() + 1));
+                params.push(param);
             }
             let where_clause = if fields.is_empty() {
                 "1=1".to_string()
@@ -178,7 +163,7 @@ macro_rules! dynamic_postgres_query {
                 fields.join(" AND ")
             };
             // Queries to get total count.
-            let total_query = format!("SELECT COUNT(1) FROM {} WHERE {}", $table, where_clause);
+            let total_query = format!("SELECT COUNT(1) FROM {} WHERE {} AND del_flag = 0", $table, where_clause);
             use sqlx::Row;
             let mut total_operator = sqlx::query(&total_query);
             for param in params.iter() {
@@ -235,16 +220,17 @@ macro_rules! dynamic_postgres_upsert {
         {
             use chrono::{DateTime, Utc};
             use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
 
-            let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let insert_by = $bean.base.created_by.clone();
 
             // Notice:
             // 1. (SQLite/Postgres) Because the ORM library is not used for the time being, the fields are dynamically
             // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
             // 2. (MongoDB) The underlying BSON serialization is also based on serde, so using #[serde(rename="xx")] is also valid
             // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+            let supplied_id = $bean.base.id;
             $bean.base.pre_insert(insert_by).await;
+            if supplied_id.is_some() { $bean.base.id = supplied_id; }
 
             let serialized = serde_json::to_value($bean).unwrap();
             let obj = serialized.as_object().unwrap();
@@ -326,9 +312,8 @@ macro_rules! dynamic_postgres_update {
     ($bean:expr, $table:expr, $pool:expr) => {
         {
             use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
 
-            let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let updated_by = $bean.base.updated_by.clone();
             $bean.base.pre_update(updated_by).await;
 
             // Notice:

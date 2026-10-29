@@ -23,3 +23,10 @@ pub mod config_tenant;
 pub mod constant;
 pub mod resources;
 pub mod swagger;
+
+pub mod authguard;
+
+pub mod llm;
+pub mod platform;
+pub mod services;
+pub mod storage;

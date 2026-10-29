@@ -31,7 +31,8 @@ pub async fn init() {
     let config = &get_config();
 
     // Setup logging+tracing layers.
-    let (route_layer, _) = tracing_subscriber::reload::Layer::new(logging::default_log_route_layer());
+    let (route_layer, route_handle) = tracing_subscriber::reload::Layer::new(logging::default_log_route_layer());
+    logging::LogRoutes::initialize(route_handle);
     let (stderr_layer, _) = tracing_subscriber::reload::Layer::new(logging::default_log_stderr_layer(config));
     let level_layer = logging::default_log_levels_layer();
 

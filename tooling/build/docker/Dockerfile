@@ -22,7 +22,8 @@
 #####################################################
 ### STAGE 1: Build Base with System Dependencies  ###
 #####################################################
-FROM registry.cn-shenzhen.aliyuncs.com/wl4g/rust:1.91.1 AS base
+ARG RUST_BUILD_IMAGE=docker.io/library/rust:1.94.0-bookworm
+FROM ${RUST_BUILD_IMAGE} AS base
 
 ARG BUILD_MIRROR_URL=http://mirrors.aliyun.com
 ARG DEBIAN_FRONTEND=noninteractive
@@ -39,6 +40,9 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         pkg-config \
+        cmake \
+        libssl-dev \
+        libcurl4-openssl-dev \
         ca-certificates \
         python3-dev \
         python3 \
@@ -60,15 +64,14 @@ ARG PROJECT_NAME=sigbot
 # Copy only files needed for dependency resolution. (Excluded: 'rust-toolchain.toml' due to containing dev components.)
 COPY benchmarks ./benchmarks
 COPY src ./src
-COPY tests/Cargo.toml ./tests/Cargo.toml
+COPY tests ./tests
 COPY tooling/build/deps/swagger-ui-5.17.14.zip ./tooling/build/deps/swagger-ui-5.17.14.zip
 COPY Cargo.toml Cargo.lock ./
 
 ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/tooling/build/deps/swagger-ui-5.17.14.zip
 
 # Setup dependency caching structure
-RUN find src -type f -not -name "Cargo.toml" -delete && \
-    find benchmarks -type f -not -name "Cargo.toml" -delete && \
+RUN find src benchmarks tests -type f -not -name "Cargo.toml" -delete && \
     find src -type d -name src -o -path "*/src" | xargs -I{} mkdir -p {} && \
     find benchmarks -type d -name src -o -path "*/src" | xargs -I{} mkdir -p {} && \
     find src -type d -name src | xargs -I{} touch {}/lib.rs && \
@@ -76,10 +79,16 @@ RUN find src -type f -not -name "Cargo.toml" -delete && \
     mkdir -p tests/integration && \
     touch tests/integration/mod.rs tests/integration/integration_all.rs && \
     mkdir -p src/cmd/src/bin && \
-    echo "fn main() {}" > src/cmd/src/bin/${PROJECT_NAME}.rs
+    echo "fn main() {}" > src/cmd/src/bin/${PROJECT_NAME}.rs && \
+    mkdir -p src/strategy/runner/src/bin && \
+    echo "fn main() {}" > src/strategy/runner/src/bin/sigbot-strategy-worker.rs
+
+# Cargo validates explicitly named targets even when the cache build selects bins.
+# Preserve every manifest's custom lib/test/bench/example path in this throwaway layer.
+RUN python3 -c 'from pathlib import Path; import tomllib; roots = [Path("src"), Path("benchmarks"), Path("tests")]; manifests = [path for root in roots for path in root.rglob("Cargo.toml")]; exec("for manifest in manifests:\n spec = tomllib.loads(manifest.read_text())\n for kind in (\"lib\", \"bin\", \"test\", \"bench\", \"example\"):\n  targets = [spec[kind]] if kind == \"lib\" and kind in spec else spec.get(kind, [])\n  for target in targets:\n   if \"path\" in target:\n    path = manifest.parent / target[\"path\"]\n    path.parent.mkdir(parents=True, exist_ok=True)\n    path.write_text(\"\" if kind == \"lib\" else \"fn main() {}\\n\")")'
 
 # Build dependencies only
-RUN cargo build --locked --release -p sigbot-cmd --bin ${PROJECT_NAME}
+RUN cargo build --locked --release -p sigbot-cmd -p sigbot-strategy-runner --bins
 
 ################################################
 ### STAGE 3: Build Application Binary        ###
@@ -106,7 +115,9 @@ COPY Cargo.toml Cargo.lock ./
 ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/tooling/build/deps/swagger-ui-5.17.14.zip
 
 # Check toolchain and build the application
-RUN cargo install ${BUILD_ARGS} --path src/cmd --bin ${PROJECT_NAME}
+RUN cargo build --locked --release ${BUILD_ARGS} -p sigbot-cmd -p sigbot-strategy-runner --bins && \
+    install -m 0755 target/release/${PROJECT_NAME} /usr/local/cargo/bin/${PROJECT_NAME} && \
+    install -m 0755 target/release/sigbot-strategy-worker /usr/local/cargo/bin/sigbot-strategy-worker
 
 #################################################
 ### STAGE 4: Runtime Image                    ###
@@ -154,7 +165,7 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources && \
         python3-pip \
         libpython3.11 \
         && \
-    pip3 install --no-cache-dir \
+    pip3 install --no-cache-dir --break-system-packages \
         polars \
         pandas \
         pyarrow \
@@ -163,13 +174,14 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN groupadd -r ${PROJECT_NAME} && \
-    useradd -r -g ${PROJECT_NAME} ${PROJECT_NAME} && \
+RUN groupadd -g 1000 ${PROJECT_NAME} && \
+    useradd -u 1000 -g ${PROJECT_NAME} ${PROJECT_NAME} && \
     mkdir -p /app/config /app/data /app/static && \
     chown -R ${PROJECT_NAME}:${PROJECT_NAME} /app
 
 # Copy the application binary
 COPY --from=builder /usr/local/cargo/bin/${PROJECT_NAME} /usr/local/bin/${PROJECT_NAME}
+COPY --from=builder /usr/local/cargo/bin/sigbot-strategy-worker /usr/local/bin/sigbot-strategy-worker
 
 # Copy configuration and static files
 COPY --from=builder /usr/src/app/etc /app/config
@@ -177,9 +189,11 @@ COPY --from=builder /usr/src/app/static /app/static
 
 # Setup working directory
 WORKDIR /app
+USER 1000:1000
+ENV SIGBOT_CFG_PATH=/app/config/sigbot.yaml
 
 # Set the run entrypoint using tini as init
-ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/${PROJECT_NAME}"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/sigbot"]
 
 # Default command if none provided
-CMD ["--config", "/app/config/sigbot.yaml"]
+CMD ["api"]

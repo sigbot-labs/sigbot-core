@@ -106,6 +106,7 @@ impl SigbotStrategyRunnerStarter {
         Self::start(matches, verbose).await;
 
         signal_handle.await.expect("Failed to start Management server.");
+        SigbotStrategyRunner::shutdown().await;
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {

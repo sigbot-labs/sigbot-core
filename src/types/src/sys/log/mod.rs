@@ -37,7 +37,7 @@ pub struct LogManagerArgument {
 
 impl LogManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, anyhow::Error> {
-        serde_json::from_str(json).context(format!("Failed to parse log manager info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse log manager info from JSON")
     }
 }
 

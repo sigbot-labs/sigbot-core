@@ -25,7 +25,7 @@
 //!
 //! ## MCP Integration
 //! Tools prefixed with `mcp_` can call external MCP services (e.g., Binance MCP, Bitget MCP)
-//! when configured. If no MCP client is available, they fall back to mock data.
+//! when configured. Missing sources are errors; fabricated market data is forbidden.
 
 pub mod binance_tool;
 pub mod twitter_tool;

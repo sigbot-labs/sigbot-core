@@ -25,7 +25,10 @@ use std::{
     fmt::{self, Display},
     io::{IsTerminal, LineWriter},
     str::FromStr,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
+    },
 };
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
@@ -39,6 +42,61 @@ use tracing_subscriber::{
 };
 
 pub type LogRouteHandle = tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
+
+static LOG_ROUTE: OnceLock<LogRouteHandle> = OnceLock::new();
+static LOG_ROUTE_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Subscriber infrastructure only: concrete sinks belong to their shared component.
+pub struct LogRoutes;
+pub struct LogRouteGuard {
+    handle: Option<LogRouteHandle>,
+}
+
+impl LogRoutes {
+    pub(super) fn initialize(handle: LogRouteHandle) {
+        LOG_ROUTE
+            .set(handle)
+            .unwrap_or_else(|_| panic!("log route already initialized"));
+    }
+
+    pub fn install(
+        layer: Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>,
+        targets: Targets,
+    ) -> anyhow::Result<LogRouteGuard> {
+        let handle = LOG_ROUTE
+            .get()
+            .ok_or_else(|| anyhow::anyhow!("logging subscriber is not initialized"))?
+            .clone();
+        anyhow::ensure!(
+            LOG_ROUTE_INSTALLED
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok(),
+            "a fixed-identity log route is already installed in this process"
+        );
+        // Keep the FilterId registered when the subscriber was constructed.
+        // Replacing the whole Filtered layer bypasses on_layer registration.
+        if let Err(error) = handle.modify(|route| {
+            *route.inner_mut() = Some(layer);
+            *route.filter_mut() = targets;
+        }) {
+            LOG_ROUTE_INSTALLED.store(false, Ordering::Release);
+            return Err(error.into());
+        }
+        Ok(LogRouteGuard { handle: Some(handle) })
+    }
+}
+
+impl Drop for LogRouteGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.modify(|route| {
+                *route.inner_mut() = None;
+                *route.filter_mut() = Targets::new().with_target("", LevelFilter::OFF);
+            });
+            LOG_ROUTE_INSTALLED.store(false, Ordering::Release);
+        }
+    }
+}
 
 pub type LogRouteType = tracing_subscriber::filter::Filtered<
     Option<Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>>,

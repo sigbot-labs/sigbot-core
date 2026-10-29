@@ -1,0 +1,9 @@
+{{- if .Values.systemdb.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sigbot.fullname" . }}-postgres-extensions
+data:
+  20-extensions.sql: |
+{{ .Files.Get "bootstrap/postgres-extensions.sql" | indent 4 }}
+{{- end }}

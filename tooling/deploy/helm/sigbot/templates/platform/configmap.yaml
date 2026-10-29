@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sigbot.fullname" . }}-runtime
+data:
+  RUST_BACKTRACE: {{ .Values.env.rustBacktrace | quote }}
+  SIGBOT__SERVER__PORT: "9000"
+  SIGBOT__SERVER__CONTEXT_PATH: "/"
+  SIGBOT__LOGGING__MODE: {{ .Values.env.loggingMode | quote }}
+  SIGBOT__LOGGING__LEVEL: {{ .Values.env.loggingLevel | quote }}
+  SIGBOT__AUTHGUARD__PROVIDER: "signed_header"
+  SIGBOT__APPDB__TYPE: "postgresql"
+  SIGBOT__APPDB__POSTGRES__HOST: "{{ include "sigbot.fullname" . }}-systemdb"
+  SIGBOT__APPDB__POSTGRES__PORT: "5432"
+  SIGBOT__APPDB__POSTGRES__USERNAME: {{ .Values.systemdb.auth.postgresUser | quote }}
+  SIGBOT__APPDB__POSTGRES__DATABASE: {{ .Values.systemdb.auth.postgresDatabase | quote }}
+  SIGBOT__CACHE__PROVIDER: "REDIS"
+  SIGBOT__CACHE__REDIS__NODES: "redis://{{ include "sigbot.fullname" . }}-redis:6379"
+  SIGBOT__LLM__VECDB__PG_VECTOR__HOST: "{{ include "sigbot.fullname" . }}-systemdb"
+  SIGBOT__LLM__VECDB__PG_VECTOR__DATABASE: {{ .Values.systemdb.auth.postgresDatabase | quote }}

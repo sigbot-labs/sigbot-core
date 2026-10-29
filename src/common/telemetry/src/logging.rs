@@ -326,10 +326,16 @@ pub fn init_global_logging(
 
             let trace_config = opentelemetry_sdk::trace::config().with_sampler(sampler).with_resource(
                 opentelemetry_sdk::Resource::new(vec![
-                    KeyValue::new(resource::SERVICE_NAME, app_name.to_string()),
-                    KeyValue::new(resource::SERVICE_INSTANCE_ID, node_id.unwrap_or("none".to_string())),
-                    KeyValue::new(resource::SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-                    KeyValue::new(resource::PROCESS_PID, std::process::id().to_string()),
+                    KeyValue::new(resource::SERVICE_NAME.as_str().to_owned(), app_name.to_string()),
+                    KeyValue::new(
+                        resource::SERVICE_INSTANCE_ID.as_str().to_owned(),
+                        node_id.unwrap_or("none".to_string()),
+                    ),
+                    KeyValue::new(resource::SERVICE_VERSION.as_str().to_owned(), env!("CARGO_PKG_VERSION")),
+                    KeyValue::new(
+                        resource::PROCESS_PID.as_str().to_owned(),
+                        std::process::id().to_string(),
+                    ),
                 ]),
             );
 

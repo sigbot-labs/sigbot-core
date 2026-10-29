@@ -42,10 +42,7 @@ pub fn decode_arg_config(configuration: &str) -> Result<String, Error> {
                 Ok(decoded_str) => Ok(decoded_str),
                 Err(_) => {
                     // Decoded but not valid UTF-8, return original string
-                    Err(Error::msg(format!(
-                        "Failed to convert the configuration to string: {}",
-                        configuration
-                    )))
+                    Err(Error::msg("Failed to decode configuration as UTF-8"))
                 }
             }
         }
@@ -55,3 +52,5 @@ pub fn decode_arg_config(configuration: &str) -> Result<String, Error> {
         }
     }
 }
+
+pub mod connection;

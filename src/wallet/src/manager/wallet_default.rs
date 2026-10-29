@@ -41,8 +41,8 @@ impl SigbotDefaultWalletManager {
     }
 
     async fn process_trade_event(&self, event: &SigbotTradeEvent) -> Result<(), Error> {
-        // 直接写入交易记录，依赖数据库的 ON CONFLICT 保证幂等性
-        // ledger/balance/position 表都已经设置了 ON CONFLICT，可以安全地处理重复消息
+        // The updater commits the immutable fact and projections atomically.
+        // ON CONFLICT on the fact gates all balance/position changes.
         self.trade_handler.upsert(event).await?;
 
         info!(

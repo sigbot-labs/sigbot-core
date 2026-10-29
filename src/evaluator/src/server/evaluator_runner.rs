@@ -19,6 +19,7 @@
 // This includes modifications and derived works.
 
 use crate::executor::evaluator_factory::SigbotEvaluationExecutorFactory;
+use crate::executor::runtime::EvaluationRuntime;
 use common_telemetry::{debug, info, warn};
 use sigbot_core::{
     config::config_tenant::{get_tenant_config, init_tenant_config},
@@ -33,7 +34,10 @@ use sigbot_types::modules::{
     evaluator::{evaluator::EvaluatorProvider, SigbotEvaluatorRunnerArgument},
     workflow::workflow::{WorkflowStageType, WorkflowStageWrapper},
 };
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Mutex;
+
+static V2_RUNTIME: OnceLock<Mutex<Option<Arc<EvaluationRuntime>>>> = OnceLock::new();
 
 /// SigbotEvaluatorRunner manages LLM-type evaluation job lifecycle
 ///
@@ -70,7 +74,6 @@ impl SigbotEvaluatorRunner {
             .try_get_one::<String>("EVALUATOR_RUNNER_CONFIGURATION")
             .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
-        init_tenant_config(&configuration);
 
         let argument = Arc::new(
             SigbotEvaluatorRunnerArgument::from_json(
@@ -85,6 +88,21 @@ impl SigbotEvaluatorRunner {
             .await
             .expect("Failed to initialize Messager Client.");
         info!("Initialized Messager Client. {}", messager.provider().as_str());
+
+        if argument
+            .properties
+            .as_ref()
+            .and_then(|p| p.get("runtime_v2"))
+            .is_some_and(|v| v == "true")
+        {
+            let runtime = EvaluationRuntime::from_properties(argument.properties.as_ref().expect("runtime properties"))
+                .await
+                .expect("failed to initialize evaluator v2");
+            runtime.start(messager).await.expect("failed to subscribe evaluator v2");
+            *V2_RUNTIME.get_or_init(|| Mutex::new(None)).lock().await = Some(runtime);
+            return;
+        }
+        init_tenant_config(&configuration);
 
         // Initialize Workflow Manager with tenant-specific configuration
         debug!("Initializing Workflow Manager.");
@@ -247,6 +265,9 @@ impl SigbotEvaluatorRunner {
     }
 
     pub async fn shutdown() {
+        if let Some(runtime) = V2_RUNTIME.get_or_init(|| Mutex::new(None)).lock().await.take() {
+            runtime.close().await;
+        }
         info!("Shutting down Evaluator Manager.");
         SigbotEvaluationExecutorFactory::shutdown().await;
         info!("Shutdown Evaluation Executor Factory.");

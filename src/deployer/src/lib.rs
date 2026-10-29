@@ -22,3 +22,5 @@ pub mod deployer_factory;
 pub mod docker;
 pub mod kubernetes;
 pub mod standalone;
+pub mod worker_plan;
+pub mod worker_reconciler;

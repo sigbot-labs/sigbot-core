@@ -371,8 +371,8 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                     .api_key(self.config.api_key.clone())
                     .api_secret(self.config.api_secret.clone())
                     .base_path(self.config.usds_api_mainnet_endpoint.clone())
-                    .timeout(self.config.api_timeout.as_secs())
-                    .retries(self.config.api_retries)
+                    .timeout(self.config.api_timeout.as_millis() as u64)
+                    .retries(0)
                     .backoff(self.config.api_backoff as u64)
                     .build()
                     .expect("Failed to build REST API configuration"),
@@ -386,8 +386,8 @@ impl ISigbotExchangeClient for SigbotBinanceClient {
                     .api_key(self.config.api_key.clone())
                     .api_secret(self.config.api_secret.clone())
                     .base_path(self.config.usds_market_api_mainnet_endpoint.clone())
-                    .timeout(self.config.api_timeout.as_secs())
-                    .retries(self.config.api_retries)
+                    .timeout(self.config.api_timeout.as_millis() as u64)
+                    .retries(0)
                     .backoff(self.config.api_backoff as u64)
                     .build()
                     .expect("Failed to build REST API configuration"),

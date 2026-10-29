@@ -1,3 +1,5 @@
+use crate::context::identity::RequestIdentity;
+use axum::Extension;
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
 // Copyleft (c) 2024 James Wong. This file is part of James Wong.
@@ -36,6 +38,8 @@ use sigbot_types::{
 
 pub fn init() -> Router<SigbotState> {
     Router::new()
+        .route("/api/v1/tenants", get(handle_query_tenants).post(handle_save_tenant))
+        .route("/api/v1/tenants/delete", post(handle_delete_tenant))
         .route("/sys/tenant/query", get(handle_query_tenants))
         .route("/sys/tenant/save", post(handle_save_tenant))
         .route("/sys/tenant/delete", post(handle_delete_tenant))
@@ -50,10 +54,11 @@ pub fn init() -> Router<SigbotState> {
 )]
 async fn handle_query_tenants(
     State(state): State<SigbotState>,
+    Extension(identity): Extension<RequestIdentity>,
     Query(param): Query<QueryTenantRequest>,
     Query(page): Query<PageRequest>,
 ) -> impl IntoResponse {
-    match get_tenant_handler(&state).find(param, page).await {
+    match get_tenant_handler(&state, &identity).find(param, page).await {
         Ok((page, data)) => Ok(Json(QueryTenantResponse::new(page, data))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
@@ -68,9 +73,10 @@ async fn handle_query_tenants(
 )]
 async fn handle_save_tenant(
     State(state): State<SigbotState>,
+    Extension(identity): Extension<RequestIdentity>,
     ValidatedJson(param): ValidatedJson<SaveTenantRequest>,
 ) -> impl IntoResponse {
-    match get_tenant_handler(&state).save(param).await {
+    match get_tenant_handler(&state, &identity).save(param).await {
         Ok(result) => Ok(Json(result)),
         Err(e) => {
             common_telemetry::error!("Failed to save tenant: {}", e);
@@ -88,14 +94,15 @@ async fn handle_save_tenant(
 )]
 async fn handle_delete_tenant(
     State(state): State<SigbotState>,
+    Extension(identity): Extension<RequestIdentity>,
     Json(param): Json<DeleteTenantRequest>,
 ) -> impl IntoResponse {
-    match get_tenant_handler(&state).delete(param).await {
+    match get_tenant_handler(&state, &identity).delete(param).await {
         Ok(result) => Ok(Json(DeleteTenantResponse::new(result))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
-fn get_tenant_handler(state: &SigbotState) -> Box<dyn ITenantHandler + '_> {
-    Box::new(TenantHandler::new(state))
+fn get_tenant_handler<'a>(state: &'a SigbotState, identity: &'a RequestIdentity) -> Box<dyn ITenantHandler + 'a> {
+    Box::new(TenantHandler::new(state, identity))
 }

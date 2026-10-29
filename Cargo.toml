@@ -2,6 +2,7 @@
 members = [
     "benchmarks",
     "src/common/audit-log",
+    "src/common/context",
     "src/common/macro",
     "src/common/makestruct",
     "src/common/mem-prof",
@@ -52,6 +53,7 @@ rust.unknown_lints = "deny"
 [workspace.dependencies]
 # workspaces members.
 common-audit-log = { path = "src/common/audit-log" }
+common-context = { path = "src/common/context" }
 common-error = { path = "src/common/error" }
 common-macro = { path = "src/common/macro" }
 common-makestruct = { path = "src/common/makestruct" }
@@ -158,9 +160,9 @@ reqwest = "0.12.12"
 
 # Database libs
 mongodb = "3.2.5"
-sqlx = { version = "0.8.3", features = ["sqlite", "postgres"] }
+sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "rust_decimal"] }
 pgvector = { version = "0.4", features = ["postgres"] }
-rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision"] }
+rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision", "db-postgres", "db-tokio-postgres"] }
 
 # Swagger/OpenAPI libs
 utoipa = "5.3.1"
@@ -196,6 +198,7 @@ pyo3 = { version = "0.22", features = ["auto-initialize"] }
 
 # Kubernetes libs
 kube = { version = "0.90", features = ["runtime", "derive"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 k8s-openapi = { version = "0.21", features = ["v1_28"] }
 
 # Docker libs

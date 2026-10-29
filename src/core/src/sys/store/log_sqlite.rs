@@ -78,8 +78,7 @@ impl IAsyncRepository<LogInfo> for LogSQLiteRepository {
 impl ILogRepository for LogSQLiteRepository {
     async fn append(&self, mut log: LogInfo) -> Result<i64, Error> {
         // Logs are append-only, use insert instead of upsert
-        use crate::util::auths::SecurityContext;
-        let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+        let insert_by = log.base.created_by.clone();
         log.base.pre_insert(insert_by).await;
 
         let result = sqlx::query(

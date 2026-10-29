@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use super::strategy_runtime::StrategyRuntime;
 use crate::executor::strategy_factory::SigbotStrategyExecutorFactory;
 use common_telemetry::{debug, info, warn};
 use sigbot_core::{
@@ -33,7 +34,9 @@ use sigbot_types::modules::{
     strategy::SigbotStrategyArgument,
     workflow::workflow::{WorkflowStageType, WorkflowStageWrapper},
 };
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static V2_RUNTIME: OnceLock<tokio::sync::Mutex<Option<Arc<StrategyRuntime>>>> = OnceLock::new();
 
 pub struct SigbotStrategyRunner {}
 
@@ -49,7 +52,6 @@ impl SigbotStrategyRunner {
             .try_get_one::<String>("STRATEGY_RUNNER_CONFIGURATION")
             .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
             .expect("Failed to parse the configuration from the command line arguments.");
-        init_tenant_config(&configuration);
 
         let argument = Arc::new(
             SigbotStrategyArgument::from_json(
@@ -64,6 +66,21 @@ impl SigbotStrategyRunner {
             .await
             .expect("Failed to initialize Messager Client.");
         info!("Initialized Messager Client. {}", messager.provider().as_str());
+
+        if argument
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.get("runtime_v2"))
+            .is_some_and(|value| value == "true")
+        {
+            let runtime = StrategyRuntime::start(&argument, messager)
+                .await
+                .expect("Failed to start scoped strategy runtime");
+            *V2_RUNTIME.get_or_init(Default::default).lock().await = Some(runtime);
+            return;
+        }
+
+        init_tenant_config(&configuration);
 
         // Initialize Workflow Manager with tenant-specific configuration
         debug!("Initializing Workflow Manager.");
@@ -200,6 +217,11 @@ impl SigbotStrategyRunner {
     }
 
     pub async fn shutdown() {
+        if let Some(runtime) = V2_RUNTIME.get_or_init(Default::default).lock().await.take() {
+            if let Err(error) = runtime.close().await {
+                warn!(target:"sigbot_archive_internal", "Strategy log durability shutdown failed: {}",error);
+            }
+        }
         info!("Shutting down Strategy Executor.");
         SigbotStrategyExecutorFactory::shutdown().await;
         info!("Shutdown Strategy Executor.");

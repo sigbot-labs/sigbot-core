@@ -18,12 +18,15 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use super::wallet_runtime::WalletRuntime;
 use crate::manager::wallet_factory::SigbotWalletManagerFactory;
 use anyhow::Error;
 use common_telemetry::{debug, error, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
 use sigbot_types::modules::{messager::TOPIC_WF_TRADING_PLACED, order::events::SigbotTradeEvent};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static V2_RUNTIME: OnceLock<tokio::sync::Mutex<Option<Arc<WalletRuntime>>>> = OnceLock::new();
 
 pub struct SigbotWalletServer {}
 
@@ -45,12 +48,27 @@ impl SigbotWalletServer {
             .expect("Failed to initialize Messager client.");
         info!("Initialized Messager client. {:?}", messager.provider());
 
+        if argument
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.get("runtime_v2"))
+            .is_some_and(|value| value == "true")
+        {
+            let runtime = WalletRuntime::start(&argument, messager)
+                .await
+                .expect("Failed to start scoped wallet runtime");
+            *V2_RUNTIME.get_or_init(Default::default).lock().await = Some(runtime);
+            return;
+        }
+
         // Subscribe to trade event topics.
         let manager0 = walletmgr.to_owned();
         let messager0 = messager.to_owned();
 
         // Subscribe to all tenant's trade topics (using wildcard).
-        let topic = TOPIC_WF_TRADING_PLACED.replace("{tenant_id}", "+"); // MQTT single level wildcard
+        let topic = TOPIC_WF_TRADING_PLACED
+            .replace("{TENANT_ID}", "+")
+            .replace("{WORKFLOW_ID}", "+");
 
         let handler: Arc<
             dyn Fn(Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, Error>> + Send>>
@@ -72,12 +90,8 @@ impl SigbotWalletServer {
                     event.trade_id, event.order_id, event.tenant_id
                 );
 
-                let manager2 = manager1.to_owned();
-                tokio::spawn(async move {
-                    if let Err(e) = manager2.handle_trade_event(event).await {
-                        error!("Failed to process trade event: {}", e);
-                    }
-                });
+                // Returning success is the transport's durable ACK boundary.
+                manager1.handle_trade_event(event).await?;
 
                 Ok(String::from_utf8_lossy(&data).to_string())
             })
@@ -92,6 +106,9 @@ impl SigbotWalletServer {
     }
 
     pub async fn shutdown() {
+        if let Some(runtime) = V2_RUNTIME.get_or_init(Default::default).lock().await.take() {
+            runtime.close();
+        }
         info!("Shutting down Wallet manager.");
         SigbotWalletManagerFactory::shutdown().await;
         info!("Shutdown Wallet manager.");

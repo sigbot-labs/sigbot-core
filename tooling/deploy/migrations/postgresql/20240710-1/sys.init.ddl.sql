@@ -58,5 +58,13 @@ CREATE TABLE IF NOT EXISTS sys_user (
     created_at TIMESTAMPTZ default current_timestamp,
     updated_by VARCHAR(64) NULL,
     updated_at TIMESTAMPTZ default current_timestamp,
-    del_flag INTEGER NOT NULL default 0,
+    del_flag INTEGER NOT NULL default 0
+);
+CREATE TABLE IF NOT EXISTS sys_tenant (
+    id BIGINT PRIMARY KEY, name TEXT NOT NULL, shared BOOLEAN NOT NULL DEFAULT FALSE,
+    admin_id BIGINT, properties JSONB, description TEXT, status SMALLINT DEFAULT 0,
+    encryption_public_key TEXT, encryption_private_key_hash VARCHAR(64),
+    encrypted_private_key TEXT, cloud_managed_key BOOLEAN DEFAULT FALSE, components JSONB,
+    created_by TEXT, updated_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(), del_flag SMALLINT NOT NULL DEFAULT 0
 );

@@ -22,4 +22,3 @@ pub mod auth_handler;
 pub mod dlock_handler;
 pub mod log_handler;
 pub mod tenant_handler;
-pub mod user_handler;

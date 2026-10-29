@@ -1,0 +1,6 @@
+existingSecret: marketpulse-boundaries
+imagePullPolicy: IfNotPresent
+services:
+  twitter: {image: "sigbot-marketpulse-twitter:local"}
+  truthsocial: {image: "sigbot-marketpulse-truthsocial:local"}
+  openai: {image: "sigbot-marketpulse-openai:local"}

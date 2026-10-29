@@ -23,14 +23,15 @@ spec:
         - name: redis
           image: "{{ .Values.redis.image.registry }}/{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
           imagePullPolicy: IfNotPresent
-          command:
-            - redis-server
-            - --appendonly
-            - "yes"
-            {{- if .Values.redis.auth.password }}
-            - --requirepass
-            - {{ .Values.redis.auth.password | quote }}
-            {{- end }}
+          command: [sh, -ec]
+          args: ['exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.redis.auth.existing_secret }}, key: {{ .Values.redis.auth.password_key }}}
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.redis.auth.existing_secret }}, key: {{ .Values.redis.auth.password_key }}}
           ports:
             - name: redis
               containerPort: 6379
@@ -44,10 +45,6 @@ spec:
             exec:
               command:
                 - redis-cli
-                {{- if .Values.redis.auth.password }}
-                - -a
-                - {{ .Values.redis.auth.password | quote }}
-                {{- end }}
                 - ping
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -56,10 +53,6 @@ spec:
             exec:
               command:
                 - redis-cli
-                {{- if .Values.redis.auth.password }}
-                - -a
-                - {{ .Values.redis.auth.password | quote }}
-                {{- end }}
                 - ping
             initialDelaySeconds: 5
             periodSeconds: 5

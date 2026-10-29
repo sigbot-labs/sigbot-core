@@ -19,3 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod notification_forwarder;
+pub mod notification_runtime;

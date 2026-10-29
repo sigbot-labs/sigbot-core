@@ -155,32 +155,44 @@ macro_rules! dynamic_sqlite_query {
               let mut fields = Vec::new();
               let mut params = Vec::new();
               for (key, value) in obj {
-                  if !value.is_null() {
-                    let v = value.as_str().unwrap_or("");
-                    if !v.is_empty() {
-                        fields.push(format!("{} = ?", key));
-                        params.push(v.to_string());
+                let param = match value {
+                    serde_json::Value::String(value) if !value.is_empty() => {
+                        if key == "created_at" || key == "updated_at" {
+                            sigbot_utils::types::GenericValue::DateTime(chrono::DateTime::parse_from_rfc3339(value)?.with_timezone(&chrono::Utc))
+                        } else { sigbot_utils::types::GenericValue::String(value.clone()) }
                     }
-                  }
-              }
-              if let Some(id) = $bean.base.id {
-                  fields.push("id = ?".to_string());
-                  params.push(id.to_string());
-              }
-              let where_clause = if fields.is_empty() {
+                    serde_json::Value::Number(value) => {
+                        if let Some(value) = value.as_i64() { sigbot_utils::types::GenericValue::Int64(value) }
+                        else if let Some(value) = value.as_f64() { sigbot_utils::types::GenericValue::Float64(value) }
+                        else { continue; }
+                    }
+                    serde_json::Value::Bool(value) => sigbot_utils::types::GenericValue::Bool(*value),
+                    _ => continue,
+                };
+                fields.push(format!("{} = ?", key));
+                params.push(param);
+            }
+            let where_clause = if fields.is_empty() {
                   "1=1".to_string()
               } else {
                   fields.join(" AND ")
               };
 
               // Queries to get total count.
-              let total_query = format!("SELECT COUNT(1) FROM {} WHERE {}", $table, where_clause);
+              let total_query = format!("SELECT COUNT(1) FROM {} WHERE {} AND del_flag = 0", $table, where_clause);
               use sqlx::Row;
-              let total_count = sqlx::query(&total_query)
-                .fetch_one($pool)
-                .await
-                .map(|row| row.get::<i64, _>(0) as i64)
-                .unwrap();
+              let mut operator = sqlx::query(&total_query);
+              for param in params.iter() {
+                  match param {
+                      sigbot_utils::types::GenericValue::Bool(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Int64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Float64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::String(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::DateTime(value) => operator = operator.bind(value),
+                      _ => unreachable!("query scalar type"),
+                  }
+              }
+              let total_count = operator.fetch_one($pool).await?.get::<i64, _>(0);
 
               // Queries to get data.
               let query = format!("SELECT * FROM {} WHERE {} AND del_flag = 0 ORDER BY {} LIMIT {} OFFSET {}",
@@ -188,7 +200,14 @@ macro_rules! dynamic_sqlite_query {
 
               let mut operator = sqlx::query_as::<_, $($t),+>(&query);
               for param in params.iter() {
-                  operator = operator.bind(param);
+                  match param {
+                      sigbot_utils::types::GenericValue::Bool(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Int64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Float64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::String(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::DateTime(value) => operator = operator.bind(value),
+                      _ => unreachable!("query scalar type"),
+                  }
               }
 
               match operator.fetch_all($pool).await {
@@ -212,16 +231,17 @@ macro_rules! dynamic_sqlite_upsert {
     ($bean:expr, $table:expr, $pool:expr) => {
         {
             use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
 
-            let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let insert_by = $bean.base.created_by.clone();
 
             // Notice:
             // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
             // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
             // 2. (MongoDB) The underlying BSON serialization is also based on serde, so using #[serde(rename="xx")] is also valid
             // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+            let supplied_id = $bean.base.id;
             $bean.base.pre_insert(insert_by).await;
+            if supplied_id.is_some() { $bean.base.id = supplied_id; }
 
             let serialized = serde_json::to_value($bean).unwrap();
             let obj = serialized.as_object().unwrap();
@@ -287,9 +307,8 @@ macro_rules! dynamic_sqlite_update {
     ($bean:expr, $table:expr, $pool:expr) => {
         {
             use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
 
-            let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let updated_by = $bean.base.updated_by.clone();
             $bean.base.pre_update(updated_by).await;
 
             // Notice:

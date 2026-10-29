@@ -20,13 +20,10 @@
 
 use crate::config::config::SqliteAppDBProperties;
 use crate::dynamic_sqlite_query;
-use crate::dynamic_sqlite_update;
-use crate::dynamic_sqlite_upsert;
 use crate::store::sqlite::SQLiteRepository;
-use crate::store::{select_by_sql_sqlite, IAsyncRepository};
+use crate::store::IAsyncRepository;
 use anyhow::{Error, Ok};
 use async_trait::async_trait;
-use common_telemetry::debug;
 use sigbot_types::modules::workflow::workflow::WorkflowInfo;
 use sigbot_types::PageRequest;
 use sigbot_types::PageResponse;
@@ -52,6 +49,7 @@ impl IAsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
         workflow: WorkflowInfo,
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<WorkflowInfo>), Error> {
+        anyhow::ensure!(workflow.tenant_id.is_some(), "explicit workflow tenant scope required");
         let result = dynamic_sqlite_query!(
             workflow,
             "s_workflow",
@@ -61,120 +59,97 @@ impl IAsyncRepository<WorkflowInfo> for WorkflowInfoSQLiteRepository {
             WorkflowInfo
         )?;
 
-        debug!("query workflows: {:?}", result);
         Ok((result.0, result.1))
     }
 
-    async fn select_by_id(&self, id: i64) -> Result<WorkflowInfo, Error> {
-        let workflow = sqlx::query_as::<_, WorkflowInfo>("SELECT * FROM s_workflow WHERE id = ? AND del_flag = 0")
-            .bind(id)
-            .fetch_one(self.inner.get_pool())
-            .await?;
-
-        debug!("query workflow: {:?}", workflow);
-        Ok(workflow)
+    async fn select_by_id(&self, _id: i64) -> Result<WorkflowInfo, Error> {
+        Err(Error::msg("use select with explicit workflow tenant scope"))
     }
 
     async fn upsert(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
-        // Convert flow_info to flow_json for database storage (database column is still named flow_json)
-        if let Some(ref flow_info) = workflow.flow_info {
-            // Serialize flow_info to JSON string for database storage
-            let flow_json_str = serde_json::to_string(flow_info)?;
-            let workflow_id = workflow.base.id;
-            let insert_by = crate::util::auths::SecurityContext::get_instance()
-                .get_current_uname_for_store()
-                .await;
-            workflow.base.pre_insert(insert_by).await;
-
-            let query = "INSERT OR IGNORE INTO s_workflow (id, name, status, flow_json, description, created_at, updated_at, created_by, updated_by, del_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            sqlx::query(query)
-                .bind(workflow_id)
-                .bind(&workflow.name)
-                .bind(workflow.status.as_ref().map(|s| s.as_str()))
-                .bind(&flow_json_str)
-                .bind(&workflow.description)
-                .bind(&workflow.base.created_at)
-                .bind(&workflow.base.updated_at)
-                .bind(&workflow.base.created_by)
-                .bind(&workflow.base.updated_by)
-                .bind(workflow.base.del_flag)
-                .execute(self.inner.get_pool())
-                .await?;
-
-            let upserted_id = if let Some(id) = workflow_id {
-                id
-            } else {
-                sqlx::query_scalar::<_, i64>("SELECT last_insert_rowid()")
-                    .fetch_one(self.inner.get_pool())
-                    .await?
-            };
-            debug!("Inserted workflow.id: {:?}", upserted_id);
-            Ok(upserted_id)
-        } else {
-            let upserted_id = dynamic_sqlite_upsert!(workflow, "s_workflow", self.inner.get_pool())?;
-            debug!("Inserted workflow.id: {:?}", upserted_id);
-            Ok(upserted_id)
+        anyhow::ensure!(
+            workflow.tenant_id.is_some()
+                && workflow.space_id.is_some()
+                && workflow
+                    .env
+                    .as_deref()
+                    .is_some_and(|value| !value.is_empty() && value != "legacy"),
+            "bound workflow tenant, space and environment required"
+        );
+        let supplied_id = workflow.base.id;
+        let actor = workflow.base.created_by.clone();
+        if supplied_id.is_none() {
+            workflow.base.pre_insert(actor).await;
         }
+        let id = workflow.base.id.ok_or_else(|| Error::msg("workflow id required"))?;
+        let flow = workflow.flow_info.as_ref().map(serde_json::to_string).transpose()?;
+        let result = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO s_workflow (id, name, status, flow_json, properties, secrets, description, created_at, updated_at, created_by, updated_by, del_flag, tenant_id, space_id, env)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = excluded.status,
+             flow_json = excluded.flow_json, properties = excluded.properties, secrets = excluded.secrets,
+             description = excluded.description, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+             WHERE s_workflow.del_flag = 0 AND s_workflow.tenant_id = excluded.tenant_id AND s_workflow.space_id = excluded.space_id AND s_workflow.env = excluded.env RETURNING id")
+            .bind(id).bind(&workflow.name).bind(workflow.status.as_ref().map(|value| value.as_str()))
+            .bind(flow).bind(workflow.properties.as_ref().map(serde_json::to_string).transpose()?)
+            .bind(workflow.secrets.as_ref().map(serde_json::to_string).transpose()?)
+            .bind(&workflow.description).bind(workflow.base.created_at).bind(workflow.base.updated_at)
+            .bind(&workflow.base.created_by).bind(&workflow.base.updated_by).bind(0_i16)
+            .bind(workflow.tenant_id).bind(workflow.space_id).bind(&workflow.env)
+            .fetch_one(self.inner.get_pool()).await?;
+        Ok(result)
     }
 
     async fn update(&self, mut workflow: WorkflowInfo) -> Result<i64, Error> {
-        // Convert flow_info to flow_json for database storage (database column is still named flow_json)
-        if let Some(ref flow_info) = workflow.flow_info {
-            let flow_json_value = serde_json::to_value(flow_info)?;
-            let flow_json_str = serde_json::to_string(&flow_json_value)?;
-            let workflow_id = workflow.base.id.unwrap_or(0);
-            let update_by = crate::util::auths::SecurityContext::get_instance()
-                .get_current_uname_for_store()
-                .await;
-            workflow.base.pre_update(update_by).await;
-
-            let query = "UPDATE s_workflow SET name = ?, status = ?, flow_json = ?, description = ?, updated_at = ?, updated_by = ? WHERE id = ? AND del_flag = 0";
-            sqlx::query(query)
-                .bind(&workflow.name)
-                .bind(workflow.status.as_ref().map(|s| s.as_str()))
-                .bind(&flow_json_str)
-                .bind(&workflow.description)
-                .bind(&workflow.base.updated_at)
-                .bind(&workflow.base.updated_by)
-                .bind(workflow_id)
-                .execute(self.inner.get_pool())
-                .await?;
-
-            debug!("Updated workflow.id: {:?}", workflow_id);
-            Ok(workflow_id)
-        } else {
-            let updated_id = dynamic_sqlite_update!(workflow, "s_workflow", self.inner.get_pool())?;
-            debug!("Updated workflow.id: {:?}", updated_id);
-            Ok(updated_id)
-        }
+        let id = workflow.base.id.ok_or_else(|| Error::msg("workflow id required"))?;
+        anyhow::ensure!(
+            workflow.tenant_id.is_some() && workflow.space_id.is_some() && workflow.env.is_some(),
+            "explicit workflow scope required"
+        );
+        let deleted = workflow.base.del_flag.unwrap_or(0);
+        let actor = workflow.base.updated_by.clone();
+        workflow.base.pre_update(actor).await;
+        let flow = workflow.flow_info.as_ref().map(serde_json::to_string).transpose()?;
+        let rows = sqlx::query(
+            "UPDATE s_workflow SET name = ?, status = ?, flow_json = ?,
+             properties = ?, secrets = ?, description = ?, updated_at = ?, updated_by = ?, del_flag = ?
+             WHERE id = ? AND tenant_id = ? AND space_id = ? AND env = ? AND del_flag = 0 AND (status = ? OR ? NOT IN ('STOPPED','SUCCESS','FAILED'))",
+        )
+        .bind(&workflow.name)
+        .bind(workflow.status.as_ref().map(|value| value.as_str()))
+        .bind(flow)
+        .bind(workflow.properties.as_ref().map(serde_json::to_string).transpose()?)
+        .bind(workflow.secrets.as_ref().map(serde_json::to_string).transpose()?)
+        .bind(&workflow.description)
+        .bind(workflow.base.updated_at)
+        .bind(&workflow.base.updated_by)
+        .bind(i16::from(deleted))
+        .bind(id)
+        .bind(workflow.tenant_id)
+        .bind(workflow.space_id)
+        .bind(&workflow.env)
+        .bind(workflow.status.as_ref().map(|status|status.as_str()))
+        .bind(workflow.status.as_ref().map(|status|status.as_str()))
+        .execute(self.inner.get_pool())
+        .await?
+        .rows_affected();
+        anyhow::ensure!(rows == 1, "workflow missing or deleted");
+        Ok(id)
     }
 
     async fn delete_all(&self) -> Result<u64, Error> {
-        let delete_result = sqlx::query("UPDATE s_workflow SET del_flag = 1")
-            .execute(self.inner.get_pool())
-            .await?;
-
-        debug!("Deleted result: {:?}", delete_result);
-        Ok(delete_result.rows_affected())
+        Err(Error::msg("unscoped workflow deletion is disabled"))
     }
 
-    async fn delete_by_id(&self, id: i64) -> Result<u64, Error> {
-        let delete_result = sqlx::query("UPDATE s_workflow SET del_flag = 1 WHERE id = ? AND del_flag = 0")
-            .bind(id)
-            .execute(self.inner.get_pool())
-            .await?;
-
-        debug!("Deleted result: {:?}", delete_result);
-        Ok(delete_result.rows_affected())
+    async fn delete_by_id(&self, _id: i64) -> Result<u64, Error> {
+        Err(Error::msg("use a scoped workflow update to mark deletion"))
     }
 
     async fn select_by_sql(
         &self,
-        sql_template: &str,
-        params: &HashMap<String, GenericValue>,
+        _sql_template: &str,
+        _params: &HashMap<String, GenericValue>,
     ) -> Result<Vec<WorkflowInfo>, Error> {
-        let workflows = select_by_sql_sqlite(self.inner.get_pool(), sql_template, params).await?;
-        debug!("query workflows by sql: {:?}", workflows);
-        Ok(workflows)
+        Err(Error::msg("unscoped workflow SQL is disabled"))
     }
 }

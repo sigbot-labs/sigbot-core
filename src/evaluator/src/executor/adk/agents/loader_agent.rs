@@ -175,88 +175,13 @@ Only include tools that are relevant for the analysis."#,
         ])
     }
 
-    /// Invoke selected tools and aggregate results
+    /// The compatibility path cannot fabricate successful tool results.
     async fn invoke_tools(
         &self,
         _ctx: &SigbotAgentContext,
-        tool_calls: Vec<(String, Value)>,
+        _tool_calls: Vec<(String, Value)>,
     ) -> Result<HashMap<String, Value>, Error> {
-        let mut results = HashMap::new();
-
-        for (tool_name, params) in tool_calls {
-            results.insert(
-                tool_name.clone(),
-                json!({
-                    "tool": tool_name,
-                    "params": params,
-                    "status": "success",
-                    "result": "Tool invocation mocked due to trait mismatch"
-                }),
-            );
-        }
-        /*
-                if let Some(toolset) = &ctx.toolset {
-                    for (tool_name, params) in tool_calls {
-                        info!("LoaderAgent: Invoking tool '{}' with params: {:?}", tool_name, params);
-
-                        // Iterating over tools since `.tool()` might be unavailable or renamed
-                        // Using .tools() which help suggested, assuming it returns iterator or vec
-                        let found_tool = toolset.tools().into_iter().find(|t| t.name() == tool_name);
-
-                        if let Some(tool) = found_tool {
-                            // Create a tool context for execution
-                            // We can reuse the agent context or create a specific tool context
-                            let tool_ctx = Arc::new(SimpleToolContext);
-
-                            match tool.execute(tool_ctx, params.clone()).await {
-                                Ok(result) => {
-                                    debug!("LoaderAgent: Tool '{}' execution successful", tool_name);
-                                    results.insert(tool_name, result);
-                                }
-                                Err(e) => {
-                                    error!("LoaderAgent: Tool '{}' execution failed: {}", tool_name, e);
-                                    results.insert(
-                                        tool_name.clone(),
-                                        json!({
-                                            "tool": tool_name,
-                                            "params": params,
-                                            "error": e.to_string(),
-                                            "status": "failed"
-                                        }),
-                                    );
-                                }
-                            }
-                        } else {
-                            warn!("LoaderAgent: Tool '{}' not found in toolset", tool_name);
-                            results.insert(
-                                tool_name.clone(),
-                                json!({
-                                    "tool": tool_name,
-                                    "params": params,
-                                    "error": "Tool not found",
-                                    "status": "failed"
-                                }),
-                            );
-                        }
-                    }
-                } else {
-                    error!("LoaderAgent: Toolset not available in context");
-                    // Return failure results for all tools
-                    for (tool_name, params) in tool_calls {
-                        results.insert(
-                            tool_name.clone(),
-                            json!({
-                                "tool": tool_name,
-                                "params": params,
-                                "error": "Toolset not initialized",
-                                "status": "failed"
-                            }),
-                        );
-                    }
-                }
-        */
-
-        Ok(results)
+        anyhow::bail!("Legacy tool loading is unavailable; enable runtime_v2 for bounded persisted facts")
     }
 }
 

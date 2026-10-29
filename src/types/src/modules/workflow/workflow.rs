@@ -38,6 +38,9 @@ use validator::Validate;
 // #[derive(Serialize, Deserialize, Clone, Debug, sqlx::sqlite::FromRow, sqlx::sqlite::Decode)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct WorkflowInfo {
+    pub env: Option<String>,
+    pub tenant_id: Option<i64>,
+    pub space_id: Option<i64>,
     #[serde(flatten)]
     pub base: EntityBase,
     pub name: Option<String>,
@@ -52,6 +55,9 @@ pub struct WorkflowInfo {
 impl Default for WorkflowInfo {
     fn default() -> Self {
         WorkflowInfo {
+            env: None,
+            tenant_id: None,
+            space_id: None,
             base: EntityBase::new_empty(),
             name: None,
             status: Some(JobStatus::PENDING),
@@ -112,7 +118,7 @@ pub enum JobStatus {
 
 impl JobStatus {
     pub fn of(status: &str) -> Result<JobStatus, String> {
-        match status.to_lowercase().as_str() {
+        match status.to_uppercase().as_str() {
             "PENDING" => Ok(JobStatus::PENDING),
             "STARTING" => Ok(JobStatus::STARTING),
             "RUNNING" => Ok(JobStatus::RUNNING),
@@ -238,6 +244,9 @@ pub struct WorkflowNodePosition {
 /// Workflow connection information
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub struct WorkflowConnectionInfo {
+    /// Optional v2 topic enum name; absent preserves the accepted module routing defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub id: String,
     pub source: String,
     pub target: String,
@@ -388,7 +397,14 @@ impl WorkflowStageType {
                 _ => None,
             };
         }
-        None
+        match node_type.to_uppercase().as_str() {
+            "INPUT" => Some(Self::INPUT(None)),
+            "EVALUATION" | "ANALYSIS" => Some(Self::EVALUATION(None)),
+            "TRANSACTION" => Some(Self::TRANSACTION(None)),
+            "OUTPUT" => Some(Self::OUTPUT(None)),
+            "POST" => Some(Self::POST(None)),
+            _ => None,
+        }
     }
 }
 
@@ -416,13 +432,32 @@ impl<'r> FromRow<'r, SqliteRow> for WorkflowInfo {
         };
 
         Ok(WorkflowInfo {
-            base: EntityBase::from_row(row).unwrap(),
+            env: row.try_get("env")?,
+            tenant_id: row.try_get("tenant_id")?,
+            space_id: row.try_get("space_id")?,
+            base: EntityBase {
+                id: row.try_get("id")?,
+                status: None,
+                created_by: row.try_get("created_by")?,
+                created_at: row.try_get("created_at")?,
+                updated_by: row.try_get("updated_by")?,
+                updated_at: row.try_get("updated_at")?,
+                del_flag: row.try_get::<Option<i16>, _>("del_flag")?.map(|value| value as i8),
+            },
             name: row.try_get("name")?,
             status,
             flow_info,
             // TODO: auto convert and wrap to Map attribute.
-            properties: None,
-            secrets: None,
+            properties: row
+                .try_get::<Option<String>, _>("properties")?
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+            secrets: row
+                .try_get::<Option<String>, _>("secrets")?
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
             description: row.try_get("description")?,
         })
     }
@@ -451,13 +486,32 @@ impl<'r> FromRow<'r, PgRow> for WorkflowInfo {
         };
 
         Ok(WorkflowInfo {
-            base: EntityBase::from_row(row)?,
+            env: row.try_get("env")?,
+            tenant_id: row.try_get("tenant_id")?,
+            space_id: row.try_get("space_id")?,
+            base: EntityBase {
+                id: row.try_get("id")?,
+                status: None,
+                created_by: row.try_get("created_by")?,
+                created_at: row.try_get("created_at")?,
+                updated_by: row.try_get("updated_by")?,
+                updated_at: row.try_get("updated_at")?,
+                del_flag: row.try_get::<Option<i16>, _>("del_flag")?.map(|value| value as i8),
+            },
             name: row.try_get("name")?,
             status,
             flow_info,
             // TODO: auto convert and wrap to Map attribute.
-            properties: None,
-            secrets: None,
+            properties: row
+                .try_get::<Option<Value>, _>("properties")?
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+            secrets: row
+                .try_get::<Option<Value>, _>("secrets")?
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
             description: row.try_get("description")?,
         })
     }
@@ -468,6 +522,8 @@ impl<'r> FromRow<'r, PgRow> for WorkflowInfo {
 #[derive(Deserialize, Clone, Debug, PartialEq, Validate, utoipa::ToSchema, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct QueryWorkflowRequest {
+    pub env: Option<String>,
+    pub space_id: Option<i64>,
     #[validate(length(min = 1, max = 32))]
     pub name: Option<String>,
     pub status: Option<String>,
@@ -476,6 +532,9 @@ pub struct QueryWorkflowRequest {
 impl QueryWorkflowRequest {
     pub fn to_entity(&self) -> WorkflowInfo {
         WorkflowInfo {
+            env: self.env.clone(),
+            tenant_id: None,
+            space_id: self.space_id,
             base: EntityBase::new_empty(),
             name: self.name.clone(),
             status: self.status.as_ref().and_then(|s| JobStatus::of(s).ok()),
@@ -505,6 +564,8 @@ impl QueryWorkflowResponse {
 #[derive(Deserialize, Clone, Debug, PartialEq, Validate, utoipa::ToSchema, MakeStructWith)]
 #[excludes(id)]
 pub struct SaveWorkflowRequest {
+    pub env: String,
+    pub space_id: i64,
     pub id: Option<i64>,
     #[validate(length(min = 1, max = 32))]
     pub name: String,
@@ -521,6 +582,9 @@ pub struct SaveWorkflowRequest {
 impl SaveWorkflowRequest {
     pub fn to_entity(&self) -> WorkflowInfo {
         WorkflowInfo {
+            env: Some(self.env.clone()),
+            tenant_id: None,
+            space_id: Some(self.space_id),
             base: EntityBase::new_with_id(self.id),
             name: Some(self.name.clone()),
             status: self.status.as_ref().and_then(|s| JobStatus::of(s).ok()),

@@ -1,0 +1,7 @@
+{
+  "image": "docker.io/apache/kafka:4.1.1",
+  "verified_platform": "linux/amd64",
+  "verified_digest": "sha256:0bc1bb2478f45b6cea78864df86acdc11e8df2c5172477819a4d12942cbe5d40",
+  "documentation": "https://kafka.apache.org/41/getting-started/docker/",
+  "scope": "isolated local integration fixture; not a production cluster deployment"
+}

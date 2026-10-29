@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::context::state::SigbotState;
+use crate::context::{identity::RequestIdentity, state::SigbotState};
 use anyhow::Error;
 use async_trait::async_trait;
 use common_audit_log::audit_log;
@@ -42,11 +42,12 @@ pub trait ITenantHandler: Send {
 
 pub struct TenantHandler<'a> {
     state: &'a SigbotState,
+    identity: &'a RequestIdentity,
 }
 
 impl<'a> TenantHandler<'a> {
-    pub fn new(state: &'a SigbotState) -> Self {
-        Self { state }
+    pub fn new(state: &'a SigbotState, identity: &'a RequestIdentity) -> Self {
+        Self { state, identity }
     }
 }
 
@@ -59,7 +60,11 @@ impl<'a> ITenantHandler for TenantHandler<'a> {
         page: PageRequest,
     ) -> Result<(PageResponse, Vec<TenantInfo>), Error> {
         let repo = self.state.tenant_repo.lock().await;
-        repo.get(&self.state.config).select(param.to_tenant(), page).await
+        {
+            let mut tenant = param.to_tenant();
+            tenant.base.id = Some(self.identity.tenant_id().parse()?);
+            repo.get(&self.state.config).select(tenant, page).await
+        }
     }
 
     #[audit_log("[TENANT][ADD] name: {param.name.clone().unwrap_or_default()}")]
@@ -69,15 +74,19 @@ impl<'a> ITenantHandler for TenantHandler<'a> {
         let mut tenant = param.to_tenant();
         let mut private_key_to_return: Option<String> = None;
 
-        // Get system master key from environment or config
-        // This key is used to encrypt tenant private keys when cloud-managed is enabled
-        let system_master_key = std::env::var("SIGBOT_SYSTEM_MASTER_KEY").unwrap_or_else(|_| {
-            // Fallback: use JWT secret as system master key if available
-            self.state.config.auth.jwt_secret.clone().unwrap_or_else(|| {
-                // Last resort: use a default (should be changed in production)
-                "default-system-master-key-change-in-production".to_string()
-            })
-        });
+        let tenant_id = self.identity.tenant_id().parse::<i64>()?;
+        if let Some(id) = param.id {
+            self.identity.require_tenant(id)?;
+        }
+        tenant.base.id = Some(tenant_id);
+        tenant.base.created_by = Some(self.identity.principal_id().to_owned());
+        tenant.base.updated_by = Some(self.identity.principal_id().to_owned());
+        let system_master_key = if param.cloud_managed_key.unwrap_or(true) {
+            std::env::var("SIGBOT_SYSTEM_MASTER_KEY")
+                .map_err(|_| Error::msg("SIGBOT_SYSTEM_MASTER_KEY Secret is required"))?
+        } else {
+            String::new()
+        };
 
         // Default to enable cloud-managed key to prevent user from losing private key
         let enable_cloud_managed = param.cloud_managed_key.unwrap_or(true);
@@ -246,6 +255,7 @@ impl<'a> ITenantHandler for TenantHandler<'a> {
 
     #[audit_log("[TENANT][DELETE] id: {param.id}")]
     async fn delete(&self, param: DeleteTenantRequest) -> Result<u64, Error> {
+        self.identity.require_tenant(param.id)?;
         let repo = self.state.tenant_repo.lock().await;
         repo.get(&self.state.config).delete_by_id(param.id).await
     }

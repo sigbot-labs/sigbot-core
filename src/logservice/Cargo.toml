@@ -31,3 +31,16 @@ tower.workspace = true
 tower-http.workspace = true
 futures.workspace = true
 dashmap.workspace = true
+sqlx.workspace = true
+sha2.workspace = true
+hex.workspace = true
+regex.workspace = true
+chrono.workspace = true
+object_store = { version = "0.12.5", features = ["aws"] }
+
+[dev-dependencies]
+tempfile = "3.23"
+
+[[test]]
+name = "tracing_archive"
+path = "tests/manager/tracing_archive_test.rs"

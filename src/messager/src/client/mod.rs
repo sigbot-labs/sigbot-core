@@ -21,3 +21,5 @@
 pub mod messager_factory;
 pub mod messager_local;
 pub mod messager_mqtt;
+pub mod outbox_relay;
+pub mod reply_pairing;

@@ -44,7 +44,7 @@ impl SigbotDefaultLogManager {
     }
 
     /// Start log archiving subscription using shared subscription ($share/group_name/topic)
-    /// This ensures no log loss even if the service restarts
+    /// Legacy compatibility; v2 callers use the durable LogArchive component.
     async fn start_archiving0(&self) -> Result<(), Error> {
         info!("Starting log archiving subscription.");
 
@@ -110,7 +110,7 @@ impl SigbotDefaultLogManager {
                                 "Failed to archive log entry: workflow_id={}, node_id={:?}, error={}",
                                 log_entry.workflow_id, log_entry.node_id, e
                             );
-                            // Continue processing other log lines even if one fails
+                            return Err(e.context("legacy log append failed; delivery must not be acknowledged"));
                         }
                     }
                 }
@@ -120,7 +120,7 @@ impl SigbotDefaultLogManager {
         });
 
         // Use shared subscription format: $share/group_name/topic
-        // This ensures load balancing and no message loss
+        // Load balancing alone does not establish persistence guarantees.
         // Replace placeholders with MQTT wildcards: + for single level, # for multi-level
         let base_topic = TOPIC_WF_LOG
             .replace("{TENANT_ID}", "+")

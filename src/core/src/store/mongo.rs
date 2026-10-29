@@ -105,15 +105,10 @@ macro_rules! dynamic_mongo_query {
         let mut filter = Document::new();
         for (key, value) in obj {
             if !value.is_null() {
-                let v = value.as_str().unwrap_or("");
-                if !v.is_empty() {
-                    filter.insert(key, v);
-                }
+                filter.insert(key, mongodb::bson::to_bson(value)?);
             }
         }
-        if let Some(id) = $bean.base.id {
-            filter.insert("id", id);
-        }
+        filter.insert("del_flag", 0);
 
         let options = mongodb::options::FindOptions::builder()
             .skip($page.get_offset() as u64)
@@ -150,9 +145,8 @@ macro_rules! dynamic_mongo_query {
 macro_rules! dynamic_mongo_insert {
     ($bean:expr, $collection:expr) => {
         {
-            use crate::util::auths::SecurityContext;
 
-            let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let insert_by = $bean.base.created_by.clone();
             let id = $bean.base.pre_insert(insert_by).await;
             //use mongodb::bson::to_bson;
             //let serialized = to_bson(&$bean)?;
@@ -180,9 +174,8 @@ macro_rules! dynamic_mongo_update {
     ($bean:expr, $collection:expr) => {
         {
             use mongodb::bson::{doc, to_bson, Bson};
-            use crate::util::auths::SecurityContext;
 
-            let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let updated_by = $bean.base.updated_by.clone();
             $bean.base.pre_update(updated_by).await;
 
             // Note:

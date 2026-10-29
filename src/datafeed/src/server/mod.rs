@@ -19,3 +19,8 @@
 // This includes modifications and derived works.
 
 pub mod datafeed_ingestor;
+
+pub mod compute_query;
+pub mod market_query;
+pub mod persisted_ingestor;
+pub mod replay_ingestor;

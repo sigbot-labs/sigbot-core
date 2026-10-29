@@ -32,13 +32,8 @@ use common_telemetry::{error, info};
 use sigbot_core::{
     config::{config::get_config, swagger},
     context::state::SigbotState,
-    mgmt::{apm, health::init as health_router},
-    sys::route::{
-        auth_router::{auth_middleware, init as auth_router},
-        log_router::init as log_router,
-        tenant_router::init as tenant_router,
-        user_router::init as user_router,
-    },
+    mgmt::{apm, health::HealthRouter},
+    sys::route::{auth_router::AuthRouter, tenant_router::init as tenant_router},
 };
 use sigbot_utils::{panics::PanicHelper, tokio_signal::tokio_graceful_shutdown_handler};
 use std::{future::Future, pin::Pin};
@@ -98,14 +93,31 @@ impl SigbotAPIServer {
     ) {
         let config = get_config();
         let app_state = SigbotState::new(&config).await;
+        assert!(
+            app_state.authguard.is_configured(),
+            "API requires a configured Authguard verifier"
+        );
+        let controller = if config.services.deployer.workers.enabled {
+            Some(
+                sigbot_deployer::deployer_factory::SigbotDeployerFactory::embedded(std::sync::Arc::new(
+                    app_state.clone(),
+                ))
+                .await,
+            )
+        } else {
+            None
+        };
 
         // 1. Merge the biz modules routes.
         info!("Register Web server app routers ...");
         let mut register_router = Router::new()
-            .merge(auth_router())
-            .merge(user_router())
+            .merge(AuthRouter::routes())
             .merge(tenant_router())
-            .merge(log_router());
+            .merge(sigbot_core::modules::workflow::route::workflow_router::WorkflowRouter::routes())
+            .merge(sigbot_core::modules::workflow::route::observation_router::WorkflowObservationRouter::routes())
+            .merge(sigbot_core::modules::connection::route::connection_router::ConnectionRouter::routes())
+            .merge(sigbot_core::modules::market::route::market_router::MarketRouter::routes())
+            .merge(sigbot_core::modules::notification::route::delivery_router::NotificationDeliveryRouter::routes());
 
         // 1.1 Merge the addition router.
         register_router = if let Some(addition_router) = addition_router {
@@ -118,20 +130,20 @@ impl SigbotAPIServer {
         let mut app_router = match &config.server.context_path {
             // If the context path is "/" then should not be use nest on axum-0.8+
             Some(ctx_path) if ctx_path == "/" => Router::new()
-                .merge(health_router())
+                .merge(HealthRouter::routes())
                 .merge(register_router)
                 .with_state(app_state.clone()),
             // If the context path is not "/" then should be use nest on axum-0.8+
             Some(ctx_path) => {
                 let prefixed_router = Router::new().nest(&ctx_path, register_router);
                 Router::new()
-                    .merge(health_router())
+                    .merge(HealthRouter::routes())
                     .merge(prefixed_router) // support the context-path.
                     .with_state(app_state.clone()) // TODO: remove clone
             }
             None => {
                 Router::new()
-                    .merge(health_router())
+                    .merge(HealthRouter::routes())
                     .merge(register_router)
                     .with_state(app_state.clone()) // TODO: remove clone
             }
@@ -153,7 +165,7 @@ impl SigbotAPIServer {
             ServiceBuilder::new()
                 .layer(axum::middleware::from_fn_with_state(
                     app_state.to_owned(),
-                    auth_middleware,
+                    AuthRouter::authenticate,
                 ))
                 // Optional: add logs to tracing.
                 .layer(
@@ -161,7 +173,7 @@ impl SigbotAPIServer {
                         tracing::info_span!(
                             "http_request",
                             method = %request.method(),
-                            uri = %request.uri(),
+                            path = %request.uri().path(),
                         )
                     }),
                 ),
@@ -185,12 +197,18 @@ impl SigbotAPIServer {
             }
         };
 
+        common_telemetry::readiness::RuntimeReadiness::business("api", true);
+        let readiness = common_telemetry::readiness::RuntimeReadiness::task("api.listener");
+        readiness.set(true);
         match axum::serve(listener, app_router.into_make_service())
             .with_graceful_shutdown(tokio_graceful_shutdown_handler())
             // .tcp_nodelay(true)
             .await
         {
             Ok(_) => {
+                if let Some(controller) = controller {
+                    controller.shutdown().await;
+                }
                 info!("API Server shut down gracefully");
             }
             Err(e) => {

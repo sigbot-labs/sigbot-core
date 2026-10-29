@@ -24,8 +24,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 pub mod balance;
+pub mod funding;
 pub mod ledger;
 pub mod position;
+pub mod reservation;
 pub mod wallet;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -37,7 +39,7 @@ pub struct SigbotWalletManagerArgument {
 
 impl SigbotWalletManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse wallet manager info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse wallet manager info from JSON")
     }
 }
 

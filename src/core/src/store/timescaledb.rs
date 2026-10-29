@@ -192,9 +192,8 @@ macro_rules! dynamic_timescaledb_insert {
         {
             use chrono::{DateTime, Utc};
             use sigbot_utils::types::GenericValue;
-            use crate::util::auths::SecurityContext;
 
-            let insert_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+            let insert_by = $bean.base.created_by.clone();
 
             // Notice:
             // 1. (TimescaleDB) Because the ORM library is not used for the time being, the fields are dynamically
@@ -282,10 +281,9 @@ macro_rules! dynamic_timescaledb_insert {
 #[macro_export]
 macro_rules! dynamic_timescaledb_update {
     ($bean:expr, $table:expr, $pool:expr) => {{
-        use crate::util::auths::SecurityContext;
         use sigbot_utils::types::GenericValue;
 
-        let updated_by = SecurityContext::get_instance().get_current_uname_for_store().await;
+        let updated_by = $bean.base.updated_by.clone();
         $bean.base.pre_update(updated_by).await;
 
         // Notice:

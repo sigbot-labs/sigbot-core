@@ -17,7 +17,7 @@ spec:
 ---
 {{- end }}
 
-{{- if .Values.systemdb.enabled }}
+{{- if and .Values.systemdb.enabled .Values.systemdb.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -61,7 +61,7 @@ spec:
 ---
 {{- end }}
 
-{{- if .Values.redis.enabled }}
+{{- if and .Values.redis.enabled .Values.redis.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

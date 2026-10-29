@@ -14,6 +14,8 @@ sigbot-core.workspace = true
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
 sigbot-messager.workspace = true
+sigbot-datafeed.workspace = true
+sigbot-strategy-sdk.workspace = true
 
 # Thirdparty dependencies.
 axum.workspace = true
@@ -39,6 +41,7 @@ regex.workspace = true
 moka.workspace = true
 redis.workspace = true
 sqlx.workspace = true
+rust_decimal.workspace = true
 openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true

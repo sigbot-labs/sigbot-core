@@ -45,6 +45,18 @@ impl SigbotOrderServer {
             .expect("Failed to initialize Messager client.");
         info!("Initialized Messager client. {}", messager.provider().as_str());
 
+        if let Some(properties) = argument
+            .properties
+            .as_ref()
+            .filter(|p| p.get("runtime_v2").is_some_and(|value| value == "true"))
+        {
+            let runtime = super::order_runtime::OrderRuntime::from_properties(properties)
+                .await
+                .expect("invalid v2 order runtime configuration");
+            runtime.start(messager).await.expect("failed to start v2 order runtime");
+            return;
+        }
+
         // Subscribe to trading signal topics.
         let manager0 = manager.to_owned();
         let messager0 = messager.to_owned();
@@ -73,12 +85,8 @@ impl SigbotOrderServer {
                     signal.signal_id, signal.tenant_id
                 );
 
-                let manager2 = manager1.to_owned();
-                tokio::spawn(async move {
-                    if let Err(e) = manager2.process_signal(signal).await {
-                        error!("Failed to process signal: {}", e);
-                    }
-                });
+                // The handler completes only after the business operation has persisted.
+                manager1.process_signal(signal).await?;
 
                 Ok(String::from_utf8_lossy(&data).to_string())
             })

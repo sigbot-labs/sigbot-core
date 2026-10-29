@@ -29,7 +29,13 @@ tower.workspace = true
 config.workspace = true
 chrono.workspace = true
 async-trait.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+rmcp = { version = "3.8.0", default-features = false, features = ["client", "reqwest", "transport-streamable-http-client-reqwest"] }
+http = "1"
+html2text = "0.14"
+parse_link_header = "0.4.1"
+feed-rs = "3.0.0"
+rust_decimal.workspace = true
 anyhow.workspace = true
 dotenv.workspace = true
 tracing.workspace = true

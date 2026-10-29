@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::client::notification_factory::ISigbotNotificationClient;
+use crate::client::notification_factory::{ISigbotNotificationClient, NotificationDeliveryError};
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use common_telemetry::{info, warn};
@@ -42,21 +42,6 @@ pub struct SigbotEmailClientConfig {
     pub default_to_addresses: Option<Vec<String>>,
     // pub default_cc_addresses: Option<Vec<String>>,
     // pub default_bcc_addresses: Option<Vec<String>>,
-}
-
-impl std::fmt::Display for SigbotEmailClientConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "(id={}, smtp_host={:?}, smtp_port={:?}, smtp_username={:?}, smtp_password_len={:?})",
-            self.id,
-            self.smtp_host,
-            self.smtp_port,
-            self.smtp_username,
-            self.smtp_password.chars().count(),
-        )?;
-        Ok(())
-    }
 }
 
 impl SigbotEmailClientConfig {
@@ -137,13 +122,17 @@ impl ISigbotNotificationClient for SigbotEmailClient {
     }
 
     async fn init(&self) {
-        info!("Starting Email notification with config={}", self.config);
+        info!("Starting Email notification provider");
 
         let creds = Credentials::new(self.config.smtp_username.clone(), self.config.smtp_password.clone());
 
         match AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.smtp_host) {
             Ok(builder) => {
-                let mailer = builder.port(self.config.smtp_port).credentials(creds).build();
+                let mailer = builder
+                    .port(self.config.smtp_port)
+                    .credentials(creds)
+                    .timeout(Some(std::time::Duration::from_secs(20)))
+                    .build();
 
                 *self.smtp_transport.lock().await = Some(mailer);
                 info!(
@@ -158,15 +147,13 @@ impl ISigbotNotificationClient for SigbotEmailClient {
     }
 
     async fn close(&self) {
-        info!("Closing Email notification with {}", self.config);
+        info!("Closing Email notification provider");
         let mut guard = self.smtp_transport.lock().await;
         *guard = None;
-        info!("Closed Email notification with {}", self.config);
+        info!("Closed Email notification provider");
     }
 
     async fn send_simple_message(&self, to: Option<Vec<String>>, message: &str) -> Result<String, Error> {
-        info!("Sending email to {:?} with message={}", to, message);
-
         let guard = self.smtp_transport.lock().await;
         let mailer = guard
             .as_ref()
@@ -182,8 +169,8 @@ impl ISigbotNotificationClient for SigbotEmailClient {
             .or_else(|| self.config.default_to_addresses.clone())
             .context("To email address is required")?;
 
-        if to_addresses.is_empty() {
-            return Err(Error::msg("At least one recipient email address is required"));
+        if to_addresses.len() != 1 {
+            return Err(Error::msg("One email recipient is required per durable delivery"));
         }
 
         // Parse all recipient addresses
@@ -210,13 +197,16 @@ impl ISigbotNotificationClient for SigbotEmailClient {
             .body(message.to_string())
             .context("Failed to build email message")?;
 
-        mailer
-            .send(email)
-            .await
-            .context(format!("Failed to send email to {:?}", to_addresses))?;
-
-        info!("Successfully sent email to {:?}", to_addresses);
-        Ok(format!("Email sent to {:?}", to_addresses))
+        let response = mailer.send(email).await.map_err(|error| {
+            if error.is_transient() {
+                NotificationDeliveryError::Retryable
+            } else if error.is_permanent() {
+                NotificationDeliveryError::Rejected
+            } else {
+                NotificationDeliveryError::Unknown
+            }
+        })?;
+        Ok(response.code().to_string())
     }
 }
 

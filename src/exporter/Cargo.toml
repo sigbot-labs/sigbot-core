@@ -23,3 +23,9 @@ serde.workspace = true
 lazy_static.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+sqlx.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+chrono.workspace = true
+url.workspace = true
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl"] }
+google-sheets4 = "6"

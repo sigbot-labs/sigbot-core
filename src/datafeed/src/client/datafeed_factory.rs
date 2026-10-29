@@ -20,7 +20,10 @@
 
 use crate::client::{
     market::datafeed_binance::SigbotBinanceDatafeedClient,
-    news::{datafeed_trushsocial::SigbotTrushSocialDatafeedClient, datafeed_twitter::SigbotTwitterDatafeedClient},
+    news::{
+        datafeed_truthsocial::SigbotTruthSocialDatafeedClient, datafeed_twitter::SigbotTwitterDatafeedClient,
+        policy_feed::SigbotPolicyDatafeedClient,
+    },
 };
 use anyhow::{Context, Error, Ok};
 use async_trait::async_trait;
@@ -40,12 +43,12 @@ use std::{
 #[async_trait]
 pub trait ISigbotDatafeedClient: Send + Sync {
     fn provider(&self) -> DatafeedProvider;
-    async fn init(&self, argument: Arc<SigbotDatefeedArgument>);
+    async fn init(&self, argument: Arc<SigbotDatefeedArgument>) -> Result<(), Error>;
     async fn close(&self);
     async fn subscribe(
         &self,
         handler: Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync>,
-    );
+    ) -> Result<(), Error>;
 }
 
 lazy_static! {
@@ -98,11 +101,29 @@ impl SigbotDatafeedClientFactory {
 
         let argument = Arc::new(
             SigbotDatefeedArgument::from_json(
-                &decode_arg_config(&configuration)
-                    .context(format!("Failed to decode the configuration: {}", configuration))?,
+                &decode_arg_config(&configuration).context("Failed to decode datafeed configuration")?,
             )
-            .context(format!("Failed to parse the configuration: {}", configuration))?,
+            .context("Failed to parse datafeed configuration")?,
         );
+
+        let properties = argument
+            .datafeed_config
+            .properties
+            .as_ref()
+            .context("datafeed properties required")?;
+        let query_only = properties
+            .get("query_only")
+            .map(|value| value.parse::<bool>())
+            .transpose()
+            .context("query_only must be true or false")?
+            .unwrap_or(false);
+        if query_only {
+            anyhow::ensure!(
+                properties.contains_key("snapshot_input_node_ids"),
+                "query_only requires declared query consumers"
+            );
+            return Ok((Arc::new(Vec::new()), argument));
+        }
 
         let mut datafeeds: Vec<Arc<dyn ISigbotDatafeedClient + Send + Sync>> = Vec::new();
         for provider in providers
@@ -137,9 +158,15 @@ impl SigbotDatafeedClientFactory {
                         .unwrap()
                         .register0(
                             provider.as_str(),
-                            SigbotTrushSocialDatafeedClient::new().await, // TODO: set up run configuration?
+                            SigbotTruthSocialDatafeedClient::new().await, // TODO: set up run configuration?
                         )
                         .expect("Failed to register the Trush Social datafeed.");
+                }
+                DatafeedProvider::FED | DatafeedProvider::TREASURY => {
+                    Self::get()
+                        .write()
+                        .unwrap()
+                        .register0(provider.as_str(), SigbotPolicyDatafeedClient::new(provider.clone()))?;
                 }
             };
 
@@ -148,7 +175,7 @@ impl SigbotDatafeedClientFactory {
                 .expect("Failed to get the registered datafeed.");
 
             debug!("Initializing the datafeed with provider: {}", &provider.as_str());
-            registered.init(argument.to_owned()).await;
+            registered.init(argument.to_owned()).await?;
             datafeeds.push(registered);
             info!("Initialized the datafeed with provider: {}.", &provider.as_str());
         }

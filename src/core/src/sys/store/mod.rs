@@ -28,9 +28,6 @@ pub mod log_timescaledb;
 pub mod tenant_mongo;
 pub mod tenant_postgres;
 pub mod tenant_sqlite;
-pub mod user_mongo;
-pub mod user_postgres;
-pub mod user_sqlite;
 
 // Log-specific operations trait and container
 use crate::config::config::{AppDBProperties, AppDBType};

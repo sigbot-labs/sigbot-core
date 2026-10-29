@@ -19,7 +19,9 @@
 // This includes modifications and derived works.
 
 pub mod batch_executor;
+pub mod runtime_executor;
 pub mod streaming_executor;
+pub mod worker;
 
 pub mod pyo3_utils {
     use anyhow::Result;

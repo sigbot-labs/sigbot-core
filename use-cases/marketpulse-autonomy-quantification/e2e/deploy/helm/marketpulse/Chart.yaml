@@ -1,0 +1,4 @@
+apiVersion: v2
+name: marketpulse-boundaries
+version: 0.1.0
+description: Synthetic external boundaries for the Sigbot Marketpulse case

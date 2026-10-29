@@ -1,226 +1,306 @@
-// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
-//
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
-// is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the
-// Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// James Wong is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
-//
-// IMPORTANT: Any software that fully or partially contains or uses materials
-// covered by this license must also be released under the GNU GPL license.
-// This includes modifications and derived works.
-
-use crate::context::state::SigbotState;
-use anyhow::{Error, Ok};
+//! Tenant-scoped workflow lifecycle. Identity is explicit, never ambient.
+use crate::context::{identity::RequestIdentity, state::SigbotState};
+use anyhow::{ensure, Error, Result};
 use async_trait::async_trait;
-use common_audit_log::audit_log;
 use sigbot_types::modules::workflow::workflow::{
     DeleteWorkflowRequest, JobStatus, QueryWorkflowRequest, SaveWorkflowRequest, WorkflowInfo,
 };
 use sigbot_types::{EntityBase, PageRequest, PageResponse};
-use sigbot_utils::types::GenericValue;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[async_trait]
 pub trait IWorkflowInfoHandler: Send + Sync {
-    async fn get(&self, id: Option<i64>) -> Result<Option<Arc<WorkflowInfo>>, Error>;
-
-    async fn find(
-        &self,
-        param: QueryWorkflowRequest,
-        page: PageRequest,
-    ) -> Result<(PageResponse, Vec<WorkflowInfo>), Error>;
-
-    async fn save(&self, param: SaveWorkflowRequest) -> Result<i64, Error>;
-
-    async fn delete(&self, param: DeleteWorkflowRequest) -> Result<u64, Error>;
-
-    // TODO: should be support the sharding jobs (simliar to apache elastic job) for huge workflows parallel run.
-    async fn find_start_jobs(&self) -> Result<Vec<WorkflowInfo>, Error>;
-
-    // TODO: should be support the sharding jobs (simliar to apache elastic job) for huge of workflows parallel run.
-    async fn find_stop_jobs(&self) -> Result<Vec<WorkflowInfo>, Error>;
-
-    async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64, Error>;
-
-    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64, Error>;
+    async fn get(&self, id: Option<i64>) -> Result<Option<Arc<WorkflowInfo>>>;
+    async fn find(&self, param: QueryWorkflowRequest, page: PageRequest) -> Result<(PageResponse, Vec<WorkflowInfo>)>;
+    async fn save(&self, param: SaveWorkflowRequest) -> Result<i64>;
+    async fn delete(&self, param: DeleteWorkflowRequest) -> Result<u64>;
+    async fn find_start_jobs(&self) -> Result<Vec<WorkflowInfo>>;
+    async fn find_stop_jobs(&self) -> Result<Vec<WorkflowInfo>>;
+    async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64>;
+    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64>;
 }
 
 pub struct WorkflowInfoHandler {
     state: Arc<SigbotState>,
+    tenant_id: Option<i64>,
+    principal_id: Option<String>,
+    identity: Option<RequestIdentity>,
+    service_space_id: Option<i64>,
+    service_env: Option<String>,
 }
 
 impl WorkflowInfoHandler {
+    /// Worker processes must configure their tenant and service principal explicitly.
     pub fn new(state: Arc<SigbotState>) -> Self {
-        Self { state }
+        Self {
+            tenant_id: state.config.authguard.service_tenant_id,
+            service_space_id: state.config.authguard.service_space_id,
+            service_env: state.config.authguard.service_env.clone(),
+            identity: None,
+            principal_id: state.config.authguard.service_principal_id.clone(),
+            state,
+        }
+    }
+
+    pub fn for_identity(state: Arc<SigbotState>, identity: &RequestIdentity) -> Result<Self> {
+        Ok(Self {
+            state,
+            tenant_id: Some(identity.tenant_id().parse()?),
+            principal_id: Some(identity.principal_id().into()),
+            identity: Some(identity.clone()),
+            service_space_id: None,
+            service_env: None,
+        })
+    }
+
+    fn scoped(&self, mut workflow: WorkflowInfo) -> Result<WorkflowInfo> {
+        let tenant_id = self
+            .tenant_id
+            .ok_or_else(|| Error::msg("explicit workflow tenant scope required"))?;
+        let actor = self
+            .principal_id
+            .as_ref()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| Error::msg("explicit workflow principal required"))?;
+        ensure!(
+            workflow.tenant_id.is_none_or(|value| value == tenant_id),
+            "workflow tenant mismatch"
+        );
+        workflow.tenant_id = Some(tenant_id);
+        if self.identity.is_none() {
+            let env = self
+                .service_env
+                .as_ref()
+                .ok_or_else(|| Error::msg("explicit service environment required"))?;
+            let space_id = self
+                .service_space_id
+                .ok_or_else(|| Error::msg("explicit service space required"))?;
+            ensure!(
+                workflow.env.as_ref().is_none_or(|value| value == env)
+                    && workflow.space_id.is_none_or(|value| value == space_id),
+                "workflow service isolation mismatch"
+            );
+            workflow.env = Some(env.clone());
+            workflow.space_id = Some(space_id);
+        }
+        workflow.base.created_by.get_or_insert_with(|| actor.clone());
+        workflow.base.updated_by = Some(actor.clone());
+        Ok(workflow)
+    }
+
+    async fn query(&self, workflow: WorkflowInfo, page: PageRequest) -> Result<(PageResponse, Vec<WorkflowInfo>)> {
+        let mut workflow = self.scoped(workflow)?;
+        // Actor audit fields are not search predicates.
+        workflow.base.created_by = None;
+        workflow.base.updated_by = None;
+        let repository = self.state.workflow_repo.lock().await;
+        let (mut page, mut workflows) = repository.get(&self.state.config).select(workflow, page).await?;
+        if let Some(identity) = &self.identity {
+            workflows.retain(|workflow| match (&workflow.env, workflow.space_id) {
+                (Some(env), Some(space_id)) => identity.require_workflow(env, space_id, workflow.base.id).is_ok(),
+                _ => false,
+            });
+            page.total = None; // A total must not reveal resources denied by row-level grants.
+        }
+        Ok((page, workflows))
+    }
+
+    async fn store(&self, workflow: WorkflowInfo) -> Result<i64> {
+        let workflow = self.scoped(workflow)?;
+        if let Some(identity) = &self.identity {
+            identity.require_workflow(
+                workflow
+                    .env
+                    .as_deref()
+                    .ok_or_else(|| Error::msg("workflow environment required"))?,
+                workflow.space_id.ok_or_else(|| Error::msg("workflow space required"))?,
+                workflow.base.id,
+            )?;
+        }
+        let repository = self.state.workflow_repo.lock().await;
+        repository.get(&self.state.config).update(workflow).await
     }
 }
 
 #[async_trait]
 impl IWorkflowInfoHandler for WorkflowInfoHandler {
-    async fn get(&self, id: Option<i64>) -> Result<Option<Arc<WorkflowInfo>>, Error> {
-        let param = WorkflowInfo {
-            base: EntityBase::new_with_id(id),
-            name: None,
+    async fn get(&self, id: Option<i64>) -> Result<Option<Arc<WorkflowInfo>>> {
+        ensure!(id.is_some(), "workflow id required");
+        let workflow = WorkflowInfo {
+            base: EntityBase::new_empty(),
             status: None,
-            flow_info: None,
-            properties: None,
-            secrets: None,
-            description: None,
+            ..WorkflowInfo::default()
         };
+        let mut workflow = workflow;
+        workflow.base.id = id;
+        let workflow = self.query(workflow, PageRequest::new(1, 1)).await?.1.into_iter().next();
+        if let (Some(identity), Some(workflow)) = (&self.identity, &workflow) {
+            identity.require_workflow(
+                workflow
+                    .env
+                    .as_deref()
+                    .ok_or_else(|| Error::msg("unbound environment"))?,
+                workflow.space_id.ok_or_else(|| Error::msg("unbound space"))?,
+                workflow.base.id,
+            )?;
+        }
+        Ok(workflow.map(Arc::new))
+    }
 
-        let repo = self.state.workflow_repo.lock().await;
-        let res = repo
-            .get(&self.state.config)
-            .select(param, PageRequest::default())
-            .await
-            .expect("Failed to get workflow")
-            .1;
+    async fn find(&self, param: QueryWorkflowRequest, page: PageRequest) -> Result<(PageResponse, Vec<WorkflowInfo>)> {
+        if let Some(identity) = &self.identity {
+            identity.require_workflow(
+                param
+                    .env
+                    .as_deref()
+                    .ok_or_else(|| Error::msg("environment query required"))?,
+                param.space_id.ok_or_else(|| Error::msg("space query required"))?,
+                None,
+            )?;
+        }
+        self.query(param.to_entity(), page).await
+    }
 
-        if res.len() > 0 {
-            let workflow = Arc::new(res.get(0).unwrap().clone());
-            return Ok(Some(workflow));
+    async fn save(&self, param: SaveWorkflowRequest) -> Result<i64> {
+        if let Some(flow) = &param.flow_info {
+            sigbot_types::modules::workflow::deployment::WorkflowDeployment::validate(flow, false)?;
+        }
+        ensure!(
+            param
+                .secret_configuration
+                .as_ref()
+                .is_none_or(|secrets| secrets.is_empty()),
+            "workflow credentials must use host Secret references"
+        );
+        ensure!(
+            matches!(param.env.as_str(), "live" | "paper" | "simulated" | "backtest"),
+            "invalid workflow environment"
+        );
+        ensure!(param.space_id > 0, "space_id must be positive");
+        if let Some(identity) = &self.identity {
+            identity.require_workflow(&param.env, param.space_id, param.id)?;
+        }
+        if let Some(ref status) = param.status {
+            JobStatus::of(status).map_err(Error::msg)?;
+        }
+        if let Some(id) = param.id {
+            let existing = self
+                .get(Some(id))
+                .await?
+                .ok_or_else(|| Error::msg("workflow not found"))?;
+            ensure!(
+                existing.env.as_deref() == Some(param.env.as_str()) && existing.space_id == Some(param.space_id),
+                "workflow isolation cannot be changed"
+            );
+            ensure!(
+                matches!(
+                    existing.status,
+                    Some(JobStatus::STOPPED | JobStatus::SUCCESS | JobStatus::FAILED)
+                ),
+                "stop workflow before editing"
+            );
+            let mut updated = param.to_entity();
+            updated.status = existing.status.clone();
+            updated.base.created_at = existing.base.created_at;
+            updated.base.created_by = existing.base.created_by.clone();
+            if updated.secrets.is_none() {
+                updated.secrets = existing.secrets.clone();
+            }
+            self.store(updated).await
         } else {
-            Ok(None)
+            let mut workflow = self.scoped(param.to_entity())?;
+            workflow.status = Some(JobStatus::STOPPED);
+            let repository = self.state.workflow_repo.lock().await;
+            repository.get(&self.state.config).upsert(workflow).await
         }
     }
 
-    #[audit_log("[WORKFLOW][FIND] name: {param.name.clone().unwrap_or_default()}")]
-    async fn find(
-        &self,
-        param: QueryWorkflowRequest,
-        page: PageRequest,
-    ) -> Result<(PageResponse, Vec<WorkflowInfo>), Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        repo.get(&self.state.config).select(param.to_entity(), page).await
-    }
-
-    #[audit_log("[WORKFLOW][ADD] param: {param.name.clone()}")]
-    async fn save(&self, param: SaveWorkflowRequest) -> Result<i64, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        if param.id.is_some() {
-            repo.get(&self.state.config).update(param.to_entity()).await
-        } else {
-            repo.get(&self.state.config).upsert(param.to_entity()).await
-        }
-    }
-
-    #[audit_log("[WORKFLOW][DELETE] id: {param.id}")]
-    async fn delete(&self, param: DeleteWorkflowRequest) -> Result<u64, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        repo.get(&self.state.config).delete_by_id(param.id).await
-    }
-
-    #[audit_log("[WORKFLOW][FIND_START_JOBS]")]
-    async fn find_start_jobs(&self) -> Result<Vec<WorkflowInfo>, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        let sql = "SELECT * FROM s_workflow WHERE del_flag = FALSE AND (status = :PENDING OR (status = :RUNNING AND updated_at < NOW() - INTERVAL :TIMEOUT seconds))";
-        let params = {
-            let mut p = HashMap::new();
-            p.insert(
-                "PENDING".to_string(),
-                GenericValue::String(JobStatus::PENDING.as_str().to_string()),
-            );
-            p.insert(
-                "RUNNING".to_string(),
-                GenericValue::String(JobStatus::RUNNING.as_str().to_string()),
-            );
-            p.insert("TIMEOUT".to_string(), GenericValue::String("180".to_string()));
-            p
-        };
-        repo.get(&self.state.config).select_by_sql(sql, &params).await
-    }
-
-    #[audit_log("[WORKFLOW][FIND_STOP_JOBS]")]
-    async fn find_stop_jobs(&self) -> Result<Vec<WorkflowInfo>, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        let sql = "SELECT * FROM s_workflow WHERE del_flag = 0 AND status = :STOPPING";
-        let params = {
-            let mut p = HashMap::new();
-            p.insert(
-                "STOPPING".to_string(),
-                GenericValue::String(JobStatus::STOPPING.as_str().to_string()),
-            );
-            p
-        };
-        repo.get(&self.state.config).select_by_sql(sql, &params).await
-    }
-
-    // TODO: using dynamic_postgres_query! macro to update status with transaction.
-    #[audit_log("[WORKFLOW][UPDATE_STATUS] id: {workflow_id}, status: {status.as_str()}")]
-    async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        let param = WorkflowInfo {
-            base: EntityBase::new_with_id(Some(workflow_id)),
-            name: None,
-            status: None,
-            flow_info: None,
-            properties: None,
-            secrets: None,
-            description: None,
-        };
-        let res = repo
-            .get(&self.state.config)
-            .select(param, PageRequest::default())
-            .await
-            .expect("Failed to get workflow")
-            .1;
-
-        if res.is_empty() {
-            return Err(Error::msg(format!("Workflow with id {} not found", workflow_id)));
-        }
-
-        let mut updated = res.get(0).unwrap().clone();
-        updated.status = Some(status);
-
-        repo.get(&self.state.config).update(updated).await?;
+    async fn delete(&self, param: DeleteWorkflowRequest) -> Result<u64> {
+        let workflow = self
+            .get(Some(param.id))
+            .await?
+            .ok_or_else(|| Error::msg("workflow not found"))?;
+        ensure!(
+            matches!(
+                workflow.status,
+                Some(JobStatus::STOPPED | JobStatus::SUCCESS | JobStatus::FAILED)
+            ),
+            "stop workflow before deletion"
+        );
+        let mut workflow = (*workflow).clone();
+        workflow.base.del_flag = Some(1);
+        self.store(workflow).await?;
         Ok(1)
     }
 
-    // TODO: using dynamic_postgres_query! macro to update jsonb node status with transaction.
-    #[audit_log("[WORKFLOW][UPDATE_NODE_STATUS] id: {workflow_id}, node_id: {node_id}, status: {status.as_str()}")]
-    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64, Error> {
-        let repo = self.state.workflow_repo.lock().await;
-        let param = WorkflowInfo {
-            base: EntityBase::new_with_id(Some(workflow_id)),
-            name: None,
-            status: None,
-            flow_info: None,
-            properties: None,
-            secrets: None,
-            description: None,
-        };
-        let res = repo
-            .get(&self.state.config)
-            .select(param, PageRequest::default())
-            .await
-            .expect("Failed to get workflow")
+    async fn find_start_jobs(&self) -> Result<Vec<WorkflowInfo>> {
+        let mut jobs = self
+            .query(
+                WorkflowInfo {
+                    status: Some(JobStatus::PENDING),
+                    ..WorkflowInfo::default()
+                },
+                PageRequest::new(1, 1000),
+            )
+            .await?
             .1;
+        let running = self
+            .query(
+                WorkflowInfo {
+                    status: Some(JobStatus::RUNNING),
+                    ..WorkflowInfo::default()
+                },
+                PageRequest::new(1, 1000),
+            )
+            .await?
+            .1;
+        let cutoff = chrono::Utc::now() - chrono::Duration::seconds(180);
+        jobs.extend(
+            running
+                .into_iter()
+                .filter(|job| job.base.updated_at.is_some_and(|at| at < cutoff)),
+        );
+        jobs.retain(|job| job.env.as_deref().is_some_and(|env| env != "legacy") && job.space_id.is_some());
+        Ok(jobs)
+    }
 
-        if res.is_empty() {
-            return Err(Error::msg(format!("Workflow with id {} not found", workflow_id)));
-        }
+    async fn find_stop_jobs(&self) -> Result<Vec<WorkflowInfo>> {
+        Ok(self
+            .query(
+                WorkflowInfo {
+                    status: Some(JobStatus::STOPPING),
+                    ..WorkflowInfo::default()
+                },
+                PageRequest::new(1, 1000),
+            )
+            .await?
+            .1)
+    }
 
-        let mut updated = res.get(0).unwrap().clone();
-        if let Some(ref mut flow_info) = updated.flow_info {
-            for node in flow_info.nodes.iter_mut() {
-                if node.id == node_id {
-                    node.status = Some(status);
-                    break;
-                }
-            }
-        }
+    async fn update_status(&self, workflow_id: i64, status: JobStatus) -> Result<u64> {
+        let workflow = self
+            .get(Some(workflow_id))
+            .await?
+            .ok_or_else(|| Error::msg("workflow not found"))?;
+        let mut workflow = (*workflow).clone();
+        workflow.status = Some(status);
+        self.store(workflow).await?;
+        Ok(1)
+    }
 
-        repo.get(&self.state.config).update(updated).await?;
+    async fn update_node_status(&self, workflow_id: i64, node_id: i64, status: JobStatus) -> Result<u64> {
+        let workflow = self
+            .get(Some(workflow_id))
+            .await?
+            .ok_or_else(|| Error::msg("workflow not found"))?;
+        let mut workflow = (*workflow).clone();
+        let node = workflow
+            .flow_info
+            .as_mut()
+            .and_then(|flow| flow.nodes.iter_mut().find(|node| node.id == node_id))
+            .ok_or_else(|| Error::msg("workflow node not found"))?;
+        node.status = Some(status);
+        self.store(workflow).await?;
         Ok(1)
     }
 }

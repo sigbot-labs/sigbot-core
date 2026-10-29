@@ -34,12 +34,21 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+pub type MessageHandler =
+    Arc<dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<String, Error>> + Send>> + Send + Sync>;
+
 #[async_trait]
 pub trait ISigbotMessagerClient: Send + Sync {
     fn provider(&self) -> MessagerProvider;
     async fn init(&self);
     async fn close(&self);
     async fn publish(&self, to: &str, message: &str) -> Result<String, Error>;
+    /// Broker durability boundary for an outbox relay. Enqueuing locally is insufficient.
+    async fn publish_confirmed(&self, _topic: &str, _message: &str) -> Result<(), Error> {
+        Err(Error::msg(
+            "this transport does not provide durable publish confirmation",
+        ))
+    }
     async fn subscribe(
         &self,
         topic: &str,
@@ -78,36 +87,36 @@ impl SigbotMessagerClientFactory {
                 .unwrap_or(&MessagerProvider::MQTT.as_str().to_owned()),
         )?;
 
-        debug!("Registering Sigbot Messager: {}", &provider.as_str());
-
-        match provider {
+        let properties = config.properties.as_ref().context("messager properties are required")?;
+        let key = match provider {
+            MessagerProvider::MQTT => format!(
+                "MQTT:{}:{}:{}:{}",
+                properties.get("mqtt_server").context("mqtt_server required")?,
+                properties.get("mqtt_port").context("mqtt_port required")?,
+                properties.get("mqtt_username").context("mqtt_username required")?,
+                properties
+                    .get("mqtt_client_id")
+                    .context("scoped persistent mqtt_client_id required")?
+            ),
+            MessagerProvider::LOCAL => format!(
+                "LOCAL:{}",
+                properties
+                    .get("local_client_id")
+                    .map(String::as_str)
+                    .unwrap_or("default")
+            ),
+        };
+        // Build outside the registry lock; clients are initialized only after the
+        // atomic get-or-insert selects one owner for this scoped session.
+        let candidate: Arc<dyn ISigbotMessagerClient + Send + Sync> = match provider {
             MessagerProvider::LOCAL => {
-                Self::get()
-                    .write()
-                    .unwrap()
-                    .register0(
-                        &provider.as_str().to_owned(),
-                        SigbotLocalMessagerClient::new(Arc::new(SigbotLocalMessagerClientConfig::from_config(config)))
-                            .await,
-                    )
-                    .context("Failed to register the Local messager.")?;
+                SigbotLocalMessagerClient::new(Arc::new(SigbotLocalMessagerClientConfig::from_config(config))).await
             }
             MessagerProvider::MQTT => {
-                Self::get()
-                    .write()
-                    .unwrap()
-                    .register0(
-                        &provider.as_str().to_owned(),
-                        SigbotMqttMessagerClient::new(Arc::new(SigbotMqttMessagerClientConfig::from_config(config)))
-                            .await,
-                    )
-                    .context("Failed to register the MQTT messager.")?;
+                SigbotMqttMessagerClient::new(Arc::new(SigbotMqttMessagerClientConfig::from_config(config))).await
             }
         };
-
-        let registered = Self::get_implementation(provider.as_str().to_owned())
-            .await
-            .context("Failed to get the registered messager.")?;
+        let registered = Self::get().write().unwrap().register0(&key, candidate)?;
 
         debug!("Initializing the messager with provider: {}", &provider.as_str());
         registered.init().await;
@@ -117,15 +126,10 @@ impl SigbotMessagerClientFactory {
 
     fn register0(
         &mut self,
-        name: &String,
+        name: &str,
         handler: Arc<dyn ISigbotMessagerClient + Send + Sync>,
     ) -> Result<Arc<dyn ISigbotMessagerClient + Send + Sync>, Error> {
-        if self.implementations.contains_key(name) {
-            debug!("Already register the sigbot messager client '{}'", name);
-            return Ok(handler);
-        }
-        self.implementations.insert(name.to_owned(), handler.to_owned());
-        Ok(handler)
+        Ok(self.implementations.entry(name.to_owned()).or_insert(handler).clone())
     }
 
     pub async fn get_implementation(name: String) -> Result<Arc<dyn ISigbotMessagerClient + Send + Sync>, Error> {

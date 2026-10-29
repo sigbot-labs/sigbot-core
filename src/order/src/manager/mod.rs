@@ -18,5 +18,14 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod execution_tracker;
 pub mod order_default;
 pub mod order_factory;
+pub mod order_processor;
+pub mod risk;
+
+pub(crate) mod order_events;
+pub mod order_reservation;
+
+pub mod execution_group;
+pub mod venue_poller;

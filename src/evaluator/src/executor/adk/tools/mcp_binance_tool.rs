@@ -23,7 +23,7 @@
 //! This tool wraps external Binance MCP service calls
 //! and implements the ADK Tool trait for integration.
 
-use adk_core::{Tool, ToolContext, Result as AdkResult};
+use adk_core::{Result as AdkResult, Tool, ToolContext};
 use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use serde_json::{json, Value};
@@ -49,18 +49,12 @@ impl McpBinanceMarketTool {
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
         } else {
-            // Return mock data if no MCP client configured
-            Ok(self.get_mock_data())
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "MCP market source is not configured; fabricated market data is forbidden",
+            )
+            .into())
         }
-    }
-
-    fn get_mock_data(&self) -> Value {
-        json!({
-            "symbol": "BTCUSDT",
-            "price": 50000.0,
-            "timestamp": chrono::Utc::now().timestamp_millis(),
-            "source": "binance-mcp-mock"
-        })
     }
 }
 
@@ -89,10 +83,7 @@ impl Tool for McpBinanceMarketTool {
     }
 
     async fn execute(&self, _ctx: Arc<dyn ToolContext>, args: Value) -> AdkResult<Value> {
-        let symbol = args
-            .get("symbol")
-            .and_then(|s| s.as_str())
-            .unwrap_or("BTCUSDT");
+        let symbol = args.get("symbol").and_then(|s| s.as_str()).unwrap_or("BTCUSDT");
 
         info!("McpBinanceMarketTool: Fetching price for symbol={}", symbol);
 
@@ -212,9 +203,7 @@ mod tests {
     #[tokio::test]
     async fn test_mock_market_tool() {
         let tool = McpBinanceMarketTool::new(None);
-        let result = tool
-            .execute(Arc::new(()), json!({"symbol": "BTCUSDT"}))
-            .await;
+        let result = tool.execute(Arc::new(()), json!({"symbol": "BTCUSDT"})).await;
         assert!(result.is_ok());
     }
 }

@@ -485,6 +485,7 @@ def on_process(context):
     fn test_streaming_executor() {
         let executor = StreamingStrategyExecutor::new(
             Arc::new(SigbotStrategyArgument {
+                properties: None,
                 sys_environment: Some(HashMap::new()),
                 run_mode: "STREAMING".to_string(),
                 messager_config: Arc::new(MessagerConfiguration::default()),
@@ -535,6 +536,7 @@ def on_process(context):
     fn test_streaming_executor_multi_thread_and_mock_cost() {
         let executor = Arc::new(StreamingStrategyExecutor::new(
             Arc::new(SigbotStrategyArgument {
+                properties: None,
                 sys_environment: Some(HashMap::new()),
                 run_mode: "STREAMING".to_string(),
                 messager_config: Arc::new(MessagerConfiguration::default()),

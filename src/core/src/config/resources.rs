@@ -28,7 +28,7 @@ use rust_embed::RustEmbed;
 struct Asset;
 
 pub async fn handle_static(State(state): State<SigbotState>, uri: Uri) -> impl IntoResponse {
-    let mut path = auths::clean_context_path(&state.config.server.context_path, uri.path());
+    let mut path = auths::RequestPaths::clean_context_path(&state.config.server.context_path, uri.path());
     path = path.trim_start_matches("/static/");
 
     // If there are context path is '/' then should be use '' for prevent such as the '//static/img/logo.jpg'

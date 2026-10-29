@@ -19,5 +19,8 @@
 // This includes modifications and derived works.
 
 pub mod exporter_factory;
-pub mod exporter_googlestreet;
+pub mod exporter_google_sheets;
+pub mod sink;
+#[deprecated(note = "use exporter_google_sheets")]
+pub use exporter_google_sheets as exporter_googlestreet;
 pub mod exporter_kafka;

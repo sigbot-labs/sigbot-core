@@ -10,10 +10,7 @@ workspace = true
 [dependencies]
 # Other modules dependencies.
 common-telemetry.workspace = true
-common-makestruct.workspace = true
-sigbot-utils.workspace = true
 sigbot-types.workspace = true
-sigbot-core.workspace = true
 
 # Thirdparty dependencies.
 async-trait.workspace = true
@@ -24,3 +21,7 @@ clap.workspace = true
 # see:https://crates.io/crates/mqtt-endpoint-tokio
 #mqtt-endpoint-tokio = "0.6"
 rumqttc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }

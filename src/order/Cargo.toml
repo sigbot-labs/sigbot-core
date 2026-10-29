@@ -42,6 +42,7 @@ regex.workspace = true
 moka.workspace = true
 redis.workspace = true
 sqlx.workspace = true
+rust_decimal.workspace = true
 openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true

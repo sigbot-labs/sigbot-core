@@ -1,0 +1,8 @@
+{
+  "retrieved_at": "2026-10-28T09:10:49.915458+00:00",
+  "url": "https://api.x.com/2/openapi.json",
+  "documentation_url": "https://docs.x.com/tools/mcp",
+  "sha256": "85d03e0e6b3155e9b6bd85b5c882f28d40b10c17c6780ecfa4799e542be22797",
+  "version": "2.173",
+  "official": true
+}

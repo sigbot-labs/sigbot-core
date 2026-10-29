@@ -84,7 +84,7 @@ impl LangchainOperation {
             vecdb_config.pg_vector.schema,
         );
 
-        debug!("Connecting to the PG vector database: {}", pgconn_url);
+        debug!("Connecting to the configured PG vector database");
 
         // Create the knowledge vector store for PG vector.
         let pgvec_store = StoreBuilder::new()

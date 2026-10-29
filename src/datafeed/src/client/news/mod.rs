@@ -20,3 +20,8 @@
 
 pub mod datafeed_trushsocial;
 pub mod datafeed_twitter;
+
+pub mod datafeed_truthsocial;
+pub mod policy_feed;
+pub mod social_feed;
+pub mod social_transport;

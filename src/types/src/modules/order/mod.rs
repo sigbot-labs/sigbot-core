@@ -24,6 +24,9 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 pub mod events;
+pub mod execution;
+pub mod execution_group;
+pub mod intent;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SigbotOrderManagerArgument {
@@ -34,7 +37,7 @@ pub struct SigbotOrderManagerArgument {
 
 impl SigbotOrderManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse order manager info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse order manager info from JSON")
     }
 }
 

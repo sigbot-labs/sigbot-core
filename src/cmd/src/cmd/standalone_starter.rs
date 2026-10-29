@@ -83,10 +83,12 @@ impl SigbotStandaloneStarter {
                     .value_parser(clap::value_parser!(String))
                     .display_order(10)
                     .help(format!(
-                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {})",
+                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {}, {}, {})",
                         DatafeedProvider::BINANCE.as_str(),
                         DatafeedProvider::TWITTER.as_str(),
-                        DatafeedProvider::TRUTHSOCIAL.as_str()
+                        DatafeedProvider::TRUTHSOCIAL.as_str(),
+                        DatafeedProvider::FED.as_str(),
+                        DatafeedProvider::TREASURY.as_str()
                     ))
                     .default_value(DatafeedProvider::BINANCE.as_str()),
             )

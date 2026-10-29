@@ -18,6 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod observation_postgres;
+pub mod run_postgres;
 pub mod workflow_mongo;
 pub mod workflow_postgres;
 pub mod workflow_sqlite;

@@ -30,7 +30,7 @@ use sigbot_types::{
     modules::exchange::exchange::{ExchangeInfo, ExchangeProvider},
     modules::exchange::models::{
         trade_market::{KlineModel, OrderInfo, PriceModel, SymbolInfo},
-        trade_position::{PlaceTradeSignal, ExitTradePosition, TradeResult},
+        trade_position::{ExitTradePosition, PlaceTradeSignal, TradeResult},
     },
 };
 use std::sync::Arc;
@@ -157,25 +157,16 @@ impl SigbotIBKRClient {
         headers
     }
 
-    async fn execute_with_retry<F, Fut>(&self, mut request_fn: F) -> Result<reqwest::Response, Error>
+    async fn execute_once<F, Fut>(&self, mut request_fn: F) -> Result<reqwest::Response, Error>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
     {
-        let mut last_error = None;
-        for attempt in 0..=self.config.api_retries {
-            match request_fn().await {
-                Ok(response) => return Ok(response),
-                Err(e) => {
-                    last_error = Some(e);
-                    if attempt < self.config.api_retries {
-                        let delay = Duration::from_millis(self.config.api_backoff as u64 * (attempt + 1) as u64 * 100);
-                        tokio::time::sleep(delay).await;
-                    }
-                }
-            }
-        }
-        Err(Error::from(last_error.unwrap()).context("Request failed after retries"))
+        // A transport failure after POST may mean the exchange accepted the order.
+        // Reconciliation belongs to order; resubmitting here can duplicate exposure.
+        request_fn()
+            .await
+            .context("Exchange outcome may be unknown; reconcile before retry")
     }
 }
 
@@ -263,7 +254,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         );
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .post(&url)
                     .headers(headers.clone())
@@ -348,7 +339,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         );
 
         let response = self
-            .execute_with_retry(|| self.http_client.delete(&url).headers(headers.clone()).send())
+            .execute_once(|| self.http_client.delete(&url).headers(headers.clone()).send())
             .await
             .context("Failed to cancel order")?;
 
@@ -399,7 +390,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         );
 
         let response = self
-            .execute_with_retry(|| self.http_client.delete(&url).headers(headers.clone()).send())
+            .execute_once(|| self.http_client.delete(&url).headers(headers.clone()).send())
             .await
             .context("Failed to cancel order")?;
 
@@ -442,7 +433,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         }
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 let mut request = self.http_client.get(&url).headers(headers.clone());
                 for (key, value) in &query_params {
                     request = request.query(&[(key, value.as_str())]);
@@ -518,7 +509,7 @@ impl ISigbotExchangeClient for SigbotIBKRClient {
         }
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 let mut request = self.http_client.get(&url).headers(headers.clone());
                 for (key, value) in &query_params {
                     request = request.query(&[(key, value.as_str())]);
@@ -587,7 +578,7 @@ impl ISigbotOrderBookExchangeClient for SigbotIBKRClient {
         let symbol_str = symbol.to_string();
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 self.http_client
                     .get(&url)
                     .headers(headers.clone())
@@ -658,7 +649,7 @@ impl ISigbotOrderBookExchangeClient for SigbotIBKRClient {
         query_params.push(("limit", limit.to_string()));
 
         let response = self
-            .execute_with_retry(|| {
+            .execute_once(|| {
                 let mut request = self.http_client.get(&url).headers(headers.clone());
                 for (key, value) in &query_params {
                     request = request.query(&[(key, value.as_str())]);

@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod delivery_postgres;
 pub mod notification_mongo;
 pub mod notification_postgres;
 pub mod notification_sqlite;

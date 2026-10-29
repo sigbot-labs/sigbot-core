@@ -19,11 +19,12 @@
 // This includes modifications and derived works.
 
 use crate::client::datafeed_factory::SigbotDatafeedClientFactory;
-use anyhow::{Context, Error};
 use common_telemetry::{debug, info};
 use sigbot_messager::client::messager_factory::SigbotMessagerClientFactory;
-use sigbot_types::modules::messager::TOPIC_WF_MARKET_STREAM;
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::{Arc, OnceLock};
+
+static QUERY_RUNTIME: OnceLock<tokio::sync::Mutex<Option<Arc<super::market_query::MarketQueryRuntime>>>> =
+    OnceLock::new();
 
 pub struct SigbotDatafeedIngestor {}
 
@@ -33,6 +34,7 @@ impl SigbotDatafeedIngestor {
     }
 
     pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
+        common_telemetry::readiness::RuntimeReadiness::business("datafeed", false);
         debug!("Initializing Datafeed clients.");
         let (datafeeds, argument) = SigbotDatafeedClientFactory::init(matches, verbose)
             .await
@@ -45,30 +47,53 @@ impl SigbotDatafeedIngestor {
             .expect("Failed to initialize Messager client.");
         info!("Initialized Messager client. {}", messager.provider().as_str());
 
-        // TODO: Publish the datafeed data to messager topics.
-        let handler: Arc<
-            dyn Fn(Vec<u8>) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, Error>> + Send>> + Send + Sync,
-        > = Arc::new(move |data: Vec<u8>| {
-            let messager0 = messager.to_owned();
-            Box::pin(async move {
-                let data0 = String::from_utf8(data.clone())
-                    .context("Failed to convert data to string.")
-                    .unwrap_or_default();
-                info!("Received data: {:?}", data0);
-                messager0
-                    .publish(TOPIC_WF_MARKET_STREAM, &data0)
-                    .await
-                    .context("Failed to publish data to messager topic.")?;
-                Ok(data)
-            })
-        });
+        let properties = argument
+            .datafeed_config
+            .properties
+            .as_ref()
+            .expect("datafeed properties required");
+        if properties.contains_key("snapshot_input_node_ids") {
+            let query = super::market_query::MarketQueryRuntime::from_properties(properties)
+                .await
+                .expect("failed to initialize bounded market query runtime");
+            query
+                .start(messager.clone())
+                .await
+                .expect("failed to subscribe market snapshot requests");
+            *QUERY_RUNTIME.get_or_init(Default::default).lock().await = Some(query);
+        }
         for datafeed in datafeeds.iter() {
-            datafeed.subscribe(handler.to_owned()).await;
+            let provider = datafeed.provider().as_str().to_lowercase();
+            let ingestor = Arc::new(
+                super::persisted_ingestor::PersistedDatafeedIngestor::from_properties(properties, &provider)
+                    .await
+                    .expect("failed to initialize durable datafeed storage"),
+            );
+            ingestor
+                .start_relay(messager.clone())
+                .await
+                .expect("failed to start durable feed outbox relay");
+            let handler: crate::client::news::social_feed::FeedHandler = Arc::new(move |data| {
+                let ingestor = ingestor.clone();
+                Box::pin(async move {
+                    ingestor.ingest(&data).await?;
+                    Ok(data)
+                })
+            });
+            datafeed
+                .subscribe(handler)
+                .await
+                .expect("failed to subscribe datafeed source");
         }
         info!("Subscribed to Datafeed clients.");
+        common_telemetry::readiness::RuntimeReadiness::business("datafeed", true);
     }
 
     pub async fn shutdown() {
+        common_telemetry::readiness::RuntimeReadiness::business("datafeed", false);
+        if let Some(query) = QUERY_RUNTIME.get_or_init(Default::default).lock().await.take() {
+            query.close().await;
+        }
         info!("Shutting down Datafeed clients.");
         SigbotDatafeedClientFactory::shutdown().await;
         info!("Shutdown Datafeed clients.");

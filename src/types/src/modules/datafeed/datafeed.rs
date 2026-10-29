@@ -114,6 +114,8 @@ pub enum DatafeedProvider {
     BINANCE,
     TWITTER,
     TRUTHSOCIAL,
+    FED,
+    TREASURY,
 }
 
 impl DatafeedProvider {
@@ -122,6 +124,8 @@ impl DatafeedProvider {
             "BINANCE" => Ok(DatafeedProvider::BINANCE),
             "TWITTER" => Ok(DatafeedProvider::TWITTER),
             "TRUTHSOCIAL" => Ok(DatafeedProvider::TRUTHSOCIAL),
+            "FED" => Ok(DatafeedProvider::FED),
+            "TREASURY" => Ok(DatafeedProvider::TREASURY),
             _ => Err(anyhow::anyhow!("Unsupported the datafeed provider: {}", provider)),
         }
     }
@@ -131,6 +135,8 @@ impl DatafeedProvider {
             DatafeedProvider::BINANCE => "BINANCE",
             DatafeedProvider::TWITTER => "TWITTER",
             DatafeedProvider::TRUTHSOCIAL => "TRUTHSOCIAL",
+            DatafeedProvider::FED => "FED",
+            DatafeedProvider::TREASURY => "TREASURY",
         }
     }
 }

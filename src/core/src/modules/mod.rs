@@ -19,8 +19,10 @@
 // This includes modifications and derived works.
 
 pub mod backtest;
+pub mod connection;
 pub mod datafeed;
 pub mod exchange;
+pub mod market;
 pub mod notification;
 pub mod order;
 pub mod strategy;

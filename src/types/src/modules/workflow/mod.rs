@@ -18,6 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+pub mod deployment;
 pub mod workflow;
 
 pub use workflow::{

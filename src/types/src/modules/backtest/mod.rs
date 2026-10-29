@@ -35,7 +35,7 @@ pub struct SigbotBacktestManagerArgument {
 
 impl SigbotBacktestManagerArgument {
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context(format!("Failed to parse backtest manager info from JSON. - {}", json))
+        serde_json::from_str(json).context("Failed to parse backtest manager info from JSON")
     }
 }
 

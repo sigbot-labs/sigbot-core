@@ -20,4 +20,7 @@
 
 pub mod backtest_factory;
 pub mod kline;
+pub mod replay;
+pub mod replay_barrier;
+pub mod replay_postgres;
 pub mod trades;

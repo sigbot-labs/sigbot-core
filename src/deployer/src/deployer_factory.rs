@@ -27,14 +27,8 @@ use async_trait::async_trait;
 use common_telemetry::{debug, info};
 use lazy_static::lazy_static;
 use sigbot_core::context::state::SigbotState;
-use sigbot_core::sys::handler::tenant_handler::ITenantHandler;
-use sigbot_types::{
-    sys::tenant::{QueryTenantRequest, TenantInfo},
-    PageRequest, PageResponse,
-};
 use std::{
     collections::HashMap,
-    future::Future,
     sync::{Arc, RwLock},
 };
 
@@ -55,6 +49,19 @@ pub struct SigbotDeployerFactory {
 
 impl SigbotDeployerFactory {
     pub const DEFAULT_SAFETY_THRESHOLD: u16 = 1000;
+
+    /// The API host embeds the shared controller; it is not an independently deployed service.
+    pub async fn embedded(state: Arc<SigbotState>) -> Arc<dyn ISigbotDeployer> {
+        use sigbot_core::config::config::WorkerDeployProvider;
+        let cron = Some(state.config.services.deployer.inner.cron.clone());
+        let channels = Some(state.config.services.deployer.inner.channel_size);
+        let controller: Arc<dyn ISigbotDeployer> = match state.config.services.deployer.workers.provider {
+            WorkerDeployProvider::Kubernetes => SigbotKubernetesDeployer::new(cron, channels, Some(state)).await,
+            WorkerDeployProvider::Docker => SigbotDockerDeployer::new(cron, channels, Some(state)).await,
+        };
+        controller.startup().await;
+        controller
+    }
 
     fn new() -> Self {
         SigbotDeployerFactory {
@@ -121,58 +128,6 @@ impl SigbotDeployerFactory {
         info!("Starting the deployer with provider: {}", &provider);
         registered.startup().await;
         info!("Started the deployer with provider: {}.", &provider);
-    }
-
-    pub(crate) async fn do_scan_process<F, FutF, G, FutG>(
-        state: Arc<SigbotState>,
-        startup_handler: F,
-        shutdown_handler: G,
-    ) where
-        F: Fn(Arc<TenantInfo>) -> FutF + Send,
-        FutF: Future<Output = ()> + Send,
-        G: Fn(Arc<TenantInfo>) -> FutG + Send,
-        FutG: Future<Output = ()> + Send,
-    {
-        info!("Scanning Tenants components lifecycle process ...");
-
-        let mut gatekeeper_counter = 0 as u16;
-        let mut last_page = PageResponse::new(None, None, None);
-        while gatekeeper_counter < Self::DEFAULT_SAFETY_THRESHOLD
-            && (last_page.total.is_none() || last_page.total.unwrap_or(0) > 0)
-        {
-            gatekeeper_counter += 1;
-            info!("Loading Tenants : {}", last_page.num.unwrap_or(1));
-
-            // Create handler instance from core module
-            let tenant_handler = sigbot_core::sys::handler::tenant_handler::TenantHandler::new(&state);
-            let (current_page, tenants) = tenant_handler
-                .find(
-                    QueryTenantRequest {
-                        name: None,
-                        shared: None,
-                        admin_id: None,
-                        properties: None,
-                        description: None,
-                    },
-                    PageRequest::new(last_page.num.unwrap_or(1) as u32, last_page.limit.unwrap_or(10) as u32),
-                )
-                .await
-                .expect("Failed to find Tenants.");
-            last_page = current_page;
-
-            info!("Loaded Tenants {} : {}", tenants.len(), last_page.num.unwrap_or(0));
-
-            for tenant in tenants {
-                let t = Arc::new(tenant);
-                if t.base.status.unwrap_or(0) == 1 {
-                    info!("Initializing Components for : {:?}/{:?}", t.base.id, t.name);
-                    startup_handler(t.to_owned()).await;
-                } else {
-                    info!("Shutting down Components for : {:?}/{:?}", t.base.id, t.name);
-                    shutdown_handler(t.to_owned()).await;
-                }
-            }
-        }
     }
 
     fn register0<T: ISigbotDeployer + Send + Sync + 'static>(
