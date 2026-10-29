@@ -86,126 +86,61 @@ cache:
 
 - 标量支持 `${MYAPP__A__B:default}`。Mgmt 仅私网 health/metrics，禁写；日志附 time/level/service/component/run/trace/span 并脱敏。
 
-## 2. Specification of Domain Component (Must Factory/Provider Mode)
+## 2. Specification of Domain component
 
-- 组件统一 Provider+Factory（SPI）：契约唯一、按需创建、禁直建；UT 覆盖选择、失败、并发、生命周期。
-
-```text
-[type|class] I<Component> { provider(), init(), close(), <domain_operation>() } // interface defintion
-
-[type|class] <Component>Factory {
-  registry: Map<Provider, I<Component>>
-  get(provider) -> I<Component> { // get or create
-    return registry.add_if_absent(provider, () -> resolve(provider).create(Config.get().getXxxConfig()))
-  }
-  close() { } // destroy all registered
-}
-```
+- 任何独立的领域组件(即子模块)**必须**实现为统一的 Provider SPI 体系结构; 严格结构模版代码请参考如下 `<domain>/src/`
 
 ```bash
 src/
 ├── common/
-│   ├── src/
-│   │   ├── context/
-│   │   │   ├── src/
-│   │   │   │   ├── lib.rs                      # 公共 API 导出
-│   │   │   │   └── application.rs              # IProvider、ApplicationContext 顶级接口定义和通用统一注册/生命周期管理
-│   │   ├── audit-log/
-│   │   ├── macro/
-│   │   ├── mem-prof/
-│   │   ├── pprof/
-│   │   ├── telemetry/
-│   │   ├── ...
+│   ├── context/
+│   │   ├── src/
+│   │   │   ├── lib.rs                   # 公共模块/结构导出
+│   │   │   └── lifecycle/
+│   │   │       ├── application.rs       # ApplicationContext 统一注册、获取和生命周期管理
+│   │   │       └── provider.rs          # IProvider 顶级接口定义
+│   ├── audit-log/src/
+│   ├── mem-prof/src/
+│   ├── ...
 ├── <domain>/src/
-│   ├── lib.rs                                  # API 导出
-│   ├── <domain>.rs                             # I<Domain>: IProvider 接口继承定义、配置、枚举、注册入口
+│   ├── lib.rs                           # 独立领域模块/结构导出
+│   ├── <domain>.rs                      # I<Domain>: IProvider 独立领域接口定义(继承)
 │   └── <domain>/
-│       ├── <spec_impl_name_1>.rs               # <SpecImplName1><Domain>
-│       └── <spec_impl_name_2>.rs               # <SpecImplName2><Domain>
+│       ├── <spec_impl_name_1>.rs        # <SpecImplName1><Domain>
+│       └── <spec_impl_name_2>.rs        # <SpecImplName2><Domain>
 │       └── <spec_impl_name_N>/
-│           └── <meaningful_name>.rs            # 可选：仅复杂内部逻辑才拆分
-└── transport/src/                              # 示例：如下为 transport 领域模块
+│           └── <meaningful_name>.rs     # 可选：仅复杂内部逻辑才拆分
+└── ingestor/src/                        # ↓↓↓ 示例：如下为 ingestion 领域模块
     ├── lib.rs
-    ├── transport.rs                            # ITransport: IProvider 继承定义
-    └── transport/
-        ├── mqtt.rs                             # MqttTransport: ITransport 领域实现
-        └── grpc.rs                             # GrpcTransport: ITransport 领域实现
-        └── mqtt/
-            └── mqttclient.rs                   # 使用不同的第三方库连接 MQTT 的内部逻辑
+    ├── ingestor.rs                      # ITestIngestor: IProvider 继承定义
+    └── ingestor/
+        ├── web.rs                       # WebTestIngestor: ITestIngestor 领域实现
+        └── twitter.rs                   # TwitterTestIngestor: ITestIngestor 领域实现
+        └── twitter/
+            └── twitter_client.rs        # 使用不同的第三方库连接 Twitter 的内部逻辑
 ```
 
-- 约束： 以 <Domain> 表示业务名（如 Transport/Storage），<Provider> 表示具体实现（如 Grpc/Postgres）；实际路径使用 snake_case，类型使用 PascalCase。默认一个 Provider 一个 .rs；仅复杂内部逻辑允许增加私有子模块。禁止额外 factory.rs、registry.rs、types.rs、utils.rs、mod.rs 等冗余文件；测试内联。
-
-2. 统一接口与生命周期
+- 使用示例
 
 ```rust
-// src/common/src/context/src/application.rs
-#[async_trait]
-trait IProvider: Send + Sync + 'static {
-    async fn close(&self) -> Result<()>; // 幂等、可重试、释放资源
-}
+let ctx = ApplicationContext::new(); // 应用创建一次，并共享给各业务组件
+ctx.register::<dyn ITestIngestor, _>("web-default", web_ingestor_instantiator)?;
+ctx.register::<dyn ITestIngestor, _>("twitter-default", twitter_ingestor_instantiator)?;
+ctx.init().await?; // 启动上下文，实例仍在首次 get 时初始化
+let web = ctx.get::<dyn ITestIngestor>("web-default").await?;
+let twitter = ctx.get::<dyn ITestIngestor>("twitter-default").await?;
+let page = web.ingest("https://example.test/news/42", "Market update");
+let tweet = twitter.ingest("tweet-42", "Latest update");
 
-struct ApplicationContext { /* 泛型注册表、异步实例缓存 */ }
-
-impl ApplicationContext {
-    // Key = (业务接口 TypeId, provider_id, instance_id)
-    fn register<T: IProvider + ?Sized>(...);  // 只登记构造器，重复 Key 报错
-    async fn get<T: IProvider + ?Sized>(...) -> Result<Arc<T>>; // 懒初始化、同 Key 单例
-    async fn close<T: IProvider + ?Sized>(...) -> Result<()>;   // 关闭成功才移除
-    async fn shutdown(&self) -> Result<()>;   // 逆序关闭，失败保留并汇总
-}
-
-// src/<domain>/src/<domain>.rs
-#[async_trait]
-trait I<Domain>: IProvider {
-    // 业务接口方法
-}
+ctx.close_for::<dyn ITestIngestor>("web-default").await?; // 可选：单独关闭一个实例
+ctx.shutdown().await?; // 整体停机，关闭其余所有注册实例
 ```
 
-```rust
-// src/<domain>/src/<domain>/<provider>.rs
-struct <Provider><Domain> { /* 业务状态 */ }
+- 如上示例为数据摄入领域组件：`ITestIngestor`、`WebTestIngestor`、`TwitterTestIngestor`;
+- 注册表按领域接口类型和 `instance_id` 两层索引，不额外传入实现名, 同一领域的不同实现使用不同实例 ID;
+- 同一对象暴露多个领域接口时，使用 `register_with::<Target, Source>(instance_id, projection)` 共享生命周期;
 
-impl <Provider><Domain> {
-    async fn new(config: Config) -> Result<Self>; // 构造及初始化
-}
-
-#[async_trait]
-impl IProvider for <Provider><Domain> {
-    async fn close(&self) -> Result<()>; // 实例资源清理
-}
-
-#[async_trait]
-impl I<Domain> for <Provider><Domain> {
-    // 业务接口实现
-}
-```
-
-// 使用示例：替换占位符后的真实 Rust 语法
-context.register::<dyn ITransport, _>("grpc", "default", constructor)?;
-let transport = context.get::<dyn ITransport>("grpc", "default").await?;
-context.close::<dyn ITransport>("grpc", "default").await?;
-context.shutdown().await?;
-核心约束：
-* 统一管理： 所有业务共享 ApplicationContext，禁止独立 Factory、全局实例表或重复单例。
-* 懒加载： register 不初始化；get 首次异步初始化，同 Key 并发复用 Arc，不同 Key 独立。
-* 生命周期： 初始化成功才发布；失败可重试；close 幂等，关闭期间拒绝获取/替换，失败保留对象。
-* 依赖方向： Application → Domain → Context；依赖先注册、逆序关闭；禁止循环依赖、持有标准库锁跨 await。
-* 优雅停机： 正常退出、异常、SIGINT/SIGTERM 均先停止接入、等待任务，再 await context.shutdown()；不得依赖 Drop 异步清理。
-* 质量要求： 不引入无必要的 DI 框架、宏或动态扫描；并发/生命周期逻辑须有回归测试，执行 cargo fmt --all --check、cargo test --workspace。
-
-
-
-
-
-
-
-
-
-
-
-
-- **IMPORTANT: 针对 Go/Rust/Python 任何主源码文件里，都禁止直接定义函数，而必须先定义合理的结构体再在结构体里面定义函数;**
+- **IMPORTANT: 如上模版示例针对 Go/Rust/Python 任何主源码文件里，都禁止直接定义函数，而必须先定义合理的结构体再在结构体里面定义函数;**
 
 ## 3. Specification of Storage / Repository
 
@@ -230,7 +165,7 @@ cache/
 └── memory.(go|rs|py|ts)       # 同上
 ```
 
-## 5. Job (Scheduler)
+## 5. Job / Scheduler
 
 - `job/<domain>.(go|rs|py|ts)` 仅负责 cron/并发/锁/生命周期/观测并调用组件；未获锁跳过，非法 cron 启动失败；处理、幂等、重试归组件。
 
@@ -249,7 +184,7 @@ cache/
 | `parent_span_id` | 仅引用父 Span，非业务 ID | 同左 |
 | 共同规则 | Run/Trace 无固定层级；重试保持 `run_id`、递增 `attempt_no`、创建新 Span | 同左 |
 
-## 7. 多语言客户端 SDK
+## 7. Multi langusage SDKs
 
 ```text
 src/adapters/
