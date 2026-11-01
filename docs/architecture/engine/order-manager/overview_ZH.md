@@ -56,9 +56,9 @@ Notifier 接收类型化 Operational Event，而不是原始 Exchange Payload。
 | 角色 | 契约 | 示例 |
 |---|---|---|
 | Service Root | `SigbotOrderManager` | `SigbotEventDrivenOrderManager` |
-| Order Policy | `ISigbotOrderManager` | Signal-to-order 编排 |
+| Order Policy | `IOrder` | Signal-to-order 编排 |
 | 硬风险 | `ISigbotRiskPolicy` | Account、Position、Exposure、Price 与 Rate Policy |
-| Venue Access | `ISigbotExchangeClient` | 感知 Capability 的 Venue Adapter |
+| Venue Access | `IExchange` | 感知 Capability 的 Venue Adapter |
 | Persistence | `ISigbotOrderRepository` | `SigbotPostgresOrderRepository` |
 
 Risk Validation 是可独立测试的 Port，但最终 Allow/Deny 由 Order Manager 拥有，
@@ -89,8 +89,8 @@ Strategy 建议不能绕过。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotOrderServer`、`ISigbotOrderManager` 与
-`SigbotDefaultOrderManager`。它已订阅 Trade-signal Topic，但 Exchange Registry
+当前源码暴露 `SigbotOrderServer`、`IOrder` 与
+`DefaultOrder`。它已订阅 Trade-signal Topic，但 Exchange Registry
 尚未填充，Risk/Retry 仍是骨架；没有持久化 Order/Fill 状态机、专用 Order DB、
 Idempotency Record、Reconciliation Loop 或 Transactional Outbox。当前 Event 由
 Placement Result 简化生成，不代表完整权威 Fill。
@@ -100,6 +100,6 @@ Reservation、Venue Reconciliation 与类型化 Execution Fact。
 
 ## 源码地图
 
-- Order Service：`src/order/`
+- Order 数据面组件：`src/component/order/`
 - Exchange Client：`src/exchange/`
-- Order 与 Trade Event 类型：`src/types/src/modules/`
+- Order 与 Trade Event 类型：`src/types/src/`

@@ -19,7 +19,7 @@ flowchart LR
     API --> CoreDB[(核心控制面 DB)]
     Controller[SigbotController] <-->|list / watch / status| API
 
-    Sources[市场 / 新闻源] --> Datafeed[共享 SigbotDatafeed]
+    Sources[市场 / 新闻源] --> Datafeed[租户级 SigbotDatafeed]
     Controller -. 逻辑 Binding .-> Datafeed
     Controller -. Strategy-scoped Runtime .-> Evaluator[SigbotEvaluator]
     Controller -. Strategy-scoped Runtime .-> Strategy[SigbotStrategyRunner]
@@ -29,7 +29,7 @@ flowchart LR
     Evaluator -->|SigbotEvaluationSnapshot| Strategy
     Wallet[SigbotWalletManager] -->|SigbotPortfolioSnapshot| Strategy
     Strategy -->|SigbotTradeSignal| Order[SigbotOrderManager]
-    Order --> Exchange[ISigbotExchangeClient]
+    Order --> Exchange[IExchange]
     Exchange -->|执行事实| Order
     Order -->|SigbotExecutionEvent| Wallet
     Order -->|SigbotExecutionEvent| Exporter[SigbotExporter]
@@ -43,9 +43,14 @@ flowchart LR
     Backtest -. 模拟 Adapter .-> Exchange
 ```
 
-APIServer 与 Controller 构成控制面；实时行情评估、策略决策、订单执行和组合记账
-构成交易数据面。Backtest 使用历史源、虚拟时钟、模拟交易所及 Run-scoped Store
-组合相同领域契约，而不是建立第二套生产拓扑。
+平台面核心服务是 API、Controller 与 Web：三种 API 负责租户绑定、Workflow、Worker
+连接等配置的 CRUD；Controller 负责租户级九个组件的启动、更新、停止与健康恢复。
+认证、用户、权限和成员关系统一由 Authguard 管理，Sigbot 不复制平台 IAM 表。
+
+数据面核心是 Backtest、Datafeed、Evaluator、Strategy、Logservice、Exporter、Notifier、
+Order、Wallet 九个租户级组件。它们由 Controller 按 tenant/workflow 隔离动态部署，分别
+通过 MQTT 异步 pub/sub 执行 Workflow 中不同类型的节点；同一架构也允许为某个租户部署
+一套长期运行的 shared Workflow，但 Topic 与持久状态仍保持 tenant/workflow 边界。
 
 ## 决策契约
 
@@ -89,17 +94,18 @@ Edge。
 
 | 服务 | 运行作用域 | 规范职责 | 设计 |
 |---|---|---|---|
-| APIServer | 集群共享 daemon | 核心控制面数据库唯一网关；拥有 API、认证、IAM 组合、Pipeline Desired State、Watch 与 Status API | [APIServer](engine/apiserver/overview_ZH.md) |
-| Controller | 集群共享 daemon | 仅通过 APIServer Reconcile 固定 `StrategyPipeline` Desired State；禁止直接扫描核心数据库 | [Controller](engine/controller/overview_ZH.md) |
-| Datafeed | 集群共享 daemon | 复用公共市场/新闻上游连接、规范化事件并管理 Pipeline-scoped 逻辑 Binding | [Datafeed](engine/datafeed/overview_ZH.md) |
-| Evaluator | Strategy-scoped Worker Set | 非确定地识别市场结构，发布受限、带版本的 Evaluation Snapshot | [Evaluator](engine/evaluator/overview_ZH.md) |
-| Strategy Runner | Strategy-scoped Worker Set | 确定性 Join Feed、Evaluation 和 Portfolio 输入，产生最终 Signal | [Strategy Runner](engine/strategy-runner/overview_ZH.md) |
-| Order Manager | 集群共享、可分片 daemon | 拥有订单与成交事实、硬风险校验、交易所副作用、对账及 Order DB | [Order Manager](engine/order-manager/overview_ZH.md) |
-| Wallet Manager | 集群共享、可分片 daemon | 拥有资金预留、不可变 Ledger、Balance、Position、Portfolio Snapshot 与 Wallet DB | [Wallet Manager](engine/wallet-manager/overview_ZH.md) |
-| Backtest | Run-scoped Job | 使用虚拟时间和模拟交易所，让规范化历史数据通过同一决策契约 | [Backtest](engine/backtest/overview_ZH.md) |
-| Notifier | 集群共享 daemon | 将类型化通知路由到用户配置的投递 Channel | [Notifier](engine/notifier/overview_ZH.md) |
-| Exporter | 集群共享 daemon | 将执行事实投递到用户配置的下游 Sink | [Exporter](engine/exporter/overview_ZH.md) |
-| Log Service | 集群共享 daemon | 实时传递和归档运维日志，不加入交易决策主链 | [Log Service](engine/log-service/overview_ZH.md) |
+| API | 平台共享服务 | 暴露 HTTP、MCP、A2A，负责租户业务绑定、Workflow、Worker 和连接配置 CRUD | [APIServer](engine/apiserver/overview_ZH.md) |
+| Controller | 平台共享服务 | 为远程 Docker/Kubernetes Worker 调度并管理九个租户数据面组件生命周期 | [Controller](engine/controller/overview_ZH.md) |
+| Web | 平台共享服务 | 以 Authguard 身份访问 API，配置和观察租户 Workflow | [APIServer](engine/apiserver/overview_ZH.md) |
+| Datafeed | 租户/Workflow 动态组件 | 规范化行情与新闻，发布带事件/可得时间的数据 | [Datafeed](engine/datafeed/overview_ZH.md) |
+| Evaluator | 租户/Workflow 动态组件 | 识别市场结构并发布受限、带版本的 Evaluation Snapshot | [Evaluator](engine/evaluator/overview_ZH.md) |
+| Strategy Runner | 租户/Workflow 动态组件 | 确定性 Join Feed、Evaluation 和 Portfolio，产生交易意图 | [Strategy Runner](engine/strategy-runner/overview_ZH.md) |
+| Order | 租户/Workflow 动态组件 | 拥有预检、预占、下单、对账及订单/成交事实 | [Order](engine/order-manager/overview_ZH.md) |
+| Wallet | 租户/Workflow 动态组件 | 拥有预占、不可变 Ledger、Balance、Position 和 Portfolio Snapshot | [Wallet](engine/wallet-manager/overview_ZH.md) |
+| Backtest | 租户/Workflow 动态组件 | 使用虚拟时钟和模拟交易所复用相同决策契约 | [Backtest](engine/backtest/overview_ZH.md) |
+| Notifier | 租户/Workflow 动态组件 | 幂等投递 Email、Telegram 与站内通知 | [Notifier](engine/notifier/overview_ZH.md) |
+| Exporter | 租户/Workflow 动态组件 | 以游标、批量和背压导出 Kafka、Google Sheets 等目标 | [Exporter](engine/exporter/overview_ZH.md) |
+| Logservice | 租户/Workflow 动态组件 | 持久缓冲并归档 Python/Rust 日志，不参与交易决策 | [Logservice](engine/log-service/overview_ZH.md) |
 
 Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Namespace
 只有一个规范归属：[Tenant Governance & IAM](engine/apiserver/tenant-governance-and-iam_ZH.md)。
@@ -132,13 +138,13 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 | Datafeed | `SigbotDatafeed` | `ISigbotDatafeedSource` |
 | Backtest | `SigbotBacktestRunner` | `ISigbotBacktestEngine`、`ISigbotClock` |
 | Evaluator | `SigbotEvaluator` | `ISigbotMarketEvaluator` |
-| Strategy Runner | `SigbotStrategyRunner` | `ISigbotStrategyExecutor` |
-| Order Manager | `SigbotOrderManager` | `ISigbotOrderManager`、`ISigbotRiskPolicy` |
-| Wallet Manager | `SigbotWalletManager` | `ISigbotWalletManager`、`ISigbotPortfolioLedger` |
+| Strategy Runner | `SigbotStrategyRunner` | `IStrategy` |
+| Order Manager | `SigbotOrderManager` | `IOrder`、`ISigbotRiskPolicy` |
+| Wallet Manager | `SigbotWalletManager` | `IWallet`、`ISigbotPortfolioLedger` |
 | Notifier | `SigbotNotifier` | `ISigbotNotifier`、`ISigbotNotificationChannel` |
 | Exporter | `SigbotExporter` | `ISigbotExporter`、`ISigbotExportSink` |
-| Exchange SDK | 内嵌，无 daemon | `ISigbotExchangeClient` 及按能力拆分的子 Port |
-| Messager SDK | 内嵌，无 daemon | `ISigbotMessagerClient` |
+| Exchange SDK | 内嵌，无 daemon | `IExchange` 及按能力拆分的子 Port |
+| Messager SDK | 内嵌，无 daemon | `IMessager` |
 
 ## 数据所有权与一致性
 
@@ -164,8 +170,10 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 - 业务事件由 Producer 拥有：Datafeed 拥有 Feed Event，Evaluator 拥有 Evaluation
   Snapshot，Strategy Runner 拥有 Signal，Order 拥有 Execution Fact，Wallet 拥有
   Portfolio Snapshot。Messager 只拥有 Envelope 与投递语义。
-- 每个 Envelope 携带 Event ID、Tenant ID、Pipeline ID、Producer、Schema Version、
-  Event Time、Publish Time、Correlation ID 与 Causation ID。
+- 每个 Envelope 携带 Event ID、Tenant ID、Workflow ID、Producer、Schema Version、
+  Event Time、Publish Time、`run_id`、seq 与 attempt_no；禁止另建 correlation ID。
+- Trace 使用 W3C `traceparent`；异步请求的 `requestSpanId` 等于 producer span_id，响应原样回显，
+  只作短期 QoS 配对且不得持久化。
 - Consumer 必须假定重复和延迟投递，建立幂等边界并显式定义 Ordering/Partition Key。
 - Local 与 MQTT 实现必须提供等价的可观测 Fan-out、Cancellation、Backpressure 和
   Failure 语义。
@@ -187,14 +195,14 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 
 | 范畴 | 当前证据 | 必须对齐的契约 |
 |---|---|---|
-| APIServer 与核心 DB | APIServer 已有 Core Repository；Evaluator、Strategy、Deployer 等路径仍会构造 `SigbotState` | 由 APIServer 独占控制面 DB，并提供 List/Watch/Status 契约 |
-| Controller | `src/deployer/` 仍通过扫描数据库协调 Tenant-scoped 资源 | 按 `SigbotController` 语义，仅通过 APIServer Reconcile Strategy Pipeline |
+| APIServer 与核心 DB | APIServer 已有 Core Repository；Evaluator、Strategy、Controller 等路径仍会构造 `SigbotState` | 由 APIServer 独占控制面 DB，并提供 List/Watch/Status 契约 |
+| Controller | `src/controller/` 仍通过扫描数据库协调 Tenant-scoped 资源 | 按 `SigbotController` 语义，仅通过 APIServer Reconcile Strategy Pipeline |
 | Datafeed | 已有 Provider 骨架和发布代码 | 增加规范 Envelope、Source 复用、逻辑 Binding 与正确 Topic 展开 |
 | Evaluator | 已有 Multi-agent Executor；事件驱动行情订阅不完整 | 发布包含 Regime、Confidence、Watermark 和 Expiry 的类型化、版本化 Snapshot |
 | Strategy Runner | 已有 Python 执行；当前路径未 Join Evaluation/Portfolio，且存在直连 Exchange 路径 | 强制三输入确定性执行，只向 Order Manager 发布 Signal |
 | Order Manager | 已有 Signal 订阅骨架 | 增加持久化 Order/Fill 状态、Exchange 注册、硬风险、幂等、对账与 Outbox |
 | Wallet Manager | 已有 PostgreSQL Updater | 使用专用 Store，并在一个事务内更新 Inbox、Ledger、Balance 与 Position Effect |
-| Backtest | 已有 Manager 外壳；核心处理未完成 | 组合 Historical Replay、Virtual Clock、Simulated Exchange 与隔离 Run State |
+| Backtest | 可部署的运行组件 | 组合 Historical Replay、Virtual Clock、Backtest Exchange 与隔离 Run State |
 | Notifier 与 Exporter | 已有 Email/Telegram 与 Google Sheets/Kafka 骨架 | 增加类型化路由、真实 Adapter、幂等、重试、Receipt 及保留 Channel/Sink |
 | Messager | 已有 Local 与 MQTT Client | 增加显式 Consumer Group 与等价的多订阅/Fan-out 语义 |
 

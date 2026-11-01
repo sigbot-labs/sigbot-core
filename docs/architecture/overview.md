@@ -24,7 +24,7 @@ flowchart LR
     API --> CoreDB[(Core control-plane DB)]
     Controller[SigbotController] <-->|list / watch / status| API
 
-    Sources[Markets / News] --> Datafeed[Shared SigbotDatafeed]
+    Sources[Markets / News] --> Datafeed[Tenant SigbotDatafeed]
     Controller -. logical binding .-> Datafeed
     Controller -. strategy-scoped runtime .-> Evaluator[SigbotEvaluator]
     Controller -. strategy-scoped runtime .-> Strategy[SigbotStrategyRunner]
@@ -34,7 +34,7 @@ flowchart LR
     Evaluator -->|SigbotEvaluationSnapshot| Strategy
     Wallet[SigbotWalletManager] -->|SigbotPortfolioSnapshot| Strategy
     Strategy -->|SigbotTradeSignal| Order[SigbotOrderManager]
-    Order --> Exchange[ISigbotExchangeClient]
+    Order --> Exchange[IExchange]
     Exchange -->|execution facts| Order
     Order -->|SigbotExecutionEvent| Wallet
     Order -->|SigbotExecutionEvent| Exporter[SigbotExporter]
@@ -45,14 +45,20 @@ flowchart LR
     Wallet --> WalletDB[(Wallet DB)]
 
     Backtest[SigbotBacktestRunner] -. same contracts .-> Strategy
-    Backtest -. simulated adapter .-> Exchange
+    Backtest -. backtest adapter .-> Exchange
 ```
 
-The APIServer and Controller form the control plane. Live market evaluation,
-strategy decisions, order execution, and portfolio accounting form the trading
-data plane. Backtesting composes the same domain contracts with a historical
-source, virtual clock, simulated exchange, and run-scoped stores; it is not a
-second production topology.
+The platform plane consists of API, Controller, and Web. HTTP, MCP, and A2A APIs
+own CRUD for tenant bindings, Workflows, worker connections, and related
+configuration; Controller owns startup, update, shutdown, and health recovery
+for the nine tenant components. Authguard remains the sole owner of users,
+memberships, roles, and permissions.
+
+The data plane consists of Backtest, Datafeed, Evaluator, Strategy, Logservice,
+Exporter, Notifier, Order, and Wallet. Controller dynamically deploys these nine
+components with tenant/Workflow resource isolation; they asynchronously pub/sub
+the different Workflow node types. A long-running tenant-shared Workflow uses
+the same topology without weakening tenant/Workflow topic and state boundaries.
 
 ## Decision Contract
 
@@ -100,17 +106,18 @@ disabled, but callers cannot create new node kinds or arbitrary edges.
 
 | Service | Runtime scope | Canonical responsibility | Design |
 |---|---|---|---|
-| APIServer | Cluster-shared daemon | Sole gateway to the core control-plane database; owns API, authentication, IAM composition, pipeline desired state, watch, and status APIs | [APIServer](engine/apiserver/overview.md) |
-| Controller | Cluster-shared daemon | Reconciles fixed `StrategyPipeline` desired state through APIServer; never scans the core database directly | [Controller](engine/controller/overview.md) |
-| Datafeed | Cluster-shared daemon | Shares public upstream market/news connections, normalizes events, and manages pipeline-scoped logical bindings | [Datafeed](engine/datafeed/overview.md) |
-| Evaluator | Strategy-scoped worker set | Non-deterministically classifies market structure and publishes bounded, versioned evaluation snapshots | [Evaluator](engine/evaluator/overview.md) |
-| Strategy Runner | Strategy-scoped worker set | Deterministically joins feed, evaluation, and portfolio inputs and emits the final signal | [Strategy Runner](engine/strategy-runner/overview.md) |
-| Order Manager | Cluster-shared daemon, shardable | Owns order and fill facts, hard risk checks, exchange side effects, reconciliation, and the Order DB | [Order Manager](engine/order-manager/overview.md) |
-| Wallet Manager | Cluster-shared daemon, shardable | Owns reservations, immutable ledger, balances, positions, portfolio snapshots, and the Wallet DB | [Wallet Manager](engine/wallet-manager/overview.md) |
-| Backtest | Run-scoped job | Replays normalized history through the same decision contracts with virtual time and a simulated exchange | [Backtest](engine/backtest/overview.md) |
-| Notifier | Cluster-shared daemon | Routes typed notifications through user-configured delivery channels | [Notifier](engine/notifier/overview.md) |
-| Exporter | Cluster-shared daemon | Delivers execution facts to user-configured downstream sinks | [Exporter](engine/exporter/overview.md) |
-| Log Service | Cluster-shared daemon | Streams and archives operational logs without joining the trading decision path | [Log Service](engine/log-service/overview.md) |
+| API | Platform service | Exposes HTTP, MCP, and A2A CRUD for tenant bindings, Workflows, workers, and connections | [APIServer](engine/apiserver/overview.md) |
+| Controller | Platform service | Manages nine tenant data-plane components on remote Docker/Kubernetes workers | [Controller](engine/controller/overview.md) |
+| Web | Platform service | Configures and observes tenant Workflows through Authguard-protected APIs | [APIServer](engine/apiserver/overview.md) |
+| Datafeed | Tenant/Workflow component | Normalizes market/news data and publishes event/availability-time records | [Datafeed](engine/datafeed/overview.md) |
+| Evaluator | Tenant/Workflow component | Classifies market structure and publishes bounded versioned snapshots | [Evaluator](engine/evaluator/overview.md) |
+| Strategy Runner | Tenant/Workflow component | Deterministically joins feed, evaluation, and portfolio inputs | [Strategy Runner](engine/strategy-runner/overview.md) |
+| Order | Tenant/Workflow component | Owns checks, reservations, venue submission, reconciliation, and order facts | [Order](engine/order-manager/overview.md) |
+| Wallet | Tenant/Workflow component | Owns reservations, immutable ledger, balances, positions, and portfolio snapshots | [Wallet](engine/wallet-manager/overview.md) |
+| Backtest | Tenant/Workflow component | Reuses the decision contracts with virtual time and simulated exchange | [Backtest](engine/backtest/overview.md) |
+| Notifier | Tenant/Workflow component | Idempotently delivers Email, Telegram, and in-product notifications | [Notifier](engine/notifier/overview.md) |
+| Exporter | Tenant/Workflow component | Cursor-based, batched export with retries and backpressure | [Exporter](engine/exporter/overview.md) |
+| Logservice | Tenant/Workflow component | Durably buffers and archives Python/Rust logs outside the decision path | [Logservice](engine/log-service/overview.md) |
 
 Tenant, user, identity, membership, role, permission, policy, and logical
 namespace semantics have one canonical owner:
@@ -123,7 +130,7 @@ fixed trading pipeline.
 
 | Component | Responsibility | Design |
 |---|---|---|
-| Exchange | Unified async trading, account, market-data, and stream capabilities for venues such as Binance, Bitget, Coinbase, IBKR, Schwab, and the simulated venue | [Exchange](engine/exchange/overview.md) |
+| Exchange | Unified async trading, account, market-data, and stream capabilities for venues such as Binance, IBKR, Polymarket, and the Backtest venue | [Exchange](engine/exchange/overview.md) |
 | Messager | Transport-neutral async event SDK: local queue in all-in-one mode and MQTT/EMQX in distributed mode | [Messager](engine/messager/overview.md) |
 | A2A | Optional external agent interoperability; it cannot bypass pipeline policy or place orders directly | [A2A](engine/a2a/overview.md) |
 | MCP | Optional tool protocol for API exposure and evaluator context; it is not the canonical live market feed | [MCP](engine/mcp/overview.md) |
@@ -146,13 +153,13 @@ fixed trading pipeline.
 | Datafeed | `SigbotDatafeed` | `ISigbotDatafeedSource` |
 | Backtest | `SigbotBacktestRunner` | `ISigbotBacktestEngine`, `ISigbotClock` |
 | Evaluator | `SigbotEvaluator` | `ISigbotMarketEvaluator` |
-| Strategy Runner | `SigbotStrategyRunner` | `ISigbotStrategyExecutor` |
-| Order Manager | `SigbotOrderManager` | `ISigbotOrderManager`, `ISigbotRiskPolicy` |
-| Wallet Manager | `SigbotWalletManager` | `ISigbotWalletManager`, `ISigbotPortfolioLedger` |
+| Strategy Runner | `SigbotStrategyRunner` | `IStrategy` |
+| Order Manager | `SigbotOrderManager` | `IOrder`, `ISigbotRiskPolicy` |
+| Wallet Manager | `SigbotWalletManager` | `IWallet`, `ISigbotPortfolioLedger` |
 | Notifier | `SigbotNotifier` | `ISigbotNotifier`, `ISigbotNotificationChannel` |
 | Exporter | `SigbotExporter` | `ISigbotExporter`, `ISigbotExportSink` |
-| Exchange SDK | Composed, no daemon | `ISigbotExchangeClient`, capability-specific subports |
-| Messager SDK | Composed, no daemon | `ISigbotMessagerClient` |
+| Exchange SDK | Composed, no daemon | `IExchange`, capability-specific subports |
+| Messager SDK | Composed, no daemon | `IMessager` |
 
 ## Data Ownership and Consistency
 
@@ -186,8 +193,12 @@ fixed trading pipeline.
   Evaluator owns evaluation snapshots, Strategy Runner owns signals, Order owns
   execution facts, and Wallet owns portfolio snapshots. Messager owns only the
   envelope and delivery semantics.
-- Every envelope carries event ID, tenant ID, pipeline ID, producer, schema
-  version, event time, publication time, correlation, and causation IDs.
+- Every envelope carries event ID, tenant ID, Workflow ID, producer, schema
+  version, event time, publication time, `run_id`, seq, and attempt_no. No
+  separate correlation ID is permitted.
+- W3C `traceparent` carries trace context. For asynchronous requests,
+  `requestSpanId` equals the producer span_id and is echoed by the response; it
+  is short-lived QoS pairing state and is never persisted.
 - Consumers assume duplicate and delayed delivery, establish an idempotency
   boundary, and define ordering/partition keys explicitly.
 - Local and MQTT implementations must provide equivalent observable fan-out,
@@ -213,14 +224,14 @@ fixed trading pipeline.
 
 | Area | Current evidence | Required alignment |
 |---|---|---|
-| APIServer and core DB | APIServer has core repositories; Evaluator, Strategy, Deployer, and other paths also construct `SigbotState` | Make APIServer the sole control-plane DB gateway and expose list/watch/status contracts |
-| Controller | `src/deployer/` reconciles tenant-scoped resources by scanning the database | Reconcile strategy pipelines through APIServer using `SigbotController` semantics |
+| APIServer and core DB | APIServer has core repositories; Evaluator, Strategy, Controller, and other paths also construct `SigbotState` | Make APIServer the sole control-plane DB gateway and expose list/watch/status contracts |
+| Controller | `src/controller/` reconciles tenant-scoped resources by scanning the database | Reconcile strategy pipelines through APIServer using `SigbotController` semantics |
 | Datafeed | Provider skeletons and publication code exist | Add normalized envelopes, source sharing, logical bindings, and correct topic expansion |
 | Evaluator | Multi-agent executor exists; event-driven market subscription is incomplete | Publish typed, versioned evaluation snapshots with regime, confidence, watermark, and expiry |
 | Strategy Runner | Python execution exists; current path lacks evaluation/portfolio joins and can call an exchange directly | Enforce deterministic three-input execution and publish signals only to Order Manager |
 | Order Manager | Signal subscription skeleton exists | Add durable order/fill state, exchange registration, hard risk checks, idempotency, reconciliation, and outbox |
 | Wallet Manager | PostgreSQL updater exists | Use a dedicated store and one transaction for inbox, ledger, balance, and position effects |
-| Backtest | Manager shells exist; core processing is incomplete | Compose historical replay, virtual clock, simulated exchange, and isolated run state |
+| Backtest | Run-scoped component | Compose historical replay, virtual clock, deterministic matching, and isolated run state |
 | Notifier and Exporter | Email/Telegram and Google Sheets/Kafka skeletons exist | Add typed routing, real adapters, idempotency, retries, receipts, and the reserved channels/sinks |
 | Messager | Local and MQTT clients exist | Add explicit consumer groups and equivalent multi-subscription/fan-out semantics |
 

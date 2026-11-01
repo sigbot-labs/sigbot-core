@@ -3,46 +3,77 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
+import os
+import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common.context import VerificationContext
-from common.broker import BrokerCredentials
-from common.services import ProductServices
-from deploy.deployer.base import DeployerFactory
+
+
+class CaseBootstrap:
+    @classmethod
+    def prepare(cls, root, deployer, browser_required):
+        interpreter = Path(os.environ.get("E2E_PYTHON", root / ".venv/bin/python"))
+        if not interpreter.is_absolute():
+            interpreter = root / interpreter
+        interpreter = interpreter.absolute()
+        if not interpreter.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(interpreter.parent.parent)], check=True)
+        requirements = root / "requirements.txt"
+        digest = hashlib.sha256(requirements.read_bytes()).hexdigest()
+        marker = interpreter.parent.parent / ".requirements.sha256"
+        if not marker.is_file() or marker.read_text().strip() != digest:
+            subprocess.run(
+                [str(interpreter), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(requirements)],
+                check=True,
+            )
+            marker.write_text(digest + "\n")
+        browser = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE", os.environ.get("MARKETPULSE_CHROMIUM_PATH"))
+        if browser and not (Path(browser).is_file() and os.access(browser, os.X_OK)):
+            raise ValueError("configured Chromium executable is missing or not executable")
+        if deployer == "docker" and browser_required and not browser:
+            subprocess.run([str(interpreter), "-m", "playwright", "install", "chromium"], check=True)
+        # Do not resolve either path: venv/python is commonly a symlink to the
+        # system binary, but its path is what activates the virtual environment.
+        if Path(sys.executable).absolute() != interpreter:
+            os.execve(str(interpreter), [str(interpreter), str(Path(__file__).resolve()), *sys.argv[1:]], dict(os.environ))
 
 
 class CaseRunner:
     scenarios = {
-        "structure": "verifier.infra.s01_structure",
-        "schemas": "verifier.infra.s02_schemas",
-        "infra": "verifier.infra.s00_infra",
+        "structure": "verifier.infra.s00_structure",
+        "schemas": "verifier.infra.s01_schemas",
+        "infra": "verifier.infra.s02_services",
         "acl": "verifier.infra.s03_acl",
         "database": "verifier.infra.s04_database",
-        "legacy-migration": "verifier.infra.s06_legacy_migration",
-        "kubernetes-prepare": "verifier.infra.s05_kubernetes_prepare",
-        "rust-deployment": "verifier.deployer.s55_lifecycle",
+        "rust-cache": "verifier.infra.s05_cache",
+        "rust-contracts": "verifier.infra.s06_contracts",
+        "deployment": "verifier.infra.s07_deployment",
+        "kubernetes-prepare": "verifier.controller.s10_kubernetes",
+        "rust-deployment": "verifier.controller.s11_lifecycle",
         "boundaries": "verifier.datafeed.s10_boundaries",
-        "rust-boundaries": "verifier.datafeed.s20_rust_boundaries",
-        "rust-policy": "verifier.datafeed.s22_policy",
-        "rust-extensions": "verifier.datafeed.s24_extensions",
-        "rust-market": "verifier.exchange.s23_public_market",
-        "rust-messaging": "verifier.messager.s21_delivery",
-        "rust-owners": "verifier.order.s34_owners",
-        "rust-groups": "verifier.order.s35_groups",
-        "rust-effects": "verifier.strategy.s32_service_effects",
-        "rust-resting": "verifier.backtest.s44_resting_orders",
-        "rust-export": "verifier.exporter.s55_kafka",
-        "rust-logs": "verifier.logservice.s51_tracing",
-        "runtime": "verifier.pipeline.s25_runtime",
-        "pipeline": "verifier.pipeline.s30_pipeline",
-        "groups": "verifier.order.s36_group_pipeline",
-        "recovery": "verifier.pipeline.s40_recovery",
-        "replay": "verifier.backtest.s45_replay",
-        "logs": "verifier.pipeline.s50_logs",
+        "rust-boundaries": "verifier.datafeed.s11_ingestion",
+        "rust-policy": "verifier.datafeed.s12_policy_news",
+        "rust-market": "verifier.exchange.s13_public_market",
+        "rust-extensions": "verifier.datafeed.s14_history",
+        "rust-messaging": "verifier.messager.s20_delivery",
+        "rust-effects": "verifier.strategy.s30_effects",
+        "rust-owners": "verifier.order.s31_ownership",
+        "rust-groups": "verifier.order.s32_execution_groups",
+        "rust-resting": "verifier.backtest.s33_resting_orders",
+        "rust-export": "verifier.exporter.s34_kafka",
+        "rust-logs": "verifier.logservice.s35_archive",
+        "runtime": "verifier.workflow.s40_runtime",
+        "workflow": "verifier.workflow.s41_autonomy",
+        "recovery": "verifier.workflow.s42_recovery",
+        "replay": "verifier.backtest.s43_replay",
+        "groups": "verifier.order.s44_compensation",
+        "logs": "verifier.logservice.s45_delivery",
         "web": "verifier.web.s60_dashboard",
         "web-full": "verifier.web.s61_authenticated_workflow",
     }
@@ -54,9 +85,10 @@ class CaseRunner:
         parser.add_argument("--scenario", action="append", help="repeat or comma-separate: " + ",".join(cls.scenarios))
         parser.add_argument("--rounds", type=int, default=1)
         parser.add_argument("--deployer", choices=["docker", "kubernetes"], default="docker")
-        parser.add_argument("--timeout", type=float, default=120)
+        parser.add_argument("--timeout", type=float, default=600)
         parser.add_argument("--config", type=Path, default=root / "config/sigbot/config.yaml")
         parser.add_argument("--deploy", action="store_true")
+        parser.add_argument("--reuse-environment", action="store_true")
         parser.add_argument("--skip-build", "--reuse-build", dest="skip_build", action="store_true")
         parser.add_argument("--cleanup-after-run", action="store_true")
         parser.add_argument("--cleanup", action="store_true")
@@ -65,17 +97,37 @@ class CaseRunner:
         args = parser.parse_args()
         if args.rounds < 1 or args.timeout <= 0:
             parser.error("rounds and timeout must be positive")
-        selected = list(dict.fromkeys(name for group in (args.scenario or [",".join(cls.scenarios)])
+        matrix = json.loads((root / "config/sigbot/matrix.json").read_text())
+        selected = list(dict.fromkeys(name for group in (args.scenario or [",".join(matrix[args.deployer])])
                                      for name in group.split(",")))
         if set(selected) - cls.scenarios.keys():
             parser.error("unknown scenario")
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        report_root = root / "reports" / run_id
+        CaseBootstrap.prepare(root, args.deployer, bool({"web", "web-full"}.intersection(selected)))
+        from common.broker import BrokerCredentials
+        from common.context import UuidV7, VerificationContext
+        from common.environment import CaseEnvironment
+        from common.services import ProductServices
+        from deploy.deployer.base import ControllerFactory
+        report_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        while (root / "reports" / report_id).exists():
+            time.sleep(0.05)
+            report_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        run_id = UuidV7.generate()
+        report_root = root / "reports" / report_id
         report_root.mkdir(parents=True, exist_ok=False)
         config = VerificationContext.load_config(args.config)
         context = VerificationContext(root, report_root, run_id, "deployment", 1, args.timeout, args.deployer, config, args.skip_build)
+        should_deploy = args.deploy or not args.reuse_environment
+        if args.deployer == "kubernetes" and should_deploy and not os.environ.get("MARKETPULSE_KUBERNETES_PREPARED"):
+            environment = {**os.environ, "MARKETPULSE_KUBERNETES_PREPARED": "true"}
+            prepare = [sys.executable, str(Path(__file__).resolve()), "--deployer", "docker", "--deploy",
+                       "--scenario", "infra,database", "--timeout", str(args.timeout)]
+            if args.skip_build:
+                prepare.append("--reuse-build")
+            subprocess.run(prepare, cwd=root, env=environment, check=True)
+        CaseEnvironment.initialize(root, deploy=should_deploy)
         BrokerCredentials.initialize(context)
-        deployer = DeployerFactory.create(context)
+        deployer = ControllerFactory.create(context)
         results = []
         try:
             if args.stop_runtime:
@@ -90,13 +142,12 @@ class CaseRunner:
                 deployer.cleanup()
                 results.append({"scenario": "cleanup", "status": "PASS"})
             else:
-                if args.deploy:
+                if should_deploy:
                     deployer.deploy()
                 for round_number in range(1, args.rounds + 1):
-                    round_run_id = f"{run_id}-r{round_number}"
                     for scenario in selected:
                         started = time.monotonic()
-                        context = VerificationContext(root, report_root, round_run_id, scenario, round_number,
+                        context = VerificationContext(root, report_root, run_id, scenario, round_number,
                                                       args.timeout, args.deployer, config, args.skip_build)
                         print(f"START {scenario} round={round_number}", flush=True)
                         try:
@@ -121,7 +172,7 @@ class CaseRunner:
                     deployer.cleanup()
                 except Exception as error:
                     results.append({"scenario": "cleanup", "status": "FAIL", "error": cls.redact(str(error), context)})
-            lines = ["# Marketpulse verification", "", f"Run: `{run_id}`", "",
+            lines = ["# Marketpulse verification", "", f"Report: `{report_id}`", f"Run: `{run_id}`", "",
                      "Only executed scenarios count. Boundary mocks are synthetic external systems; they do not prove the internal pipeline.", "",
                      "| Scenario | Round | Status |", "| --- | --- | --- |"]
             lines += [f"| {r['scenario']} | {r.get('round', '-')} | {r['status']} |" for r in results]

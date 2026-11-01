@@ -8,7 +8,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-authguard-adapter-rust = { git = "https://github.com/wl4g/authguard.git", rev = "56f00ee51a33136dae7e83beba558cdbf05c4a85" }
+common-context.workspace = true
+authguard-adapter-rust.workspace = true
 # Other modules dependencies.
 common-audit-log.workspace = true
 common-telemetry.workspace = true
@@ -27,7 +28,6 @@ uuid.workspace = true
 serde.workspace = true
 validator.workspace = true
 tokio.workspace = true
-tokio-cron-scheduler.workspace = true
 config.workspace = true
 chrono.workspace = true
 once_cell.workspace = true
@@ -40,20 +40,13 @@ thiserror.workspace = true
 serde_json.workspace = true
 serde_path_to_error = "0.1.20"
 regex.workspace = true
-openapi.workspace = true
-utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { workspace = true, features = ["axum"] }
-# utoipa-swagger-ui-vendored = { workspace = true}
 futures.workspace = true
-rust-embed.workspace = true
-mime_guess.workspace = true
 
 # Lang libs
 base64 = { workspace = true}
 hex = { workspace = true}
 
 # Database libs
-mongodb = { workspace = true }
 rust_decimal.workspace = true
 sqlx = { workspace = true, features = [
     "runtime-tokio-rustls",
@@ -110,24 +103,22 @@ path = "benches/bench_main.rs"
 harness = false
 
 [dev-dependencies]
-percent-encoding = "2.3.1"
+globset.workspace = true
+percent-encoding.workspace = true
 criterion.workspace = true
 
 [[test]]
 name = "authguard_integration"
-path = "tests/sys/handler/auth_handler_test.rs"
+path = "tests/context/authguard_test.rs"
 
 [[test]]
 name = "scoped_query"
-path = "tests/store/scoped_query_test.rs"
+path = "tests/storage/scoped_query_test.rs"
 
 [[test]]
 name = "config_loader"
 path = "tests/config/config_loader_test.rs"
 
-[[test]]
-name = "authenticated_workflow_api"
-path = "tests/modules/workflow/authenticated_api_test.rs"
 
 [[test]]
 name = "mgmt_health"

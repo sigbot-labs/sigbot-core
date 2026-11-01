@@ -16,8 +16,8 @@ Email、Telegram、QQ 等用户可选投递媒介统一使用 `Channel`：
 SigbotNotifier
   -> ISigbotNotifier
   -> ISigbotNotificationChannel
-       -> SigbotEmailNotificationChannel
-       -> SigbotTelegramNotificationChannel
+       -> SigbotEmailNotifierChannel
+       -> SigbotTelegramNotifierChannel
        -> SigbotQqNotificationChannel
 ```
 
@@ -77,7 +77,7 @@ Policy。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotNotificationForwarder`、`ISigbotNotificationClient` 及 Email/
+当前源码暴露 `SigbotNotifier`、`INotifier` 及 Email/
 Telegram Client。它消费 Raw UTF-8 Payload 并广播到所有已配置 Client。Typed Routing、
 Preference、Idempotency、Durable Retry/Dead-letter State、Rate Limit 与 Receipt 均未
 实现。QQ 属于保留设计，当前没有实现。
@@ -87,5 +87,5 @@ Contract、Policy Routing 与相互隔离的 Durable Delivery Lifecycle。
 
 ## 源码地图
 
-- Notification Service 与 Adapter：`src/notification/`
-- Notification 类型：`src/types/src/modules/notification/`
+- Notification Service 与 Adapter：`src/component/notifier/`
+- Notification 类型：`src/types/src/component/notifier/`

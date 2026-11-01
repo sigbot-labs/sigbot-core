@@ -71,7 +71,7 @@ Subscription、Routing、Policy、Checkpoint 与 Lifecycle。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotExporterServer`、`ISigbotExporterManager`、Google Sheets 与
+当前源码暴露 `SigbotExporterServer`、`IExporter`、Google Sheets 与
 Kafka Manager，并订阅 Placed-trade Topic。Writer 当前只记录预期写入，没有真实投递；
 MQTT/HTTP Sink、Typed Target Routing、Idempotency、Checkpoint、Retry/Dead-letter
 State 与隔离均未实现。部分源码文件名与 Alias 仍使用 “googlestreet”。
@@ -82,5 +82,5 @@ State 与隔离均未实现。部分源码文件名与 Alias 仍使用 “google
 
 ## 源码地图
 
-- Exporter Service 与 Manager：`src/exporter/`
-- Export 配置与 Event 类型：`src/types/src/modules/`
+- Exporter Service 与 Manager：`src/component/exporter/`
+- Export 配置与 Event 类型：`src/types/src/`

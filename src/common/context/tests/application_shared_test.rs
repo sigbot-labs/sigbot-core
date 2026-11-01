@@ -1,15 +1,18 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Result;
 use async_trait::async_trait;
-use common_context::{ApplicationContext, IProvider};
-use std::{
-    any::Any,
-    sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-    time::Duration,
-};
-use tokio::{sync::Notify, time::timeout};
+use common_context::ApplicationContext;
+use common_context::IProvider;
+use std::any::Any;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
+use tokio::sync::Notify;
+use tokio::time::timeout;
 
 const DEADLINE: Duration = Duration::from_secs(3);
 

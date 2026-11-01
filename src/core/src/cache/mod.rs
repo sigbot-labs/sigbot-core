@@ -18,10 +18,15 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::{
-    cache::{memory::StringMemoryCache, redis::StringRedisCache},
-    config::config::{get_config, AppConfigProperties, CacheProvider},
-};
+use crate::cache::memory::StringMemoryCache;
+
+use crate::cache::redis::StringRedisCache;
+
+use crate::config::config::get_config;
+
+use crate::config::config::AppConfigProperties;
+
+use crate::config::config::CacheProvider;
 use anyhow::Error;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -82,7 +87,7 @@ where
 {
     pub fn new() -> Box<dyn ICache<String>> {
         let config = get_config();
-        match get_config().cache.provider {
+        match config.cache.provider {
             CacheProvider::MEMORY => Box::new(StringMemoryCache::new(&config.cache.memory)),
             CacheProvider::REDIS => Box::new(StringRedisCache::new(&config.cache.redis)),
         }

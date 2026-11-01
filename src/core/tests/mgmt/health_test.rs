@@ -1,10 +1,10 @@
 //! Actual TCP and PostgreSQL health checks; no database or HTTP interception.
 use common_telemetry::readiness::RuntimeReadiness;
-use sigbot_core::{
-    config::config::{AppConfig, AppConfigProperties, AppDBType},
-    context::state::SigbotState,
-    mgmt::health::HealthRouter,
-};
+use sigbot_core::config::config::AppConfig;
+use sigbot_core::config::config::AppConfigProperties;
+use sigbot_core::config::config::StorageProvider;
+use sigbot_core::context::state::SigbotState;
+use sigbot_core::mgmt::health::HealthRouter;
 use std::time::Duration;
 
 struct Fixture;
@@ -13,8 +13,8 @@ impl Fixture {
         let address = std::env::var("MARKETPULSE_DATABASE_URL").expect("isolated integration database required");
         let url = url::Url::parse(&address).unwrap();
         let mut config = AppConfigProperties::default();
-        config.appdb.db_type = AppDBType::POSTGRESQL;
-        let postgres = &mut config.appdb.postgres.inner;
+        config.storage.provider = StorageProvider::Postgres;
+        let postgres = &mut config.storage.postgres.inner;
         postgres.host = url.host_str().unwrap().into();
         postgres.port = url.port().unwrap_or(5432);
         postgres.database = url.path().trim_start_matches('/').into();

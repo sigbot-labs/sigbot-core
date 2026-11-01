@@ -282,7 +282,7 @@ println!("BTC Price: {:?}", price_result);
 
 ```rust
 // evaluator 模块自动集成 MCP 工具
-// src/evaluator/src/executor/adk/tools/mod.rs
+// src/component/evaluator/src/executor/adk/tools/mod.rs
 
 // 使用默认工具 (包含 MCP 工具)
 let toolset = register_default_tools();

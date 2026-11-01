@@ -91,7 +91,7 @@ future/live data during replay.
 ## Implementation Alignment
 
 Current source exposes `SigbotEvaluatorRunner`,
-`ISigbotEvaluationExecutor`, `SigbotMasEvaluationExecutor`, and the Boot,
+`IEvaluator`, `MasEvaluator`, and the Boot,
 Loader, Alpha, and Auditor agent structure. Event-driven Datafeed subscription
 is incomplete; some data preparation is placeholder behavior, and published
 hyperparameter events lack the complete regime, confidence, watermark, expiry,
@@ -104,6 +104,6 @@ agent review, and typed `SigbotEvaluationSnapshot` publication.
 
 ## Source Map
 
-- Evaluator runtime and executor: `src/evaluator/src/`
-- Multi-agent implementation: `src/evaluator/src/executor/adk/`
-- Shared evaluation/message types: `src/types/src/modules/evaluator/`
+- Evaluator runtime and executor: `src/component/evaluator/src/`
+- Multi-agent implementation: `src/component/evaluator/src/executor/adk/`
+- Shared evaluation/message types: `src/types/src/evaluator/`

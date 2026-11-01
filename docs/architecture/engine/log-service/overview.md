@@ -39,7 +39,7 @@ one group.
 | Role | Contract | Examples |
 |---|---|---|
 | Service root | `SigbotLogService` | Real-time and archive supervisor |
-| Processing | `ISigbotLogManager` | `SigbotDefaultLogManager` |
+| Processing | `ILogservice` | `DefaultLogservice` |
 | Archive | `ISigbotLogArchive` | PostgreSQL/TimescaleDB, object storage, or a log backend selected explicitly |
 | Live stream | `ISigbotLogStream` | Bounded WebSocket fan-out |
 
@@ -64,19 +64,15 @@ components do not share the archive tables.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotLogServer`, `ISigbotLogManager`,
-`SigbotDefaultLogManager`, per-workflow broadcast state, and archive conversion
-through a core `LogHandler`. It initializes `SigbotState` for database access,
-uses workflow/node-oriented payloads, and current Messager semantics do not yet
-provide the documented independent shared consumer behavior.
-
-Required alignment is the `SigbotLogService` root, pipeline/component-scoped
-structured events, an independently owned observability store, two real
-consumer paths, authorization, redaction, idempotent archive, and bounded
-fan-out.
+The current source registers `ILogservice` providers through `SigbotLogServer`.
+The component owns capture, WAL buffering, immutable S3 chunks, and cursor
+reads; the core `LogserviceHandler` owns the business boundary, while database
+operations remain inside Logservice repositories. `append` is logical append:
+ACK follows a SQLite WAL `FULL` durable commit, then every chunk is created at a
+new conditional S3 key. Existing S3 objects are never modified.
 
 ## Source Map
 
-- Log service: `src/logservice/`
-- Log APIs and current persistence handlers: `src/core/src/sys/`
-- Shared log types: `src/types/`
+- Log service: `src/component/logservice/`
+- Log handler and repositories: `src/core/src/modules/logservice/`
+- Shared log types: `src/types/src/logservice/`

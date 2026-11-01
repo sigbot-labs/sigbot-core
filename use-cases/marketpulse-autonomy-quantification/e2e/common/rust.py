@@ -25,7 +25,7 @@ class RustIntegration:
         metadata = subprocess.run(["cargo", "metadata", "--offline", "--no-deps", "--format-version", "1"],
                                   cwd=repository, capture_output=True, text=True, timeout=30, check=True)
         packages = {item["name"]: item for item in json.loads(metadata.stdout)["packages"]}
-        sources = [repository / "Cargo.toml", repository / "Cargo.lock"]
+        sources = [repository / "Cargo.toml", repository / "Cargo.lock", repository / "build/metadata.rs", repository / "build/build_setpy.rs"]
         pending, visited = [package], set()
         while pending:
             name = pending.pop()
@@ -48,6 +48,25 @@ class RustIntegration:
         environment = {**os.environ, "CARGO_BUILD_JOBS": "1", "CARGO_PROFILE_DEV_DEBUG": "0",
                        "CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_INCREMENTAL": "0",
                        "HTTPS_PROXY": "http://127.0.0.1:8800", **extra_environment}
+        database_url = environment.get("MARKETPULSE_DATABASE_URL")
+        if database_url:
+            # Product crates consume only the typed central configuration.
+            # MARKETPULSE_DATABASE_URL remains an E2E harness input and is
+            # translated once at the process boundary.
+            environment["SIGBOT__STORAGE__POSTGRES__URL"] = database_url
+        token = environment.get(context.config["token_env"])
+        if token:
+            environment["SIGBOT__SECRETS__VALUES__MARKETPULSE_API_TOKEN"] = token
+        archive = context.config["log_archive"]
+        access_key = environment.get(archive["access_key_env"])
+        secret_key = environment.get(archive["secret_key_env"])
+        if access_key:
+            environment["SIGBOT__SECRETS__VALUES__MINIO_ACCESS_KEY"] = access_key
+        if secret_key:
+            environment["SIGBOT__SECRETS__VALUES__MINIO_SECRET_KEY"] = secret_key
+        mqtt_password = environment.get(context.config["mqtt"]["password_env"])
+        if mqtt_password:
+            environment["SIGBOT__SECRETS__VALUES__MQTT_PASSWORD"] = mqtt_password
         binary = None
         if context.skip_build:
             # Shared DTO/SDK changes invalidate every dependent binary too. An
@@ -71,32 +90,35 @@ class RustIntegration:
                     break
             if binary is None:
                 raise RuntimeError(f"compiled {package}/{target} with the required tests is missing; build it first")
-            command = [str(binary), "--ignored", "--nocapture", "--test-threads=1"]
+            command = [str(binary)]
         else:
             target_path = repository / "target"
             size = sum(path.stat().st_size for path in target_path.rglob("*") if path.is_file()) if target_path.exists() else 0
             if size > 10 * 1024 ** 3:
                 subprocess.run(["cargo", "clean"], cwd=repository, check=True, timeout=context.timeout_seconds)
-            command = ["cargo", "test", "-p", package, "--test", target, "--", "--ignored", "--nocapture", "--test-threads=1"]
-        command = [*(command_prefix or []), *command]
-        result = subprocess.run(command, cwd=repository, env=environment, capture_output=True, text=True,
-                                timeout=context.timeout_seconds, check=False)
-        output = result.stdout + result.stderr
-        for key in (context.config["token_env"], context.config["database_url_env"],
-                    context.config["mqtt"]["password_env"], context.config["mqtt"]["signing_key_env"]):
-            if environment.get(key):
-                output = output.replace(environment[key], "[REDACTED]")
-        for key, value in extra_environment.items():
-            if value and key.endswith(("_DATABASE_URL", "_PASSWORD", "_TOKEN", "_SECRET", "_KEY")):
-                output = output.replace(value, "[REDACTED]")
-        evidence = context.evidence(target + ".log", output)
-        passed = re.search(r"test result: ok\. (\d+) passed; 0 failed; 0 ignored;", result.stdout)
-        if result.returncode or not passed or int(passed.group(1)) < len(tests):
-            raise AssertionError(f"all required real {package} tests must execute and pass; inspect {evidence}")
-        # With --nocapture a test may print endpoint evidence between its name
-        # and `ok`. The successful aggregate above already requires zero failed
-        # or ignored tests; separately require every requested test to have run.
-        if not all(re.search(r"(?m)^test \S*" + re.escape(name) + r" \.\.\. ", result.stdout) for name in tests):
-            raise AssertionError(f"required test names were not observed; inspect {evidence}")
-        return {"command": command, "evidence": str(evidence), "tests": tests, "executed_test_count": int(passed.group(1)),
+            command = ["cargo", "test", "-p", package, "--test", target]
+        commands, outputs = [], []
+        for name in tests:
+            invocation = [*command, name, "--ignored", "--nocapture", "--test-threads=1"] if binary else [
+                *command, name, "--", "--ignored", "--nocapture", "--test-threads=1"]
+            invocation = [*(command_prefix or []), *invocation]
+            commands.append(invocation)
+            result = subprocess.run(invocation, cwd=repository, env=environment, capture_output=True, text=True,
+                                    timeout=context.timeout_seconds, check=False)
+            output = result.stdout + result.stderr
+            for key in (context.config["token_env"], context.config["database_url_env"],
+                        context.config["mqtt"]["password_env"], context.config["mqtt"]["signing_key_env"]):
+                if environment.get(key):
+                    output = output.replace(environment[key], "[REDACTED]")
+            for key, value in extra_environment.items():
+                if value and key.endswith(("_URL", "_PASSWORD", "_TOKEN", "_SECRET", "_KEY")):
+                    output = output.replace(value, "[REDACTED]")
+            outputs.append("$ " + shlex.join(invocation) + "\n" + output)
+            passed = re.search(r"test result: ok\. 1 passed; 0 failed; 0 ignored;", result.stdout)
+            observed = re.search(r"(?m)^test \S*" + re.escape(name) + r" \.\.\. ", result.stdout)
+            if result.returncode or not passed or not observed:
+                evidence = context.evidence(target + ".log", "\n".join(outputs))
+                raise AssertionError(f"required real {package} test {name} failed; inspect {evidence}")
+        evidence = context.evidence(target + ".log", "\n".join(outputs))
+        return {"commands": commands, "evidence": str(evidence), "tests": tests, "executed_test_count": len(tests),
                 "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest() if binary else None}

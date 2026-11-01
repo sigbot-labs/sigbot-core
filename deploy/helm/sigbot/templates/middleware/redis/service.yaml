@@ -1,0 +1,18 @@
+{{- if .Values.middleware.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-redis
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: redis
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+    - {name: cluster-bus, port: 16379, targetPort: cluster-bus}
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    sigbot.io/component: redis
+{{- end }}

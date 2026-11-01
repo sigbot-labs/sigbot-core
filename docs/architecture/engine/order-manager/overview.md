@@ -59,9 +59,9 @@ not raw exchange payloads.
 | Role | Contract | Examples |
 |---|---|---|
 | Service root | `SigbotOrderManager` | `SigbotEventDrivenOrderManager` |
-| Order policy | `ISigbotOrderManager` | Signal-to-order orchestration |
+| Order policy | `IOrder` | Signal-to-order orchestration |
 | Hard risk | `ISigbotRiskPolicy` | Account, position, exposure, price, and rate policies |
-| Venue access | `ISigbotExchangeClient` | Capability-aware venue adapters |
+| Venue access | `IExchange` | Capability-aware venue adapters |
 | Persistence | `ISigbotOrderRepository` | `SigbotPostgresOrderRepository` |
 
 Risk validation is an independently testable port, but the Order Manager owns
@@ -97,8 +97,8 @@ the final allow/deny decision. Strategy suggestions cannot bypass it.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotOrderServer`, `ISigbotOrderManager`, and
-`SigbotDefaultOrderManager`. It subscribes to a trade-signal topic, but the
+Current source exposes `SigbotOrderServer`, `IOrder`, and
+`DefaultOrder`. It subscribes to a trade-signal topic, but the
 exchange registry is not populated, risk checks and retries are skeletal, and
 there is no durable order/fill state machine, dedicated Order database,
 idempotency record, reconciliation loop, or transactional outbox. The current
@@ -111,6 +111,6 @@ typed execution facts.
 
 ## Source Map
 
-- Order service: `src/order/`
+- Order component: `src/component/order/`
 - Exchange clients: `src/exchange/`
-- Order and trade event types: `src/types/src/modules/`
+- Order and trade event types: `src/types/src/`

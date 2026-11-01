@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use common_error::{
-    ext::{BoxedError, ErrorExt},
-    status_code::StatusCode,
-};
+use common_error::ext::BoxedError;
+
+use common_error::ext::ErrorExt;
+
+use common_error::status_code::StatusCode;
 use common_macro::stack_trace_debug;
-use snafu::{Location, Snafu};
-use std::{any::Any, path::PathBuf};
+use snafu::Location;
+use snafu::Snafu;
+use std::any::Any;
+use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

@@ -19,7 +19,7 @@ flowchart LR
     Replay -->|SigbotFeedEvent| Strategy[Strategy core]
     Eval -->|SigbotEvaluationSnapshot| Strategy
     Strategy -->|SigbotTradeSignal| Order[Order core]
-    Order --> Sim[SigbotSimulatedExchangeClient]
+    Order --> Sim[BacktestExchange]
     Sim -->|execution facts| Ledger[Run-scoped Portfolio Ledger]
     Ledger -->|SigbotPortfolioSnapshot| Strategy
     Ledger --> Metrics[Performance metrics]
@@ -36,7 +36,7 @@ state. Parallel runs share no mutable strategy or portfolio state.
 |---|---|---|
 | Market source | External `ISigbotDatafeedSource` through shared Datafeed | `SigbotHistoricalReplaySource` reading canonical archived events |
 | Clock | `SigbotSystemClock` | `SigbotVirtualClock` |
-| Venue | Provider `ISigbotExchangeClient` | `SigbotSimulatedExchangeClient` |
+| Venue | Provider `IExchange` | `BacktestExchange` |
 | Portfolio | Wallet service | Run-scoped implementation of the same accounting contracts |
 | Transport | Local or MQTT Messager | Isolated local event bus by default |
 
@@ -44,7 +44,7 @@ The replay source reads normalized kline, trade, order-book, funding, and
 approved news events. It does not reconnect to live Binance/Twitter providers;
 testing ingestion adapters and real middleware is E2E scope.
 
-The simulated exchange—not an “Exchanger”—owns venue behavior: matching,
+The Backtest matching venue—not an “Exchanger”—owns venue behavior: matching,
 market/limit/stop orders, partial fills, rejections, latency, slippage, fees,
 funding, margin, cancellation, and forced liquidation. Accounting effects are
 applied by the run-scoped portfolio ledger rather than duplicated inside the
@@ -70,7 +70,7 @@ reported as a distribution across runs rather than as one deterministic score.
 - Events are ordered by source event time with a deterministic tie-breaker.
 - An evaluation is visible only at or after its original `published_at` and
   `valid_from`; its input watermark cannot exceed the strategy decision event.
-- A portfolio snapshot is visible only after the simulated transaction that
+- A portfolio snapshot is visible only after the matching transaction that
   produced it commits.
 - Tools in `RECOMPUTE` mode receive the virtual clock and cannot access current
   live market data.
@@ -85,7 +85,7 @@ reported as a distribution across runs rather than as one deterministic score.
 | Engine | `ISigbotBacktestEngine` | `SigbotEventDrivenBacktestEngine` |
 | Clock | `ISigbotClock` | `SigbotVirtualClock` |
 | Historical feed | `ISigbotDatafeedSource` | `SigbotHistoricalReplaySource` |
-| Simulated venue | `ISigbotExchangeClient` | `SigbotSimulatedExchangeClient` |
+| Backtest venue | `IExchange` | `BacktestExchange` |
 
 ## Results and Invariants
 
@@ -107,10 +107,10 @@ liquidations, win/loss statistics, and failure/cancellation state.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotBacktestServer`, `ISigbotBacktestManager`, and
+Current source exposes `SigbotBacktestServer`, `IBacktest`, and
 KLINE/TRADES managers. Their processing paths are unimplemented and scheduled
 runs can require an uninjected distributed-lock handler. Virtual time,
-canonical replay, simulated exchange behavior, evaluator modes, isolated
+canonical replay, deterministic matching behavior, evaluator modes, isolated
 accounting, and reproducible result artifacts are not yet complete.
 
 Required alignment is the run-scoped composition above. It replaces duplicated
@@ -119,7 +119,7 @@ adapters.
 
 ## Source Map
 
-- Backtest service and managers: `src/backtest/`
-- Strategy execution: `src/strategy/`
+- Backtest service and managers: `src/component/backtest/`
+- Strategy execution: `src/component/strategy/`
 - Exchange contracts: `src/exchange/`
-- Wallet accounting contracts: `src/wallet/`
+- Wallet accounting contracts: `src/component/wallet/`

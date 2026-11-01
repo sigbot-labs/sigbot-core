@@ -18,7 +18,7 @@ flowchart LR
     Replay -->|SigbotFeedEvent| Strategy[Strategy Core]
     Eval -->|SigbotEvaluationSnapshot| Strategy
     Strategy -->|SigbotTradeSignal| Order[Order Core]
-    Order --> Sim[SigbotSimulatedExchangeClient]
+    Order --> Sim[BacktestExchange]
     Sim -->|Execution Fact| Ledger[Run-scoped Portfolio Ledger]
     Ledger -->|SigbotPortfolioSnapshot| Strategy
     Ledger --> Metrics[Performance Metric]
@@ -35,7 +35,7 @@ Strategy 或 Portfolio State。
 |---|---|---|
 | Market Source | 共享 Datafeed 中的外部 `ISigbotDatafeedSource` | 读取规范归档事件的 `SigbotHistoricalReplaySource` |
 | Clock | `SigbotSystemClock` | `SigbotVirtualClock` |
-| Venue | Provider `ISigbotExchangeClient` | `SigbotSimulatedExchangeClient` |
+| Venue | Provider `IExchange` | `BacktestExchange` |
 | Portfolio | Wallet Service | 实现相同会计契约的 Run-scoped Ledger |
 | Transport | Local 或 MQTT Messager | 默认隔离 Local Event Bus |
 
@@ -79,7 +79,7 @@ Evaluation Artifact；结果应报告多次 Run 分布，不能伪装成单一�
 | Engine | `ISigbotBacktestEngine` | `SigbotEventDrivenBacktestEngine` |
 | Clock | `ISigbotClock` | `SigbotVirtualClock` |
 | Historical Feed | `ISigbotDatafeedSource` | `SigbotHistoricalReplaySource` |
-| Simulated Venue | `ISigbotExchangeClient` | `SigbotSimulatedExchangeClient` |
+| Backtest Venue | `IExchange` | `BacktestExchange` |
 
 ## 结果与不变量
 
@@ -97,9 +97,9 @@ Drawdown、Risk-adjusted Metric、Turnover、Fee、Funding、Liquidation、Win/L
 
 ## 实现对齐
 
-当前源码暴露 `SigbotBacktestServer`、`ISigbotBacktestManager` 及 KLINE/TRADES
+当前源码暴露 `SigbotBacktestServer`、`IBacktest` 及 KLINE/TRADES
 Manager。其 Process 路径尚未实现，Scheduled Run 还可能依赖未注入的 Distributed-lock
-Handler。Virtual Time、Canonical Replay、Simulated Exchange、Evaluator Mode、
+Handler。Virtual Time、Canonical Replay、Backtest Exchange、Evaluator Mode、
 隔离 Accounting 与可复现 Result Artifact 都未完成。
 
 必须对齐到上述 Run-scoped 组合，通过公共 Port 与 Simulation Adapter 替代重复实现
@@ -107,7 +107,7 @@ Datafeed、Exchange 与 Wallet 职责。
 
 ## 源码地图
 
-- Backtest Service 与 Manager：`src/backtest/`
-- Strategy Execution：`src/strategy/`
+- Backtest Service 与 Manager：`src/component/backtest/`
+- Strategy Execution：`src/component/strategy/`
 - Exchange Contract：`src/exchange/`
-- Wallet Accounting Contract：`src/wallet/`
+- Wallet Accounting Contract：`src/component/wallet/`

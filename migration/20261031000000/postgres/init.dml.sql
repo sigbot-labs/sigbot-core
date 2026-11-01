@@ -1,0 +1,2 @@
+-- New installations intentionally start without tenants, connections, workflows, or credentials.
+-- Bootstrap data belongs to the deployment environment and must not be embedded in the schema.

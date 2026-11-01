@@ -1,40 +1,19 @@
-# Build and Deploy with Docker
+# Build and deploy with Docker
 
-[Documentation index](../index.md)
-
-## Build the Application Image
-
-The Makefile builds one application image. Override `IMAGE` or `PLATFORM` when
-publishing to a different registry or architecture.
+Use Docker Compose v2. Select images through the shared catalog; the Makefile detects the CN registry restriction or accepts an explicit override.
 
 ```bash
-make build-image
-
-# Example override
-make build-image \
-  IMAGE=registry.example.com/sigbot/sigbot:1.0.0 \
-  PLATFORM=linux/amd64
+make build-image IN_CN_GFW=false VERSION=1.0.0
+cp deploy/docker/.env.example deploy/docker/.env
+chmod 600 deploy/docker/.env
+# Supply the actual Secret values in .env without committing them.
+make docker-up IN_CN_GFW=false
+make docker-logs
+make docker-down
 ```
 
-Authenticate with the registry explicitly, then push the same image reference:
+`build-image` builds the runtime (including the isolated Python worker) and Web images. Override `SIGBOT_IMAGE`/`SIGBOT_WEB_IMAGE` for another registry, or choose `IMAGE_SOURCE=aliyun` to require Aliyun addresses throughout. Builds propagate `HTTPS_PROXY`, commit, version and a bounded Cargo job count. A rootful Podman setup can use `CONTAINER_CLI='sudo -n --preserve-env podman'` with a Compose v2 provider; environment preservation carries the selected image references without putting credentials in argv.
 
-```bash
-docker login registry.example.com
-make push-image IMAGE=registry.example.com/sigbot/sigbot:1.0.0
-```
+Compose starts one PostgreSQL instance with TimescaleDB/pgvector extensions, applies ordered migrations, and then starts the API. Redis, EMQX, MinIO and Web use the same image catalog and explicit resource limits. The controller and shared Messager/Exchange/Logservice components run inside service hosts. The new PGDATA layout uses the separate `storage-v2` volume; do not adopt or delete old financial volumes automatically. `docker-down` retains volumes.
 
-The build accepts `FEATURES`, `BUILD_MIRROR_URL`, and `HTTPS_PROXY` as optional
-overrides. It does not perform registry login or manage credentials.
-
-## Run with Docker Compose
-
-```bash
-# Start, inspect, and stop the stack.
-make compose-up
-make compose-ps
-make compose-down
-```
-
-Compose uses `tooling/deploy/docker/docker-compose.yaml` and receives the same
-`IMAGE` value used by the image targets. These targets never delete volumes;
-destructive data cleanup must be performed explicitly with Docker tooling.
+Supply the real Authguard trusted-context configuration and route the API/Web through the actual Gateway/Hosted Login domains described in [the Authguard migration runbook](authguard-migration.md). Compose's health or unauthenticated UI screenshots do not establish a working authenticated browser session. Private management ports are not published to the host.

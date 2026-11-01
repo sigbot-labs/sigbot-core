@@ -19,7 +19,8 @@
 // This includes modifications and derived works.
 
 use crate::mgmt::apm::logging::LogMode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use std::time::Duration;
 
 // Server Properties.
@@ -31,7 +32,6 @@ pub struct ServerProperties {
     pub host: String,
     #[serde(rename = "port")]
     pub port: u16,
-    #[serde(alias = "context-path")]
     pub context_path: Option<String>,
 }
 
@@ -46,7 +46,7 @@ pub struct MgmtProperties {
     pub host: String,
     #[serde(rename = "port")]
     pub port: u16,
-    #[serde(default = "TokioConsoleProperties::default", alias = "tokio-console")]
+    #[serde(default = "TokioConsoleProperties::default")]
     pub tokio_console: TokioConsoleProperties,
     #[serde(default = "PyroscopeAgentProperties::default")]
     pub pyroscope: PyroscopeAgentProperties,
@@ -59,7 +59,6 @@ pub struct MgmtProperties {
 pub struct TokioConsoleProperties {
     pub enabled: bool,
     //#[env_config(name = "MW_TOKIO_CONSOLE_SERVER_BIND", default = "0.0.0.0:6699")]
-    #[serde(alias = "server-bind")]
     pub server_bind: String,
     pub retention: u64,
 }
@@ -68,12 +67,9 @@ pub struct TokioConsoleProperties {
 #[serde(deny_unknown_fields)]
 pub struct PyroscopeAgentProperties {
     pub enabled: bool,
-    #[serde(alias = "server-url")]
     pub server_url: String,
-    #[serde(alias = "auth-token")]
     pub auth_token: Option<String>,
     pub tags: Option<Vec<(String, String)>>,
-    #[serde(alias = "sample-rate")]
     pub sample_rate: f32,
 }
 
@@ -128,7 +124,7 @@ impl Default for ServerProperties {
 
 impl ServerProperties {
     pub fn get_bind_addr(&self) -> String {
-        self.host.to_owned() + ":" + &self.port.to_string()
+        self.host.clone() + ":" + &self.port.to_string()
     }
 }
 
@@ -149,7 +145,7 @@ impl Default for MgmtProperties {
 
 impl MgmtProperties {
     pub fn get_bind_addr(&self) -> String {
-        self.host.to_owned() + ":" + &self.port.to_string()
+        self.host.clone() + ":" + &self.port.to_string()
     }
 }
 

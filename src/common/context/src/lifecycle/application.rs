@@ -2,18 +2,31 @@
 
 //! Provider registration, lazy initialization and coordinated shutdown.
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::anyhow;
+
+use anyhow::bail;
+
+use anyhow::ensure;
+
+use anyhow::Context;
+
+use anyhow::Result;
 use async_trait::async_trait;
-use std::{
-    any::{Any, TypeId},
-    collections::{BTreeMap, HashMap},
-    future::Future,
-    pin::Pin,
-    sync::{Arc, Mutex, MutexGuard},
-};
-use tokio::{sync::Mutex as AsyncMutex, task::JoinSet};
+use std::any::Any;
+use std::any::TypeId;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
+use std::sync::OnceLock;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::task::JoinSet;
 
 use super::provider::IProvider;
+use crate::util::signal::ShutdownSignal;
 
 type BuildFuture<T> = Pin<Box<dyn Future<Output = Result<Arc<T>>> + Send + 'static>>;
 type Builder<T> = Box<dyn Fn() -> BuildFuture<T> + Send + Sync + 'static>;
@@ -115,6 +128,9 @@ struct Registry {
 /// independently. Default shutdown phase 0 closes all entries concurrently.
 /// Higher phases close first; register dependents with higher phases.
 ///
+/// Application modules share [`Self::global`]. [`Self::new`] creates an
+/// independent context, useful for tests and separately managed applications.
+///
 /// Call [`Self::close`] or [`Self::shutdown`] explicitly after stopping incoming
 /// work and awaiting active tasks. Dropping the context cannot perform async
 /// cleanup, and shutdown does not wait for externally held `Arc`s to drop.
@@ -125,6 +141,17 @@ pub struct ApplicationContext {
 }
 
 impl ApplicationContext {
+    /// Returns the same lazily created context to every module and thread.
+    ///
+    /// The application entry point registers providers, calls [`Self::init`],
+    /// and eventually awaits [`Self::shutdown`]. Accessing the singleton does
+    /// not initialize providers or restart a context that has been shut down.
+    pub fn global() -> &'static Self {
+        static CONTEXT: OnceLock<ApplicationContext> = OnceLock::new();
+        CONTEXT.get_or_init(Self::new)
+    }
+
+    /// Creates an independent context with its own registrations and lifecycle.
     pub fn new() -> Self {
         Self::default()
     }
@@ -148,6 +175,24 @@ impl ApplicationContext {
             ContextState::Running => {}
             ContextState::Closing | ContextState::Closed => bail!("application context is closing or closed"),
         }
+        drop(registry);
+        if std::ptr::eq(self, Self::global()) {
+            Self::install_shutdown_hook()?;
+        }
+        Ok(())
+    }
+
+    fn install_shutdown_hook() -> Result<()> {
+        static INSTALLED: OnceLock<()> = OnceLock::new();
+        let runtime = tokio::runtime::Handle::try_current().context("application context requires a Tokio runtime")?;
+        if INSTALLED.set(()).is_ok() {
+            runtime.spawn(async {
+                ShutdownSignal::wait().await;
+                if let Err(error) = ApplicationContext::global().close().await {
+                    tracing::error!(%error, "application context signal shutdown failed");
+                }
+            });
+        }
         Ok(())
     }
 
@@ -162,6 +207,42 @@ impl ApplicationContext {
         Fut: Future<Output = Result<Arc<T>>> + Send + 'static,
     {
         self.register_with_shutdown_phase::<T, Fut>(instance_id, 0, create)
+    }
+
+    /// Atomically retains the first lazy constructor for this typed instance.
+    /// Domain factories use the same instance ID for repeated acquisition; no
+    /// losing constructor runs and no second registry or lock is needed.
+    pub fn register_if_absent<T, Fut>(
+        &self,
+        instance_id: &str,
+        create: impl Fn() -> Fut + Send + Sync + 'static,
+    ) -> Result<bool>
+    where
+        T: IProvider + ?Sized,
+        Fut: Future<Output = Result<Arc<T>>> + Send + 'static,
+    {
+        let mut registry = self.registry()?;
+        ensure!(
+            matches!(registry.state, ContextState::New | ContextState::Running),
+            "application context is closing or closed"
+        );
+        if registry
+            .registrations
+            .get(&TypeId::of::<T>())
+            .is_some_and(|instances| instances.contains_key(instance_id))
+        {
+            return Ok(false);
+        }
+        Self::register_wrapper(
+            &mut registry,
+            instance_id,
+            0,
+            ProviderWrapper::<T> {
+                build: Box::new(move || Box::pin(create())),
+                instance: AsyncMutex::new(InstanceState::Empty),
+            },
+        )?;
+        Ok(true)
     }
 
     /// Registers a factory with an explicit shutdown phase.
@@ -317,6 +398,25 @@ impl ApplicationContext {
                 .with_context(|| format!("failed to close {key:?}"))?;
             self.remove_if_same(&key, &entry)?;
         }
+        Ok(())
+    }
+
+    /// Closes every instance of one domain while keeping the application open.
+    /// Failures retain their registrations for retry; every instance is attempted.
+    pub async fn close_all<T: IProvider + ?Sized>(&self) -> Result<()> {
+        let ids: Vec<String> = self
+            .registry()?
+            .registrations
+            .get(&TypeId::of::<T>())
+            .map(|instances| instances.keys().cloned().collect())
+            .unwrap_or_default();
+        let mut errors = Vec::new();
+        for id in ids {
+            if let Err(error) = self.close_for::<T>(&id).await {
+                errors.push(format!("{id}: {error:#}"));
+            }
+        }
+        ensure!(errors.is_empty(), "domain shutdown failed: {}", errors.join("; "));
         Ok(())
     }
 

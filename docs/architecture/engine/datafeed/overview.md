@@ -89,7 +89,7 @@ logic.
 ## Implementation Alignment
 
 Current source exposes `SigbotDatafeedIngestor` and
-`ISigbotDatafeedClient`, with Binance, Twitter, and TruthSocial provider
+`IDatafeed`, with Binance, Twitter, and TruthSocial provider
 scaffolding. Several subscription/process paths are empty or unimplemented,
 events are not normalized into the contract above, and publication can retain
 unexpanded topic placeholders. Shared source keys, logical bindings,
@@ -102,6 +102,6 @@ exist.
 
 ## Source Map
 
-- Datafeed daemon and providers: `src/datafeed/`
-- Feed and message types: `src/types/src/modules/`
+- Datafeed daemon and providers: `src/component/datafeed/`
+- Feed and message types: `src/types/src/`
 - Messager SDK: `src/messager/`

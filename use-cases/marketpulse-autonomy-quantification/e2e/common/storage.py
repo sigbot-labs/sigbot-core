@@ -33,3 +33,25 @@ class ArchiveStorage:
             raise ValueError("log object exceeds the product record bound")
         with response["Body"] as body:
             return body.read(262_145)
+
+
+class CaseDatabase:
+    def __init__(self, context):
+        self.context = context
+
+    def bootstrap(self, migrate):
+        import importlib.util
+        import psycopg
+        repository = self.context.root.parents[2]
+        module_path = repository / "migration/migrate.py"
+        spec = importlib.util.spec_from_file_location("sigbot_case_migrations", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        script = module.MigrationRunner(module_path.parent, "postgres").postgres_script()
+        from urllib.parse import urlsplit
+        url = urlsplit(self.context.secret("database_url_env"))
+        if url.hostname != "127.0.0.1" or url.path != "/sigbot":
+            raise ValueError("case bootstrap requires its isolated loopback database")
+        migrate(script)
+        with psycopg.connect(self.context.secret("database_url_env")) as connection:
+            connection.execute((self.context.root / "config/sigbot/init_01.dml.sql").read_text())

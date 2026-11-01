@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Bounded dependency and business lifecycle checks used by API and worker probes.
-use crate::{
-    config::config::{AppDBType, CacheProvider},
-    context::state::SigbotState,
-    store::{mongo::MongoRepository, sqlite::SQLiteRepository},
-};
+use crate::config::config::CacheProvider;
+use crate::config::config::StorageProvider;
+use crate::context::state::SigbotState;
+use crate::storage::sqlite::SQLiteRepository;
 use anyhow::Result;
-use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::routing::get;
+use axum::Json;
+use axum::Router;
 use common_telemetry::readiness::RuntimeReadiness;
 use serde::Serialize;
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct HealthReport {
@@ -38,21 +42,14 @@ impl HealthRouter {
         )
     }
     async fn database(state: &SigbotState) -> Result<()> {
-        match state.config.appdb.db_type {
-            AppDBType::POSTGRESQL | AppDBType::TIMESCALEDB => {
+        match state.config.storage.provider {
+            StorageProvider::Postgres => {
                 let pool = state.postgres_pool().await?;
                 sqlx::query("SELECT 1").execute(&pool).await?;
             }
-            AppDBType::SQLITE => {
-                let repository = SQLiteRepository::<()>::get_or_init(&state.config.appdb.sqlite).await?;
+            StorageProvider::SQLite => {
+                let repository = SQLiteRepository::<()>::get_or_init(&state.config.storage.sqlite).await?;
                 sqlx::query("SELECT 1").execute(repository.get_pool()).await?;
-            }
-            AppDBType::MONGODB => {
-                let repository = MongoRepository::<()>::new(&state.config.appdb.mongodb).await?;
-                repository
-                    .get_database()
-                    .run_command(mongodb::bson::doc! {"ping":1})
-                    .await?;
             }
         }
         Ok(())

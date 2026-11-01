@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
+
+use chrono::Utc;
 
 pub enum GenericValue {
     Int32(i32),

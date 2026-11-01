@@ -119,7 +119,7 @@ class WorkerCarrier:
         if pinned and fingerprints["usr/local/bin/sigbot"] != pinned:
             raise RuntimeError("the product binary changed while preparing the carrier")
         digest = hashlib.sha256(json.dumps(fingerprints, sort_keys=True).encode()).hexdigest()
-        image = f"localhost/sigbot-marketpulse-carrier:{digest[:20]}"
+        image = f"{os.environ["MARKETPULSE_CARRIER_REPOSITORY"]}:{digest[:20]}"
         provenance = {"image": image, "rootfs_sha256": digest, "python": sys.version.split()[0],
                       "explicit_binary_baseline": pinned, "newer_runtime_sources_exist": newer_sources,
                       "source_freshness_by_binary": {name: not newer for name, newer in source_status.items()},
@@ -131,17 +131,21 @@ class WorkerCarrier:
 
     def build_and_import(self):
         provenance = self.stage()
+        archive = self.directory / "image.oci"
         commands = [
             ["sudo", "-n", "podman", "build", "--network=none", "--memory=768m", "--cpu-quota=100000",
              "--tag", provenance["image"], str(self.directory)],
-            ["sudo", "-n", "podman", "save", "--format=oci-archive", "--output", str(self.directory / "image.oci"), provenance["image"]],
-            ["sudo", "-n", "k3s", "ctr", "-n", "k8s.io", "images", "import", str(self.directory / "image.oci")],
+            ["sudo", "-n", "podman", "save", "--format=oci-archive", "--output", str(archive), provenance["image"]],
+            ["sudo", "-n", "k3s", "ctr", "-n", "k8s.io", "images", "import", str(archive)],
         ]
-        for index, command in enumerate(commands):
-            result = subprocess.run(command, capture_output=True, text=True, timeout=self.context.timeout_seconds,
-                                    env={**os.environ, "KUBECONFIG": "/etc/rancher/k3s/k3s.yaml"})
-            evidence = self.context.evidence(f"carrier-{index}.log", result.stdout + result.stderr)
-            if result.returncode:
-                raise RuntimeError(f"carrier command failed; inspect {evidence}")
+        try:
+            for index, command in enumerate(commands):
+                result = subprocess.run(command, capture_output=True, text=True, timeout=self.context.timeout_seconds,
+                                        env={**os.environ, "KUBECONFIG": "/etc/rancher/k3s/k3s.yaml"})
+                evidence = self.context.evidence(f"carrier-{index}.log", result.stdout + result.stderr)
+                if result.returncode:
+                    raise RuntimeError(f"carrier command failed; inspect {evidence}")
+        finally:
+            archive.unlink(missing_ok=True)
         self.context.evidence("carrier-provenance.json", json.dumps(provenance, indent=2))
         return provenance

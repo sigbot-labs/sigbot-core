@@ -8,7 +8,7 @@ docs
 **/*.pyc
 .DS_Store
 **/node_modules
-src/web/dist
-src/web/test-results
-src/web/playwright-report
+web/dist
+web/test-results
+web/playwright-report
 use-cases/*/e2e/reports

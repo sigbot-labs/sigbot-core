@@ -3,10 +3,10 @@ services:
     build:
       context: ../..
       dockerfile: deploy/mock-twitter-service/Dockerfile
-    image: sigbot-marketpulse-twitter:local
+    image: ${MARKETPULSE_TWITTER_IMAGE:?select the image catalog}
     environment:
       MARKETPULSE_MOCK_TOKEN: ${MARKETPULSE_MOCK_TOKEN:?required}
-      MARKETPULSE_PUBLIC_URL: http://mock-twitter:8080
+      MARKETPULSE_PUBLIC_URL: ${MARKETPULSE_TWITTER_PUBLIC_URL:-http://127.0.0.1:18481}
     ports:
     - 127.0.0.1:18481:8080
     mem_limit: 256m
@@ -20,10 +20,8 @@ services:
     - no-new-privileges:true
     healthcheck:
       test:
-      - CMD
-      - python
-      - -c
-      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"
       interval: 5s
       timeout: 3s
       retries: 20

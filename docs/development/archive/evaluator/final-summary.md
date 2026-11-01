@@ -107,7 +107,7 @@ Hyperparameters
 ## 📁 文件结构
 
 ```
-src/evaluator/
+src/component/evaluator/
 ├── src/
 │   ├── evaluator_manager.rs          # 主入口，集成 WorkflowManager
 │   ├── core/

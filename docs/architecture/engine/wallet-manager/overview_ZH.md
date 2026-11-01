@@ -53,7 +53,7 @@ Wallet Database/Schema、Credential、Migration 与 Write API 由本服务私有
 | 角色 | 契约 | 示例 |
 |---|---|---|
 | Service Root | `SigbotWalletManager` | `SigbotTransactionalWalletManager` |
-| Wallet Behavior | `ISigbotWalletManager` | Reservation 与 Event Application |
+| Wallet Behavior | `IWallet` | Reservation 与 Event Application |
 | Accounting | `ISigbotPortfolioLedger` | Double-entry Ledger 实现 |
 | Persistence | `ISigbotPortfolioStore` | `SigbotPostgresPortfolioStore` |
 | Reconciliation Source | Exchange Account Capability | Venue Balance/Position/Fill Query |
@@ -81,7 +81,7 @@ Credential。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotWalletServer`、`ISigbotWalletManager`、`IWalletUpdater` 与
+当前源码暴露 `SigbotWalletServer`、`IWallet`、`IWalletUpdater` 与
 `PostgresWalletUpdater`，使用全局应用 PostgreSQL 配置。Ledger Insert 先单独 Commit，
 Balance/Position 再异步分事务更新；Duplicate Ledger Insert 后仍可能应用 Projection
 Delta，因此尚未达到目标原子/幂等边界。
@@ -92,6 +92,6 @@ Reconciliation。
 
 ## 源码地图
 
-- Wallet Service 与 Persistence Adapter：`src/wallet/`
-- Wallet Domain 类型：`src/types/src/modules/wallet/`
-- Wallet Migration：`tooling/deploy/migrations/`
+- Wallet 数据面组件与 Persistence Adapter：`src/component/wallet/`
+- Wallet Domain 类型：`src/types/src/wallet/`
+- Wallet Migration：`migration/`

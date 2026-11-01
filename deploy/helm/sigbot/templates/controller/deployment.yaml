@@ -1,0 +1,59 @@
+{{- if .Values.sigbot.controller.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-controller
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: controller
+spec:
+  replicas: {{ .Values.sigbot.controller.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      sigbot.io/component: controller
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/platform/configmap.yaml") . | sha256sum }}
+        secrets/revision: {{ .Values.secrets.revision | quote }}
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        sigbot.io/component: controller
+    spec:
+      serviceAccountName: {{ include "sigbot.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      initContainers:
+        {{- include "sigbot.migrationInitContainer" (dict "root" . "image" .Values.sigbot.controller.image) | nindent 8 }}
+      containers:
+        - name: controller
+          image: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.controller.image) | quote }}
+          imagePullPolicy: {{ .Values.sigbot.image.pullPolicy }}
+          command: ["sigbot", "controller"]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          env:
+            {{- include "sigbot.configEnvironment" . | nindent 12 }}
+            - {name: SIGBOT__MGMT__HOST, value: 0.0.0.0}
+            - {name: SIGBOT__MGMT__PORT, value: "9001"}
+            - {name: SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID, value: {{ .Values.sigbot.controller.scope.principalId | quote }}}
+            - {name: SIGBOT__SERVICES__CONTROLLER__IMAGES__SIGBOT, value: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.image) | quote }}}
+            - {name: SIGBOT__SERVICES__CONTROLLER__WORKERS__CPU_MILLIS, value: {{ .Values.sigbot.controller.workerResources.cpuMillis | quote }}}
+            - {name: SIGBOT__SERVICES__CONTROLLER__WORKERS__MEMORY_MB, value: {{ .Values.sigbot.controller.workerResources.memoryMb | quote }}}
+            - {name: SIGBOT__SERVICES__CONTROLLER__WORKERS__PIDS_LIMIT, value: {{ .Values.sigbot.controller.workerResources.pidsLimit | quote }}}
+            {{- include "sigbot.tenantMiddlewareEnvironment" . | nindent 12 }}
+            {{- include "sigbot.secretEnvironment" . | nindent 12 }}
+          ports: [{name: management, containerPort: 9001}]
+          resources:
+            {{- toYaml .Values.sigbot.controller.resources | nindent 12 }}
+          readinessProbe: {httpGet: {path: /_/healthz, port: management}}
+          livenessProbe: {httpGet: {path: /_/livez, port: management}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/sigbot/sigbot.yaml, subPath: sigbot.yaml, readOnly: true}
+            - {name: scratch, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: {{ include "sigbot.fullname" . }}-config}
+        - name: scratch
+          emptyDir: {sizeLimit: 256Mi}
+{{- end }}

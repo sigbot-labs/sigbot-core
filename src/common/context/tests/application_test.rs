@@ -1,20 +1,21 @@
-use anyhow::{bail, Result};
+use anyhow::bail;
+use anyhow::Result;
 use async_trait::async_trait;
-use common_context::{ApplicationContext, IProvider};
-use std::{
-    future::{poll_fn, Future},
-    pin::Pin,
-    sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-    task::Poll,
-    time::Duration,
-};
-use tokio::{
-    sync::{Barrier, Notify},
-    time::timeout,
-};
+use common_context::ApplicationContext;
+use common_context::IProvider;
+use std::future::poll_fn;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::task::Poll;
+use std::time::Duration;
+use tokio::sync::Barrier;
+use tokio::sync::Notify;
+use tokio::time::timeout;
 
 const DEADLINE: Duration = Duration::from_secs(3);
 

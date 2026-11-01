@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 
 from common.broker import BrokerCredentials
+from common.context import UuidV7
 from common.funding import FundingFixture
 from common.runtime import RuntimeConfiguration
 from common.services import ProductServices
@@ -17,6 +18,7 @@ class ReplayConfiguration(RuntimeConfiguration):
         super().__init__(context)
         self.run_id = context.run_id
         self.history = history
+        self.mode = "backtest"
         self.management_port = 19510
 
     def strategy(self):
@@ -40,8 +42,8 @@ class ReplayConfiguration(RuntimeConfiguration):
 
     def subscriptions(self):
         scope = self.scope
-        key = f"{scope['env']}:{scope['tenant_id']}:{scope['space_id']}"
-        base = f"internal/v2/{scope['env']}/{scope['tenant_id']}/{scope['space_id']}"
+        key = f"{scope['env']}:{scope['tenant_id']}"
+        base = f"internal/v2/{scope['env']}/{scope['tenant_id']}"
         workflow = f"{base}/workflow/{self.workflow_id}"
         account = f"{base}/account/{self.account_id}"
         query = f"datafeed.query:{key}:{self.workflow_id}:3"
@@ -71,7 +73,7 @@ class ReplayConfiguration(RuntimeConfiguration):
 
     def backtest(self):
         argument = super().backtest()
-        argument["properties"].update(bind_addr="127.0.0.1:18485", replay_v2="true", clock_mode="virtual")
+        argument["properties"].update(bind_addr="127.0.0.1:18485", clock_mode="virtual")
         matching = json.loads(argument["properties"]["matching_config"])
         matching["virtual_clock"] = True
         argument["properties"]["matching_config"] = json.dumps(matching)
@@ -79,7 +81,6 @@ class ReplayConfiguration(RuntimeConfiguration):
             "identity": {"scope": self.scope, "workflow_id": self.workflow_id, "node_id": 7, "run_id": self.run_id},
             "history": self.history, "data_node_id": 3, "evaluation_node_id": 4,
             "barrier": self.subscriptions(), "page_size": 16, "max_steps": 1000,
-            "database_url_env": self.context.config["database_url_env"],
             "warmup_from": (datetime.fromisoformat(self.history["from"]) - timedelta(minutes=5)).isoformat(),
             "warmup_limit": 1000,
         })
@@ -103,10 +104,11 @@ class ReplayServices(ProductServices):
     def seed(self):
         scope = self.context.config["scope"]
         with psycopg.connect(self.context.secret("database_url_env")) as connection:
-            row = connection.execute("SELECT env,tenant_id,space_id,replay_of FROM workflow_run WHERE run_id=%s",
+            row = connection.execute("SELECT env,tenant_id::text,replay_of::text FROM wf_run WHERE run_id=%s",
                                      (self.configuration.run_id,)).fetchone()
-            if row != (scope["env"], scope["tenant_id"], scope["space_id"], self.configuration.history["run_id"]):
+            if row != (scope["env"], scope["tenant_id"], self.configuration.history["run_id"]):
                 raise RuntimeError("historical replay run lacks its explicit source binding")
+            self.upsert_service_bindings(connection)
 
     def before_start(self, name):
         if name == "backtest":
@@ -122,14 +124,14 @@ class ReplayFixture:
         with psycopg.connect(context.secret("database_url_env")) as connection:
             if history is None:
                 source = connection.execute(
-                    "SELECT run_id,workflow_id FROM workflow_run r WHERE env=%s AND tenant_id=%s AND space_id=%s "
-                    "AND (%s::text IS NULL OR run_id=%s) AND EXISTS(SELECT 1 FROM order_record o WHERE o.run_id=r.run_id AND state='filled') "
-                    "ORDER BY started_at DESC LIMIT 1", (scope["env"], scope["tenant_id"], scope["space_id"], requested_run, requested_run)).fetchone()
+                    "SELECT run_id::text,workflow_id::text FROM wf_run r WHERE env=%s AND tenant_id=%s "
+                    "AND (%s::text IS NULL OR run_id=%s) AND EXISTS(SELECT 1 FROM ord_order o WHERE o.run_id=r.run_id AND state='filled') "
+                    "ORDER BY started_at DESC LIMIT 1", (scope["env"], scope["tenant_id"], requested_run, requested_run)).fetchone()
                 if not source:
                     raise RuntimeError("replay requires a previously completed actual product pipeline")
-                begin = connection.execute("SELECT MIN(available_at) FROM market_event WHERE env=%s AND tenant_id=%s AND space_id=%s AND run_id=%s",
-                                           (scope["env"], scope["tenant_id"], scope["space_id"], source[0])).fetchone()[0]
-                last = connection.execute("SELECT MAX(updated_at) FROM order_record WHERE run_id=%s AND state='filled'", (source[0],)).fetchone()[0]
+                begin = connection.execute("SELECT MIN(available_at) FROM mkt_event WHERE env=%s AND tenant_id=%s AND run_id=%s",
+                                           (scope["env"], scope["tenant_id"], source[0])).fetchone()[0]
+                last = connection.execute("SELECT MAX(updated_at) FROM ord_order WHERE run_id=%s AND state='filled'", (source[0],)).fetchone()[0]
                 if begin is None or last is None:
                     raise RuntimeError("historical source lacks persisted market facts and completed executions")
                 until = min(frozen, last + timedelta(seconds=5))
@@ -141,17 +143,21 @@ class ReplayFixture:
             if history["scope"] != scope:
                 raise RuntimeError("fixed replay history belongs to a different source scope")
             target_scope = {**scope, "env": f"replay-marketpulse-{context.run_id}-{context.round_number}-{pass_number}"}
+            workflow = UuidV7.generate()
             workflow = connection.execute(
-                "INSERT INTO s_workflow(env,tenant_id,space_id,name,status,flow_json) "
-                "SELECT %s,tenant_id,space_id,%s,'RUNNING',flow_json FROM s_workflow WHERE id=%s RETURNING id",
-                (target_scope["env"], "Marketpulse frozen replay", history["workflow_id"])).fetchone()[0]
-            wallet = connection.execute("SELECT nextval(pg_get_serial_sequence('s_wallets','id'))").fetchone()[0]
-            connection.execute("INSERT INTO s_wallets(id,tenant_id,account_id,exchange,mode,env,space_id) VALUES(%s,%s,%s,'BINANCE','backtest',%s,%s)",
-                               (wallet, str(scope["tenant_id"]), wallet, target_scope["env"], scope["space_id"]))
-            run_id = f"{context.run_id}-replay-{context.round_number}-{pass_number}"
-            connection.execute("INSERT INTO workflow_run(run_id,workflow_id,env,tenant_id,space_id,state,replay_of) VALUES(%s,%s,%s,%s,%s,'running',%s)",
-                               (run_id, workflow, target_scope["env"], scope["tenant_id"], scope["space_id"], history["run_id"]))
-        config = {**context.config, "scope": target_scope, "workflow_id": workflow, "account_id": wallet}
+                "INSERT INTO wf_workflow(id,env,tenant_id,name,status,flow_json,created_by,updated_by) "
+                "SELECT %s,%s,tenant_id,%s,'RUNNING',flow_json,'marketpulse-e2e','marketpulse-e2e' "
+                "FROM wf_workflow WHERE id=%s RETURNING id::text",
+                (workflow, target_scope["env"], "Marketpulse frozen replay", history["workflow_id"])).fetchone()[0]
+            wallet = UuidV7.generate()
+            account = UuidV7.generate()
+            connection.execute("INSERT INTO wlt_wallet(id,tenant_id,account_id,exchange,mode,env) VALUES(%s,%s,%s,'BINANCE','backtest',%s)",
+                               (wallet, scope["tenant_id"], account, target_scope["env"]))
+            run_id = UuidV7.generate()
+            connection.execute("INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state,replay_of) VALUES(%s,%s,%s,%s,'running',%s)",
+                               (run_id, workflow, target_scope["env"], scope["tenant_id"], history["run_id"]))
+        config = {**context.config, "scope": target_scope, "workflow_id": workflow,
+                  "account_id": account, "wallet_id": wallet}
         target = replace(context, config=config, run_id=run_id,
                          report_root=context.report_root / "replay" / f"round-{context.round_number}" / f"pass-{pass_number}")
         return target, history
@@ -159,4 +165,4 @@ class ReplayFixture:
     @staticmethod
     def activate(context):
         BrokerCredentials.initialize(context)
-        os.environ[context.config["pipeline"]["run_id_env"]] = context.run_id
+        os.environ[context.config["workflow"]["run_id_env"]] = context.run_id

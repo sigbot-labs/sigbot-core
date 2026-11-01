@@ -121,7 +121,7 @@ type SigbotResearchManager struct {
 ### Rust Implementation (evaluator_manager.rs)
 ```rust
 pub struct SigbotEvaluatorManager {
-    messager: Arc<Mutex<Option<Arc<dyn ISigbotMessagerClient + Send + Sync>>>>,
+    messager: Arc<Mutex<Option<Arc<dyn IMessager + Send + Sync>>>>,
     scheduler: Arc<Mutex<Option<JobScheduler>>>,
     job_registry: Arc<ConcurrentMap<String, Arc<SigbotEvaluationJob>>>,
     stop_chan: Arc<RwLock<bool>>,

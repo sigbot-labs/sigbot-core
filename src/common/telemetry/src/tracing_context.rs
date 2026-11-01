@@ -22,7 +22,9 @@
 use std::collections::HashMap;
 
 use opentelemetry::propagation::TextMapPropagator;
-use opentelemetry::trace::{TraceContextExt, Tracer, TracerProvider};
+use opentelemetry::trace::TraceContextExt;
+use opentelemetry::trace::Tracer;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use std::sync::OnceLock;
 use tracing_opentelemetry::OpenTelemetrySpanExt;

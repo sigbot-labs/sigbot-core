@@ -19,7 +19,10 @@
 // This includes modifications and derived works.
 
 use std::fmt;
-use strum::{AsRefStr, EnumIter, EnumString, FromRepr};
+use strum::AsRefStr;
+use strum::EnumIter;
+use strum::EnumString;
+use strum::FromRepr;
 
 /// Common status code for public API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsRefStr, EnumIter, FromRepr)]

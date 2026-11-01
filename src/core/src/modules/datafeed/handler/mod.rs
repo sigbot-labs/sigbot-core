@@ -18,4 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod datafeed_handler;
+pub mod datafeed;
+pub mod market;
+pub mod query;

@@ -53,7 +53,8 @@ mod tests {
     use std::any::Any;
 
     use snafu::prelude::*;
-    use snafu::{GenerateImplicitData, Location};
+    use snafu::GenerateImplicitData;
+    use snafu::Location;
 
     use super::*;
     use crate::ext::StackError;

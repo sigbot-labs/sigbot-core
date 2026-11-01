@@ -175,8 +175,8 @@ fn setup_linux_python_rpath() -> std::io::Result<()> {
 
     for path_str in common_paths {
         let path = std::path::PathBuf::from(path_str);
-        if path.exists() {
-            if path
+        if path.exists()
+            && path
                 .read_dir()
                 .map(|mut entries| {
                     entries.any(|e| {
@@ -185,9 +185,8 @@ fn setup_linux_python_rpath() -> std::io::Result<()> {
                     })
                 })
                 .unwrap_or(false)
-            {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
-            }
+        {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
         }
     }
 

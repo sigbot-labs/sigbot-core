@@ -78,7 +78,7 @@ Provider-to-canonical 映射。两者都不能运行 Strategy 或 Order 逻辑�
 
 ## 实现对齐
 
-当前源码暴露 `SigbotDatafeedIngestor` 与 `ISigbotDatafeedClient`，并有 Binance、
+当前源码暴露 `SigbotDatafeedIngestor` 与 `IDatafeed`，并有 Binance、
 Twitter、TruthSocial Provider 骨架。多个 Subscribe/Process 路径为空或未实现；事件
 尚未转换成上述规范契约，发布时可能保留未展开 Topic Placeholder。Source Sharing
 Key、逻辑 Binding、Backpressure 与可靠 Fan-out 尚未完成。
@@ -88,6 +88,6 @@ Source 等扩展，只有存在具体 Adapter 与 Contract Test 后才算支持�
 
 ## 源码地图
 
-- Datafeed daemon 与 Provider：`src/datafeed/`
-- Feed 与 Message 类型：`src/types/src/modules/`
+- Datafeed daemon 与 Provider：`src/component/datafeed/`
+- Feed 与 Message 类型：`src/types/src/`
 - Messager SDK：`src/messager/`

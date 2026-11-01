@@ -1,3 +1,0 @@
-{{- if .Values.pgvector.enabled }}
-{{- fail "pgvector is a systemdb PostgreSQL extension; migrate data and set pgvector.enabled=false" }}
-{{- end }}

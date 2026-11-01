@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+common-context.workspace = true
 # Other modules dependencies.
 common-macro = { workspace = true }
 common-error = { workspace = true }
@@ -19,14 +20,17 @@ common-telemetry = { workspace = true, features = [
 sigbot-types.workspace = true
 sigbot-utils.workspace = true
 sigbot-core.workspace = true
-sigbot-deployer.workspace = true
+sigbot-controller.workspace = true
+sigbot-a2a.workspace = true
+sigbot-http.workspace = true
+sigbot-mcp.workspace = true
 sigbot-messager.workspace = true
 sigbot-datafeed.workspace = true
 sigbot-strategy-runner.workspace = true
 sigbot-order.workspace = true
 sigbot-wallet.workspace = true
 sigbot-backtest.workspace = true
-sigbot-notification.workspace = true
+sigbot-notifier.workspace = true
 sigbot-logservice.workspace = true
 sigbot-exporter.workspace = true
 sigbot-evaluator.workspace = true
@@ -42,8 +46,6 @@ serde_yaml.workspace = true
 tokio.workspace = true
 axum.workspace = true
 axum-prometheus.workspace = true
-tower.workspace = true
-tower-http.workspace = true
 tower-cookies.workspace = true
 lazy_static.workspace = true
 log.workspace = true

@@ -23,6 +23,5 @@ pub mod context;
 pub mod llm;
 pub mod mgmt;
 pub mod modules;
-pub mod store;
-pub mod sys;
+pub mod storage;
 pub mod util;

@@ -1,0 +1,69 @@
+{{- if .Values.sigbot.api.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-server
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: api
+spec:
+  replicas: {{ .Values.sigbot.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      sigbot.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/platform/configmap.yaml") . | sha256sum }}
+        secrets/revision: {{ .Values.secrets.revision | quote }}
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        sigbot.io/component: api
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      initContainers:
+        {{- include "sigbot.migrationInitContainer" (dict "root" . "image" .Values.sigbot.image) | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.image) | quote }}
+          imagePullPolicy: {{ .Values.sigbot.image.pullPolicy }}
+          command: ["sigbot", "api"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports:
+            - {name: http, containerPort: 9000}
+            - {name: management, containerPort: 9001}
+            {{- if .Values.sigbot.api.protocols.mcp.enabled }}
+            - {name: mcp, containerPort: {{ .Values.sigbot.api.protocols.mcp.port }}}
+            {{- end }}
+            {{- if .Values.sigbot.api.protocols.a2a.enabled }}
+            - {name: a2a, containerPort: {{ .Values.sigbot.api.protocols.a2a.port }}}
+            {{- end }}
+          env:
+            {{- include "sigbot.configEnvironment" . | nindent 12 }}
+            - {name: SIGBOT__MGMT__HOST, value: 0.0.0.0}
+            - {name: SIGBOT__MGMT__PORT, value: "9001"}
+            - {name: SIGBOT__SERVICES__API__MCP__ENABLED, value: {{ .Values.sigbot.api.protocols.mcp.enabled | quote }}}
+            - {name: SIGBOT__SERVICES__API__MCP__BIND_ADDRESS, value: {{ printf "0.0.0.0:%v" .Values.sigbot.api.protocols.mcp.port | quote }}}
+            - {name: SIGBOT__SERVICES__API__A2A__ENABLED, value: {{ .Values.sigbot.api.protocols.a2a.enabled | quote }}}
+            - {name: SIGBOT__SERVICES__API__A2A__BIND_ADDRESS, value: {{ printf "0.0.0.0:%v" .Values.sigbot.api.protocols.a2a.port | quote }}}
+            {{- include "sigbot.tenantMiddlewareEnvironment" . | nindent 12 }}
+            {{- include "sigbot.secretEnvironment" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.sigbot.api.resources | nindent 12 }}
+          readinessProbe: {httpGet: {path: /_/healthz, port: management}}
+          livenessProbe: {httpGet: {path: /_/livez, port: management}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/sigbot/sigbot.yaml, subPath: sigbot.yaml, readOnly: true}
+            - {name: storage, mountPath: /var/lib/sigbot/storage}
+      volumes:
+        - name: config
+          configMap: {name: {{ include "sigbot.fullname" . }}-config}
+        - name: storage
+          {{- if .Values.sigbot.api.persistence.storageClass }}
+          persistentVolumeClaim: {claimName: {{ include "sigbot.fullname" . }}-storage}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

@@ -10,7 +10,7 @@ Stream，Order Manager 组合私有交易，Wallet Manager 用于账户对账，
 
 ## Capability 模型
 
-`ISigbotExchangeClient` 标识 Venue/Account Adapter，并只暴露其实际实现的 Capability
+`IExchange` 标识 Venue/Account Adapter，并只暴露其实际实现的 Capability
 Port：
 
 | Port | 职责 |
@@ -27,7 +27,7 @@ Spot、Margin、Perpetual/Futures、Option、Equity 与 Prediction Market 分别
 ## Adapter 结构
 
 ```text
-ISigbotExchangeClient
+IExchange
   -> SigbotBinanceExchangeClient
        -> Spot capabilities
        -> USD-M futures capabilities
@@ -35,7 +35,7 @@ ISigbotExchangeClient
   -> SigbotCoinbaseExchangeClient
   -> SigbotIbkrExchangeClient
   -> SigbotSchwabExchangeClient
-  -> SigbotSimulatedExchangeClient
+  -> BacktestExchange
 ```
 
 图中 Provider 名称表达目标 Adapter 边界，不代表每个 Adapter 当前都已实现。Provider
@@ -77,7 +77,7 @@ Multiplier、Margin Mode 与支持的 Order Feature。Price、Quantity、Fee、B
 
 真实订单入口为 `ExecutionAdapterFactory` → `LiveExecutionFactory`。它按配置选择
 Binance Spot 官方 SDK、IBKR `ibapi` TWS/Gateway SDK、Polymarket 官方 V2/V3 SDK。
-Paper/Simulated 选择回测执行接口，禁止改写 Live 交易所 URL。旧市场数据 Source
+Backtest 选择专用历史执行接口，禁止改写 Live 交易所 URL。旧市场数据 Source
 接口仍按原目录保留；它们不作为这些真实订单的执行路径。
 
 Binance 使用业务键的稳定编码作为 client order ID，关闭 SDK 写入重试。
@@ -86,7 +86,7 @@ IBKR 和 Polymarket 先 `prepare`，随后 Order 仓库在 Wallet 预占成功�
 Polymarket 保存官方 Solidity ABI 编码、签名与 EIP-712 order hash。重启只读取已保存
 负载并对账，不能重新分配 ID、salt 或签名后盲目提交。
 
-准备负载用 OpenSSL AES-256-GCM 加密，AAD 绑定租户、空间、环境、账户、Workflow、
+准备负载用 OpenSSL AES-256-GCM 加密，AAD 绑定租户、环境、账户、Workflow、
 节点、run/seq、交易意图及交易所订单 ID。`prepared_keys.active_key` 选择密钥版本，
 `prepared_keys.keys` 映射版本到宿主环境变量名（值为 32 字节十六进制密钥）。轮换时
 保留尚有未终结订单的旧密钥。密钥和交易凭据均不进入策略进程。
@@ -125,4 +125,4 @@ finalized、确认深度达标，以及 maker/token/side/exchange 与订单完�
 ## 源码地图
 
 - Exchange SDK 与 Provider Adapter：`src/exchange/`
-- 共享 Exchange 类型：`src/types/src/modules/exchange/`
+- 共享 Exchange 类型：`src/types/src/exchange/`

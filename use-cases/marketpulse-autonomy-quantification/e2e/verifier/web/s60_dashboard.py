@@ -8,7 +8,7 @@ def verify(context):
     directory = context.report_root / "web"
     directory.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, executable_path=os.environ.get("MARKETPULSE_CHROMIUM_PATH"))
+        browser = playwright.chromium.launch(headless=True, executable_path=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE", os.environ.get("MARKETPULSE_CHROMIUM_PATH")))
         page = browser.new_page(viewport={"width": 1440, "height": 1000}, device_scale_factor=1)
         page.set_default_timeout(min(context.timeout_seconds, 30) * 1000)
         errors = []

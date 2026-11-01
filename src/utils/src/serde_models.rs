@@ -18,29 +18,34 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::de;
+
+use serde::Deserialize;
+
+use serde::Deserializer;
+
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::option::Option;
 
-pub fn copy_properties<T: Serialize, U: for<'de> Deserialize<'de>>(
-    dst: &mut U,
-    src: &T,
-) -> Result<(), serde_json::Error>
+pub fn copy_properties<T, U>(dst: &mut U, src: &T) -> Result<(), serde_json::Error>
 where
-    U: Serialize + Clone,
+    T: Serialize,
+    U: for<'de> Deserialize<'de> + Serialize + Clone,
 {
     copy_properties_with_map(dst, src, None)
 }
 
-pub fn copy_properties_with_map<T: Serialize, U: for<'de> Deserialize<'de>>(
+pub fn copy_properties_with_map<T, U>(
     dst: &mut U,
     src: &T,
     fields_map: Option<&HashMap<String, String>>,
 ) -> Result<(), serde_json::Error>
 where
-    U: Serialize + Clone,
+    T: Serialize,
+    U: for<'de> Deserialize<'de> + Serialize + Clone,
 {
     let src_value = serde_json::to_value(src)?;
     let dst_value = serde_json::to_value(&dst)?;
@@ -82,7 +87,7 @@ where
 ///
 /// #[derive(Deserialize)]
 /// struct Config {
-///     #[serde(deserialize_with = "sigbot_utils::serde_beans::deserialize_u16_from_string_or_number")]
+///     #[serde(deserialize_with = "sigbot_utils::serde_models::deserialize_u16_from_string_or_number")]
 ///     port: u16,
 /// }
 /// ```
@@ -145,7 +150,7 @@ where
 ///
 /// #[derive(Deserialize)]
 /// struct Config {
-///     #[serde(deserialize_with = "sigbot_utils::serde_beans::deserialize_option_u32_from_string_or_number")]
+///     #[serde(deserialize_with = "sigbot_utils::serde_models::deserialize_option_u32_from_string_or_number")]
 ///     max_connections: Option<u32>,
 /// }
 /// ```
@@ -255,11 +260,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::SystemTime;
+    use std::time::UNIX_EPOCH;
 
     use super::*;
 
-    use serde::{Deserialize, Serialize};
+    use serde::Deserialize;
+
+    use serde::Serialize;
     use validator::Validate;
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Validate, Default)]

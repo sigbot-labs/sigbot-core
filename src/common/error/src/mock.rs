@@ -25,7 +25,9 @@ use std::fmt;
 
 use snafu::Location;
 
-use crate::ext::{ErrorExt, StackError};
+use crate::ext::ErrorExt;
+
+use crate::ext::StackError;
 use crate::status_code::StatusCode;
 
 /// A mock error mainly for test.

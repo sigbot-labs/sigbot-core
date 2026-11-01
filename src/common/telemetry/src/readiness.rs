@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Process-local lifecycle health; contains no request identity or user context.
-use std::{
-    collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex, OnceLock,
-    },
-};
+use std::collections::BTreeMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 struct Component {
     business: bool,

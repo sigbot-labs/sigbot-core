@@ -4,17 +4,17 @@
 
 ## Introduction
 
-Sigbot is a lightweight, Rust-based AI-driven trading bot that dynamically generates strategy code via LLM. It consists of multiple components - **APIServer**, **deployer**, **datafeed-ingestor**, **strategy-runner**, **backtest-runner**, **notification-forwarder**, **order-manager**, **wallet-manager** - working together to provide a robust, multi-tenant trading platform.
+Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform services are the **HTTP/A2A/MCP APIs**, **controller**, **order service**, and **wallet service**. The controller places isolated **datafeed**, **evaluator**, **strategy**, **backtest**, **logservice**, **notifier**, and **exporter** components for each tenant and Workflow on Docker or Kubernetes workers.
 
 ## Features
 
-- **Multi-tenant Architecture**: Support for managing tenants, users, and component deployments via Kubernetes or hosted environments;
-- **Dynamic Strategy Generation**: AI-powered strategy code generation using LangChain-based AI;
-- **Real-time Market Data Processing**: Ingest market data from multiple sources (Binance, Twitter, TruthSocial, Coinmarketcap, etc.) and publish via EMQx/Kafka;
-- **Historical Data Archiving**: Async archiving of market data to PostgreSQL/TimescaleDB for backtesting;
-- **Live & Backtest Trading**: Execute strategies in both live trading and backtest modes with position management;
-- **Multi-channel Notifications**: Forward trading signals and notifications to Email, Telegram, WeChat, and other platforms;
-- **Lightweight and Efficient**: Built with Rust async Axum framework for high performance;
+- **Tenant and Workflow isolation**: Authguard supplies platform identity and authorization; MQTT topics, storage ownership, and worker resources are scoped by `env`, `tenant_id`, and `workflow_id`.
+- **Deterministic strategy effects**: Strategies emit intents, bounded queries, and timers; they never submit orders directly.
+- **Real-time market and news ingestion**: Binance, Twitter/X, Truth Social, Federal Reserve, and Treasury facts retain source, event time, available time, sequence, and revision.
+- **Durable asynchronous processing**: EMQX QoS 1 persistent sessions plus transactional Inbox/Outbox provide replay, deduplication, and restart recovery.
+- **Three execution modes**: `live` uses real exchange APIs, `paper` uses a simulated exchange API, and `backtest` uses the isolated historical matching service.
+- **Authoritative financial state**: Order prechecks, Wallet reservations, immutable double-entry journals, rebuildable balances and positions, and venue reconciliation are separated by write ownership.
+- **Traceable evaluation and delivery**: LLM assessments separate facts from inference; logs archive to immutable S3 chunks; Email, Telegram, and in-app notifications retain idempotent delivery state.
 
 ## Development
 

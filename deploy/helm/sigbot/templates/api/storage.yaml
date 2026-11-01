@@ -1,0 +1,14 @@
+{{- if .Values.sigbot.api.persistence.storageClass }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-storage
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: api
+spec:
+  accessModes: [{{ .Values.sigbot.api.persistence.accessMode }}]
+  storageClassName: {{ .Values.sigbot.api.persistence.storageClass | quote }}
+  resources:
+    requests: {storage: {{ .Values.sigbot.api.persistence.size }}}
+{{- end }}

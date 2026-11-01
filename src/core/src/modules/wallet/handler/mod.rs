@@ -18,7 +18,4 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod balance_handler;
-pub mod ledger_handler;
-pub mod position_handler;
-pub mod wallet_handler;
+pub mod wallet;

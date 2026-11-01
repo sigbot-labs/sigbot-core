@@ -16,7 +16,7 @@
 tenant_id / pipeline_id / strategy_id
 decision_time
 market_window + terminal_feed_event_id
-evaluation_snapshot + evaluation_id
+eval_snapshot + evaluation_id
 portfolio_snapshot + portfolio_version
 strategy_code_version
 validated_hyperparameters
@@ -62,7 +62,7 @@ Feed Event、Evaluation、Portfolio、Strategy 与 Risk Version Reference。
 | 角色 | 契约 | 实现 |
 |---|---|---|
 | Service Root | `SigbotStrategyRunner` | Strategy-scoped Runtime |
-| Execution Engine | `ISigbotStrategyExecutor` | `SigbotPythonStrategyExecutor`；未来 Sandbox Runtime 需显式契约 |
+| Execution Engine | `IStrategy` | `PythonStrategy`；未来 Sandbox Runtime 需显式契约 |
 | Input Join | `ISigbotStrategyContextAssembler` | 感知 Event Time 与 Version 的 Assembler |
 | Signal Validation | `ISigbotTradeSignalValidator` | 发布前 Schema 与硬边界校验 |
 
@@ -81,8 +81,8 @@ Process；Runtime 只执行已批准、不可变的 Strategy Artifact。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotStrategyRunner`、`ISigbotStrategyExecutor` 与
-`SigbotPythonStrategyExecutor`。当前 Execution Input 缺少完整 Evaluation/Portfolio
+当前源码暴露 `SigbotStrategyRunner`、`IStrategy` 与
+`PythonStrategy`。当前 Execution Input 缺少完整 Evaluation/Portfolio
 契约，尚未订阅 Evaluation Stream，并存在 Python 执行后直接调用 Binance Exchange
 Client 的路径；Batch Execution 也未完成。
 
@@ -92,6 +92,6 @@ Client 的路径；Batch Execution 也未完成。
 
 ## 源码地图
 
-- Runner：`src/strategy/runner/`
-- Python Executor 与 SDK：`src/strategy/sdk/`
-- 共享 Strategy 类型：`src/types/src/modules/strategy/`
+- Runner：`src/component/strategy/runner/`
+- Python Executor 与 SDK：`src/component/strategy/sdk/`
+- 共享 Strategy 类型：`src/types/src/strategy/`

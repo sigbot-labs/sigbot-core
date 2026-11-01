@@ -18,7 +18,7 @@ properties:
       "timeout_ms":5000,"min_request_interval_ms":1000}]
 ```
 
-租户、环境、space、Workflow、节点和 run 继续使用现有运行配置。`source` 必须与查询中的来源一致；`symbols` 是查询品种到交易所原生品种的显式映射。上例在 2026-10-28 通过真实 Binance `exchangeInfo` 与 Hyperliquid `spotMeta` 核对，二者为 HYPE/USDC。新的映射必须核对实际资产和计价币，不会自动把现货、永续、包装资产或 USDT/USDC 视为同一种标的。
+租户、环境、Workflow、节点和 run 继续使用现有运行配置。`source` 必须与查询中的来源一致；`symbols` 是查询品种到交易所原生品种的显式映射。上例在 2026-10-28 通过真实 Binance `exchangeInfo` 与 Hyperliquid `spotMeta` 核对，二者为 HYPE/USDC。新的映射必须核对实际资产和计价币，不会自动把现货、永续、包装资产或 USDT/USDC 视为同一种标的。
 
 支持 `binance_spot`、`hyperliquid_spot`、`hyperliquid_perpetual`。Hyperliquid 现货使用元数据中的 `@index`（PURR/USDC 是官方例外），永续使用原生 coin 名。适配器固定使用官方公共端点，不接受交易密钥或任意 URL。Binance 使用已安装的官方 `binance-sdk`；Hyperliquid 使用官方 `InfoClient`、`InfoRequest`、HTTP transport 和响应模型。SDK 0.6 的成交响应遗漏 `tid`，通过组合模型补充该字段，避免使用可能全零的 `hash` 去重。
 
@@ -32,7 +32,7 @@ properties:
 
 ## 持久性与重启
 
-接收请求先用短事务保存 Inbox pending，随后释放数据库事务进行 SDK I/O。成功后在一个事务中保存 `market_event`、原始投递映射、来源检查点、`W/feed/market` Outbox、快照结果 Outbox 和 Inbox done，最后才允许 MQTT ACK。
+接收请求先用短事务保存 Inbox pending，随后释放数据库事务进行 SDK I/O。成功后在一个事务中保存 `mkt_event`、原始投递映射、来源检查点、`W/feed/market` Outbox、快照结果 Outbox 和 Inbox done，最后才允许 MQTT ACK。
 
 行情使用原生 trade ID：`{provider}:{venue_symbol}:trade:{id}`，外部 `seq` 为该成交 ID，初始 `revision=0`；这不是新增消息关联 ID。相同事实再次查询复用已保存的事件时间、可得时间与 wire identity；相同事实身份的内容变化必须显式修订，不能覆盖已有事实。响应包含本次实际获取并规范化的事实，不借并发写入的另一条“最新”记录替换它。
 
@@ -42,7 +42,7 @@ SDK 原生成交的检查点分区为 `market:{source}:{symbol}:last_trade`，�
 
 ## 验证入口与范围
 
-`src/exchange/tests/client/public_market_test.rs` 覆盖配置、真实交易编号、未来时间和缺失字段；其中 ignored 测试只读真实 Binance/Hyperliquid API，不需要资金凭据。`src/datafeed/tests/server/market_query_test.rs` 使用真实 PG 验证 AS_OF 不调用主动来源、失败不写部分事实、重复请求及重启；第二个 ignored 测试同时调用两个真实公共 API 并核对原子持久结果。
+`src/exchange/tests/client/public_market_test.rs` 覆盖配置、真实交易编号、未来时间和缺失字段；其中 ignored 测试只读真实 Binance/Hyperliquid API，不需要资金凭据。`src/component/datafeed/tests/server/market_query_test.rs` 使用真实 PG 验证 AS_OF 不调用主动来源、失败不写部分事实、重复请求及重启；第二个 ignored 测试同时调用两个真实公共 API 并核对原子持久结果。
 
 这些测试需由统一构建和验收入口执行；代码中的 ignored 标记不代表已通过。此功能没有实现深度撮合、流动性承诺、清算热力图或衍生指标。
 

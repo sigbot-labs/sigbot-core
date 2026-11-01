@@ -19,4 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod handler;
-pub mod store;
+pub(crate) mod storage;

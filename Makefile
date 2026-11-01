@@ -1,125 +1,123 @@
 # SPDX-License-Identifier: GPL-3.0-only
-
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-
 CARGO ?= cargo
-DOCKER ?= docker
-
+NPM ?= npm
+PYTHON ?= python3
+CONTAINER_CLI ?= docker
+VERSION ?= $(shell sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
 CARGO_PROFILE ?= dev
-FEATURES ?=
-TARGET ?=
-BUILD_JOBS ?=
-CARGO_BUILD_ARGS ?=
-TEST_FILTER ?=
-IT_FILTER ?=
-IT_ARGS ?=
-
-VERSION := $(shell sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
-SWAGGER_UI_ARCHIVE := $(CURDIR)/tooling/build/deps/swagger-ui-5.17.14.zip
-export SWAGGER_UI_DOWNLOAD_URL := file:$(SWAGGER_UI_ARCHIVE)
-
-IMAGE ?= docker.io/wl4g/sigbot:$(VERSION)
-PLATFORM ?= linux/amd64
-BUILD_MIRROR_URL ?= http://mirrors.aliyun.com
-DOCKERFILE := tooling/build/docker/Dockerfile
-COMPOSE_FILE := tooling/deploy/docker/docker-compose.yaml
-DOCKER_BUILD_ARGS ?=
-
-GIT_REPOSITORY := $(shell git config --get remote.origin.url 2>/dev/null || echo unknown)
-GIT_COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
-GIT_BRANCH := $(shell git branch --show-current 2>/dev/null || echo unknown)
-
-CARGO_PROFILE_ARG = $(if $(filter dev,$(CARGO_PROFILE)),,--profile $(CARGO_PROFILE))
-CARGO_FEATURE_ARGS = $(if $(strip $(FEATURES)),--features $(FEATURES),)
-CARGO_TARGET_ARG = $(if $(strip $(TARGET)),--target $(TARGET),)
-CARGO_JOBS_ARG = $(if $(strip $(BUILD_JOBS)),--jobs $(BUILD_JOBS),)
-DOCKER_PROXY_ARGS = $(if $(strip $(HTTPS_PROXY)),--build-arg HTTPS_PROXY=$(HTTPS_PROXY) --build-arg HTTP_PROXY=$(HTTPS_PROXY),)
-DOCKER_CARGO_ARGS = --locked $(CARGO_FEATURE_ARGS)
-
-.PHONY: help version build build-release test test-ut test-it it fmt fmt-check clippy clean \
-	build-image push-image compose-up compose-down compose-ps
+BUILD_JOBS ?= 2
+CARGO_ARGS ?=
+E2E_ARGS ?=
+E2E_TIMEOUT ?= 600
+RELEASE_DIR ?= dist
+HELM_CHART := deploy/helm/sigbot
+COMPOSE_FILE := deploy/docker/docker-compose.yaml
+COMPOSE_ENV ?= deploy/docker/.env
+IMAGE_GOALS := image-source build-image build-runtime-image build-web-image docker-up docker-down docker-logs e2e e2e-docker e2e-k8s release
+ifneq ($(strip $(filter $(IMAGE_GOALS),$(MAKECMDGOALS))),)
+ifeq ($(origin IN_CN_GFW),undefined)
+IN_CN_GFW := $(shell status=$$(curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 https://registry-1.docker.io/v2/ 2>/dev/null || true); if [ "$$status" = 200 ] || [ "$$status" = 401 ]; then echo false; else echo true; fi)
+endif
+else
+IN_CN_GFW ?= false
+endif
+ifeq ($(filter $(IN_CN_GFW),true false),)
+$(error IN_CN_GFW must be true or false)
+endif
+IMAGE_SOURCE ?= $(if $(filter true,$(IN_CN_GFW)),aliyun,global)
+ifeq ($(filter $(IMAGE_SOURCE),aliyun global),)
+$(error IMAGE_SOURCE must be aliyun or global)
+endif
+export VERSION IMAGE_SOURCE IN_CN_GFW CONTAINER_CLI
+export CARGO_BUILD_JOBS := $(BUILD_JOBS)
+export CARGO_INCREMENTAL ?= 0
+export CARGO_PROFILE_DEV_DEBUG ?= 0
+export CARGO_PROFILE_TEST_DEBUG ?= 0
+export SWAGGER_UI_DOWNLOAD_URL := file:$(CURDIR)/src/api/http/src/swagger/swagger-ui-5.17.14.zip
+BUILD_PROXY := $(or $(HTTPS_PROXY),$(https_proxy),$(HTTP_PROXY),$(http_proxy))
+PROXY_ARGS = $(if $(BUILD_PROXY),--network=host --build-arg HTTPS_PROXY='$(BUILD_PROXY)' --build-arg HTTP_PROXY='$(BUILD_PROXY)',)
+IMAGE_SETUP = eval "$$($(PYTHON) deploy/images.py --source '$(IMAGE_SOURCE)' --version '$(VERSION)')"
+PROFILE_ARG = $(if $(filter dev,$(CARGO_PROFILE)),,--profile $(CARGO_PROFILE))
+.PHONY: help image-source rust-target-guard web-deps web-test-deps build build-rust build-web build-image build-runtime-image build-web-image docker-up docker-down docker-logs fmt lint lint-rust lint-web lint-helm test test-rust test-python test-web e2e e2e-docker e2e-k8s package-chart release clean
+.NOTPARALLEL:
+E2E_BUILD = $(if $(filter --reuse-build --skip-build,$(E2E_ARGS)),,build)
 
 help:
-	@printf '%s\n' \
-		'SigBot Core — Make targets' \
-		'' \
-		'  Development:' \
-		'    make build                         Build the sigbot binary' \
-		'    make build-release                 Build with the release profile' \
-		'    make test | make test-ut           Run workspace unit tests' \
-		'    make test-it | make it             Run Docker-backed integration tests serially' \
-		'    make fmt | make fmt-check | make clippy' \
-		'                                       Format and lint the workspace' \
-		'    make clean                         Remove Cargo build artifacts' \
-		'' \
-		'  Container:' \
-		'    make build-image                   Build the main application image' \
-		'    make push-image                    Push the image; authenticate beforehand' \
-		'    make compose-up | compose-ps       Start or inspect the Compose stack' \
-		'    make compose-down                  Stop the Compose stack' \
-		'' \
-		'  Common overrides:' \
-		'    CARGO_PROFILE=release FEATURES=a,b TARGET=<triple> BUILD_JOBS=4' \
-		'    IT_FILTER=<test-name> IMAGE=<registry/name:tag> PLATFORM=linux/amd64'
+	@printf '%s\n' 'Sigbot' '' 'Build:' '  make build | build-web | build-image' '  make docker-up | docker-down | docker-logs' '' 'Quality:' '  make fmt | lint | lint-helm' '' 'Test:' '  make test                    All module unit tests' '  make e2e                     Every use case, Docker then Kubernetes' '  make e2e-docker | e2e-k8s     Every use case on the named platform' '' 'Overrides: IN_CN_GFW=true|false IMAGE_SOURCE=aliyun|global CONTAINER_CLI=docker|podman E2E_ARGS="..."'
 
-version:
-	@printf '%s\n' '$(VERSION)'
+image-source:
+	@echo 'IN_CN_GFW=$(IN_CN_GFW) IMAGE_SOURCE=$(IMAGE_SOURCE)'
+	@$(PYTHON) deploy/images.py --source '$(IMAGE_SOURCE)' --version '$(VERSION)'
 
-build:
-	$(CARGO) build --locked -p sigbot-cmd --bin sigbot \
-		$(CARGO_PROFILE_ARG) $(CARGO_FEATURE_ARGS) $(CARGO_TARGET_ARG) \
-		$(CARGO_JOBS_ARG) $(CARGO_BUILD_ARGS)
+rust-target-guard:
+	@size=$$(du -sk target 2>/dev/null | cut -f1); if [ "$${size:-0}" -gt 10485760 ]; then echo 'target/ exceeds 10 GiB; cargo clean before building'; $(CARGO) clean; fi
 
-build-release:
-	$(MAKE) build CARGO_PROFILE=release
+build: build-rust build-web
+build-rust:
+	@$(MAKE) --no-print-directory rust-target-guard
+	$(CARGO) build --locked --workspace $(PROFILE_ARG) $(CARGO_ARGS)
+web-deps:
+	cd web && $(NPM) ci
+web-test-deps: web-deps
+	@if [ -n "$(PLAYWRIGHT_CHROMIUM_EXECUTABLE)" ] && [ -x "$(PLAYWRIGHT_CHROMIUM_EXECUTABLE)" ]; then \
+		echo 'Using PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(PLAYWRIGHT_CHROMIUM_EXECUTABLE)'; \
+	else \
+		cd web && $(NPM) exec playwright install chromium; \
+	fi
+build-web: web-deps
+	cd web && $(NPM) run build
+build-image: build-runtime-image build-web-image
+build-runtime-image:
+	@$(MAKE) --no-print-directory rust-target-guard
+	@set -eu; $(IMAGE_SETUP); $(CONTAINER_CLI) build $(PROXY_ARGS) -f deploy/docker/Dockerfile --build-arg RUST_BUILDER_IMAGE="$$RUST_BUILDER_IMAGE" --build-arg RUNTIME_IMAGE="$$RUNTIME_IMAGE" --build-arg BUILD_MIRROR_URL='$(if $(filter aliyun,$(IMAGE_SOURCE)),http://mirrors.aliyun.com,http://deb.debian.org)' --build-arg BUILD_COMMIT_ID="$$(git rev-parse HEAD)" --build-arg BUILD_TAG='$(VERSION)' -t "$$SIGBOT_IMAGE" .
+build-web-image:
+	@set -eu; $(IMAGE_SETUP); $(CONTAINER_CLI) build $(PROXY_ARGS) -f web/deploy/Dockerfile --build-arg NODE_IMAGE="$$WEB_NODE_IMAGE" --build-arg WEB_IMAGE="$$WEB_RUNTIME_IMAGE" -t "$$SIGBOT_WEB_IMAGE" .
 
-test: test-ut
+docker-up:
+	@test -f '$(COMPOSE_ENV)' || { echo 'Create $(COMPOSE_ENV) from its example with Secret values first' >&2; exit 1; }
+	@set -eu; $(IMAGE_SETUP); SIGBOT_ENV_FILE='$(abspath $(COMPOSE_ENV))' $(CONTAINER_CLI) compose --env-file '$(COMPOSE_ENV)' -f '$(COMPOSE_FILE)' up -d --wait
+docker-down:
+	@set -eu; $(IMAGE_SETUP); SIGBOT_ENV_FILE='$(abspath $(COMPOSE_ENV))' $(CONTAINER_CLI) compose --env-file '$(COMPOSE_ENV)' -f '$(COMPOSE_FILE)' down
+docker-logs:
+	@set -eu; $(IMAGE_SETUP); SIGBOT_ENV_FILE='$(abspath $(COMPOSE_ENV))' $(CONTAINER_CLI) compose --env-file '$(COMPOSE_ENV)' -f '$(COMPOSE_FILE)' logs -f
 
-test-ut:
-	$(CARGO) test --locked --workspace --exclude sigbot-integration-tests $(TEST_FILTER)
+fmt: web-deps
+	find src build benchmarks -type f -name '*.rs' ! -path 'src/component/strategy/sdk/*' ! -path 'src/component/strategy/runner/src/python/*' -print0 | xargs -0 rustfmt --edition 2021 --config skip_children=true --check
+	cd web && $(NPM) exec prettier -- --check src tests
+lint: lint-rust lint-web lint-helm
+lint-rust:
+	@$(MAKE) --no-print-directory rust-target-guard
+	$(CARGO) clippy --locked --workspace --all-targets -- -D clippy::correctness
+lint-web: web-deps
+	cd web && $(NPM) exec tsc -- --noEmit
+lint-helm:
+	helm dependency list '$(HELM_CHART)'
+	helm lint '$(HELM_CHART)'
+	@set -eu; values=$$(mktemp); trap 'rm -f "$$values"' EXIT; for source in global aliyun; do $(PYTHON) deploy/images.py --source "$$source" --version '$(VERSION)' --format helm > "$$values"; helm template sigbot '$(HELM_CHART)' -f "$$values" >/dev/null; done
 
-# Integration tests own their Docker middleware lifecycle. Keep execution
-# serial because the suites share fixed host ports and each starts containers.
-test-it:
-	$(CARGO) test --locked -p sigbot-integration-tests --lib $(IT_FILTER) -- \
-		--include-ignored --nocapture --test-threads=1 $(IT_ARGS)
+test: test-rust test-python test-web
+test-rust:
+	@$(MAKE) --no-print-directory rust-target-guard
+	$(CARGO) test --locked --workspace --no-fail-fast $(CARGO_ARGS)
+test-python:
+	$(PYTHON) -m unittest discover -s .github/scripts -p '*_test.py' -v
+test-web: web-test-deps
+	cd web && $(NPM) run build && $(NPM) test
 
-it: test-it
+e2e: e2e-docker e2e-k8s
+e2e-docker: $(E2E_BUILD)
+	@set -eu; $(IMAGE_SETUP); $(PYTHON) use-cases/marketpulse-autonomy-quantification/e2e/runner.py --deployer docker --timeout '$(E2E_TIMEOUT)' $(E2E_ARGS)
+e2e-k8s: $(E2E_BUILD)
+	@set -eu; $(IMAGE_SETUP); export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; $(PYTHON) use-cases/marketpulse-autonomy-quantification/e2e/runner.py --deployer kubernetes --timeout '$(E2E_TIMEOUT)' $(E2E_ARGS)
 
-fmt:
-	$(CARGO) fmt --all
-
-fmt-check:
-	$(CARGO) fmt --all -- --check
-
-clippy:
-	$(CARGO) clippy --locked --workspace --all-targets -- -D warnings
-
+package-chart: lint-helm
+	mkdir -p '$(RELEASE_DIR)'
+	helm package '$(HELM_CHART)' --destination '$(RELEASE_DIR)' --version '$(VERSION)' --app-version '$(VERSION)'
+release: build-image package-chart
+	@set -eu; $(IMAGE_SETUP); $(CONTAINER_CLI) push "$$SIGBOT_IMAGE"; $(CONTAINER_CLI) push "$$SIGBOT_WEB_IMAGE"
+	helm push '$(RELEASE_DIR)/sigbot-$(VERSION).tgz' oci://ghcr.io/wl4g/charts
 clean:
 	$(CARGO) clean
-
-build-image:
-	$(DOCKER) buildx build --load \
-		--platform '$(PLATFORM)' \
-		--tag '$(IMAGE)' \
-		--file '$(DOCKERFILE)' \
-		--build-arg PROJECT_REPO='$(GIT_REPOSITORY)' \
-		--build-arg BUILD_COMMIT_ID='$(GIT_COMMIT)' \
-		--build-arg BUILD_BRANCH='$(GIT_BRANCH)' \
-		--build-arg BUILD_TAG='$(VERSION)' \
-		--build-arg BUILD_MIRROR_URL='$(BUILD_MIRROR_URL)' \
-		--build-arg BUILD_ARGS='$(DOCKER_CARGO_ARGS)' \
-		$(DOCKER_PROXY_ARGS) $(DOCKER_BUILD_ARGS) .
-
-push-image:
-	$(DOCKER) push '$(IMAGE)'
-
-compose-up:
-	SIGBOT_IMAGE='$(IMAGE)' $(DOCKER) compose -f '$(COMPOSE_FILE)' up -d
-
-compose-down:
-	SIGBOT_IMAGE='$(IMAGE)' $(DOCKER) compose -f '$(COMPOSE_FILE)' down
-
-compose-ps:
-	SIGBOT_IMAGE='$(IMAGE)' $(DOCKER) compose -f '$(COMPOSE_FILE)' ps
+	$(PYTHON) -c 'import shutil; shutil.rmtree("web/dist", ignore_errors=True)'

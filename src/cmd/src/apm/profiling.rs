@@ -22,7 +22,8 @@
 pub mod mem_prof_router {
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
-    use common_telemetry::{error, info};
+    use common_telemetry::error;
+    use common_telemetry::info;
 
     #[axum_macros::debug_handler]
     // () -> common_mem_prof::error::Result<impl IntoResponse>
@@ -48,7 +49,8 @@ pub mod mem_prof_router {
 
 #[cfg(not(feature = "profiling-mem-prof"))]
 pub mod mem_prof_router {
-    use axum::{http::StatusCode, response::IntoResponse};
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
     #[axum_macros::debug_handler]
     pub async fn mem_prof_handler() -> impl IntoResponse {
         (
@@ -66,7 +68,8 @@ pub mod pprof_router {
     use axum::response::IntoResponse;
     use common_pprof::CPUProfiling;
     use common_telemetry::info;
-    use serde::{Deserialize, Serialize};
+    use serde::Deserialize;
+    use serde::Serialize;
     use std::num::NonZeroI32;
     use std::time::Duration;
 
@@ -124,7 +127,8 @@ pub mod pprof_router {
 
 #[cfg(not(feature = "profiling-pprof"))]
 pub mod pprof_router {
-    use axum::{http::StatusCode, response::IntoResponse};
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
     #[axum_macros::debug_handler]
     pub async fn pprof_handler() -> impl IntoResponse {
         (StatusCode::NOT_IMPLEMENTED, "The 'profiling-pprof' feature is disabled").into_response()

@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: ${MARKETPULSE_KAFKA_IMAGE:-apache/kafka:4.1.1}
+    image: ${MARKETPULSE_KAFKA_IMAGE:?select the image catalog}
     ports:
     - 127.0.0.1:19092:9092
     environment:

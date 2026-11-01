@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: docker.io/timescale/timescaledb-ha@sha256:d0c5836a6ecc8633a667db5432a55553f38a1a12b93c6026c39db0b2739797ac
+    image: ${MARKETPULSE_POSTGRES_IMAGE:?select the image catalog}
     platform: linux/amd64
     container_name: sigbot-marketpulse-extensions-postgres
     labels:
@@ -14,13 +14,13 @@ services:
       TIMESCALEDB_TELEMETRY: 'off'
       TS_TUNE_MEMORY: 1GB
       TS_TUNE_NUM_CPUS: '1'
-      TS_TUNE_MAX_CONNS: '30'
+      TS_TUNE_MAX_CONNS: '120'
     ports:
       - 127.0.0.1:15440:5432
     network_mode: bridge
     volumes:
       - extensions-data:/home/postgres/pgdata/data
-      - ../../../../../tooling/deploy/helm/sigbot/bootstrap/postgres-extensions.sql:/docker-entrypoint-initdb.d/20-sigbot-extensions.sql:ro
+      - ../../../../../deploy/helm/sigbot/bootstrap/postgres-extensions.sql:/docker-entrypoint-initdb.d/20-sigbot-extensions.sql:ro
     mem_limit: 1g
     cpus: '1'
     healthcheck:

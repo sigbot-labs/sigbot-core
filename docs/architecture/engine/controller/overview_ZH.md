@@ -2,107 +2,83 @@
 
 [English](overview.md) · [架构总览](../../overview_ZH.md)
 
-**状态：** 规范性目标架构。当前物理源码归属是 `src/deployer/`，其已有行为在下文
-单独说明。
+**状态：** 当前规范和实现边界。物理源码归属 `src/controller/`；平台面只运行一个
+`CentralController` Provider，不再保留 Deployer、Factory 或 Standalone 分支。
 
-`SigbotController` Reconcile 固定 `StrategyPipeline` Resource。它借鉴 Kubernetes
-Controller 的 Desired State、Observed State、幂等 Reconciliation 与 Status
-Condition，但不会把 SigBot 变成通用 DAG Scheduler。
+## 职责
 
-## StrategyPipeline Resource
+平台面核心服务是 API、Controller、Web：API 负责租户业务绑定、Workflow、Worker
+和连接等配置 CRUD；Controller 负责租户级九个组件的启动、更新、停止与健康恢复。
 
-```text
-StrategyPipelineSpec
-  tenant_id
-  pipeline_id
-  feed_bindings[]
-  evaluator
-  strategy
-  execution { wallet_id, exchange_ref, risk_policy }
-  notification_channels[]
-  export_sinks[]
-  desired_state
-```
+数据面九个组件是 Backtest、Datafeed、Evaluator、Strategy、Logservice、Exporter、
+Notifier、Order、Wallet。它们按 Workflow Node 实例部署，通过租户/Workflow 隔离的
+MQTT Topic 异步 pub/sub；Exchange 与 Messager 是组件内共享库，不独立部署。
 
-该结构是有限的：Pipeline 始终评估市场上下文、运行一个确定性策略，并把可执行
-Signal 交给 Order Manager。可选投递能力可以关闭，但不接受任意 Node 类型与 Edge。
-
-## Reconciliation Loop
+## Reconciliation
 
 ```mermaid
 flowchart LR
-    API[APIServer list/watch] --> Queue[按 Key 工作队列]
-    Queue --> Controller[SigbotController]
-    Controller --> Runtime[ISigbotRuntimeProvider]
-    Runtime --> Observed[Observed Resource]
-    Observed --> Controller
-    Controller -->|status / conditions| API
+    ControlDB[(控制面 PostgreSQL)] --> Claim[Controller Handler / Run Claim]
+    Claim --> Target[ctl_worker]
+    Target --> Prepare[租户 Middleware Prepare]
+    Prepare --> Plan[九组件 WorkerPlan]
+    Plan --> Docker[远程 Docker]
+    Plan --> Kubernetes[远程 Kubernetes]
+    Docker --> Status[Observed Health]
+    Kubernetes --> Status
+    Status --> Claim
 ```
 
-对于每个 `{tenant_id, pipeline_id}` Key，Controller：
+每轮协调执行：
 
-1. 从 APIServer 读取最新 Desired Spec。
-2. 比较 Spec Generation 与 Observed Runtime Resource。
-3. 确保一个逻辑 Datafeed Binding、一组 Strategy-scoped Evaluator Worker 和一组
-   Strategy-scoped Strategy Runner Worker。
-4. 通过选定 Runtime Provider 应用稳定 Owner Label、Configuration Hash、Resource
-   Limit 与 Secret Reference。
-5. Pipeline 禁用或删除时，只回收由该 Pipeline 拥有的 Resource。
-6. 通过 APIServer Status API 写入 `observed_generation`、Endpoint Reference 和类型化
-   Condition。
+1. 按 `env/tenant_id/workflow_id` 锁定一个 active Workflow 和既有 `run_id`。
+2. 固定或复用 `wf_run.worker_id`；先选 Workflow 专属 Worker，再选同租户共享 Worker。
+3. 在该 Worker 上幂等准备配置的 Redis、pgvector、TimescaleDB、EMQX。
+4. 中间件全部就绪后，从持久化 Workflow Snapshot 生成九类 Node `WorkerPlan`。
+5. 按 Backtest/Wallet/Order/Strategy/Evaluator/辅助消费者/Datafeed 顺序启动，保证订阅者
+   先于生产者建立持久订阅。
+6. Docker 使用具名 Container/Volume；Kubernetes 使用 Deployment、Service、
+   NetworkPolicy 和必要的 PVC。配置哈希不变时不替换实例。
+7. 把 observed ready/restarted 写回同一 Run；重启保持 `run_id` 并递增 attempt_no。
 
-Watch 负责低延迟更新；周期性完整 List/Reconcile 用于恢复丢失事件。工作按 Key
-合并，重复事件不会创建重复 Workload。
+## 租户中间件
 
-## 部署作用域
+`ctl_worker.middleware` 只允许四种中间件各自的 `image` 与
+`resources {cpu_millis,memory_mb,storage_gb}`；不接受任意 PodSpec、特权、hostPath、
+宿主网络或命令覆盖。默认值由单一 typed configuration 提供，Web 的表单/YAML 模式
+都调用同一个 API 并接受相同服务端校验。
 
-| Resource | Controller 动作 |
-|---|---|
-| Datafeed | 创建/释放逻辑 `DatafeedBinding`；不得重复创建共享 daemon 或公共上游连接 |
-| Evaluator | Reconcile Strategy-scoped Worker Set 及独立 Consumer Group |
-| Strategy Runner | Reconcile Strategy-scoped Worker Set 及独立 Consumer Group |
-| Order、Wallet、Notifier、Exporter | 引用共享 Service Endpoint 与 Pipeline 配置；不得每策略复制一套 |
-| Backtest | 仅为已接受 Backtest Request 创建 Run-scoped Job |
-| Middleware | 作为平台基础设施 Provisioning，不作为每个 Strategy Pipeline 的 Child |
+Redis 固定为六节点 Cluster（三主三从）；pgvector、TimescaleDB、EMQX 当前各一个
+Stateful 实例。所有对象带稳定 `worker-target` ownership label。禁用某项会停止其工作负载，
+但 PVC/Volume 保留以便恢复；停止单个 Workflow 不删除 Worker/租户级中间件。
 
-公共 Feed Worker 可以跨 Tenant 复用；私有账户 Feed 必须按 Credential 与 Entitlement
-Scope 隔离。该规则由 [Datafeed](../datafeed/overview_ZH.md)拥有。
+组件端点只在 Worker 选定后注入：EMQX 写入节点 Messager 参数，其余通过统一
+`SIGBOT__...` 配置层覆盖。凭据正文仅存在于远程 Kubernetes runtime Secret 或 Docker
+宿主 owner-only env-file；`ctl_worker` 只保存 Secret key 引用。
 
-## 扩展点
+## Provider SPI
 
-| 角色 | 契约 | 实现 |
+| 层 | 契约/实现 | 职责 |
 |---|---|---|
-| Service Root | `SigbotController` | 固定 Pipeline Reconciliation 进程 |
-| Reconciliation Policy | `ISigbotPipelineController` | `SigbotDefaultPipelineController` |
-| Runtime Projection | `ISigbotRuntimeProvider` | `SigbotKubernetesRuntimeProvider`、`SigbotDockerRuntimeProvider`、`SigbotStandaloneRuntimeProvider` |
-
-Runtime Provider 把 Provider-neutral Desired Resource 翻译成平台对象，不能查询业务表
-或重新定义 Pipeline 语义。
+| Service Root | `IController` / `CentralController` | Scheduler 与统一生命周期 |
+| Router | `WorkerRouter` | 按 `ctl_worker.provider` 选择执行适配器 |
+| Runtime Provider | `WorkerProvider` | `prepare/apply/remove` 幂等契约 |
+| Adapter | `DockerController` | 远程 Docker Container、Volume、health |
+| Adapter | `KubernetesController` | 远程 K8s Workload、Service、Policy、health |
 
 ## 不变量
 
-- Controller 禁止连接核心、Order 或 Wallet 数据库。
-- Reconciliation 在 Crash、重复 Watch Event 或 Leader 切换后仍幂等安全。
-- 多 Replica 按稳定 Pipeline Key 分片或使用 Lease；同一时刻最多一个 Replica 主动
-  修改一个 Pipeline。
-- 删除必须受 Owner Scope 约束；失效 Controller 不能删除共享基础设施或其他
-  Pipeline 的 Resource。
-- Secret 只通过 Reference 使用，禁止复制到 Status、Label、Log 或普通 Environment
-  Snapshot。
-- Status 只报告 Observed Fact，不能重写 Desired Configuration。
-
-## 实现对齐
-
-当前 `src/deployer/` 暴露 `SigbotDeployerFactory`、`ISigbotDeployer` 及 Kubernetes、
-Docker、Standalone 实现。它通过 `SigbotState` 直接扫描 Tenant，部署面向 Tenant 的
-部分 Middleware/Service，Standalone 行为也尚不完整。
-
-必须对齐到 Strategy Pipeline 粒度、APIServer List/Watch/Status、共享 daemon
-Reference、逻辑 Datafeed Binding、完整 Evaluator/Strategy Runtime Ownership，以及
-`SigbotController` 公开契约。本组件不拥有通用 Workflow Node Scheduler。
+- Authguard 是用户、身份、成员、角色和权限的唯一来源；Controller 不维护全局用户上下文。
+- Run claim 的 PostgreSQL 行锁和固定 `worker_id` 防止重复 owner；重试不得偷偷迁移 Worker。
+- Controller 只能修改同时匹配 managed-by、worker-target 和领域 owner label 的资源。
+- Secret 不进入数据库正文、Plan、Status、Label 或日志；运行时只传引用和必要的进程环境。
+- 同一 Strategy 决策实例始终单 owner；普通 Python 不因扩容自动并行。
+- 停止、重复 reconcile、进程重启与乱序状态更新必须幂等。
 
 ## 源码地图
 
-- 当前 Runtime Provider 实现：`src/deployer/`
-- 目标 Resource API 与 Repository：`src/core/`
-- Kubernetes 与 Docker 部署资产：`tooling/deploy/`
+- Provider 与 Scheduler：`src/controller/src/{controller.rs,worker/}`
+- Docker/Kubernetes Adapter：`src/controller/src/{docker,kubernetes}/`
+- Worker Handler/Repository：`src/core/src/modules/controller/`
+- Worker API：`src/api/http/src/worker.rs`
+- Helm 平台面：`deploy/helm/sigbot/templates/{api,controller,middleware,web}/`

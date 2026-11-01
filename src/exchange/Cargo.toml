@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+common-context.workspace = true
 # Other modules dependencies.
 common-telemetry.workspace = true
 common-makestruct.workspace = true
@@ -44,19 +45,19 @@ hyperliquid_rust_sdk = "0.6.0"
 
 [[test]]
 name = "prepared_payload"
-path = "tests/client/prepared_payload_test.rs"
+path = "tests/execution/prepared_test.rs"
 
 [[test]]
 name = "live_sdk"
-path = "tests/client/live_sdk_test.rs"
+path = "tests/execution/live_sdk_test.rs"
 
 [[test]]
 name = "polymarket_settlement"
-path = "tests/client/polymarket_settlement_test.rs"
+path = "tests/polymarket/settlement_test.rs"
 
 [[test]]
 name = "public_market"
-path = "tests/client/public_market_test.rs"
+path = "tests/market/market_test.rs"
 
 [dev-dependencies]
 axum.workspace = true

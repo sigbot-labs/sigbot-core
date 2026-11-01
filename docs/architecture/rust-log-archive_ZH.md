@@ -1,12 +1,14 @@
 # Strategy 宿主 Rust 日志归档
 
-配置现有 `StrategyNodeConfig.log_archive` 即启用宿主 Rust tracing 采集，与 Python stdout/stderr/exception 共用 `LogArchive`、SQLite WAL、S3 不可变对象和 PG 游标索引。Logservice 保持共享组件，不增加独立部署。
+配置现有 `StrategyNodeConfig.log_archive` 即启用宿主 Rust tracing 采集，与 Python stdout/stderr/exception 共用 `LogArchive`、SQLite WAL、S3 不可变对象和 PG 游标索引。Logservice 是九个租户级数据面组件之一，由 Controller 按 tenant/workflow 隔离部署。
+
+这里的 `append` 是对有序日志流的逻辑追加，不是修改 S3 现有对象。接收端先把完整记录提交到本地 SQLite WAL 后 ACK；归档器随后以 `PutMode::Create` 为每个有界序号创建新的不可变对象，遇到同名对象时校验 SHA-256，再提交 PostgreSQL 游标索引并释放 WAL payload。S3 从未承担 append-write。
 
 Core 的现有 logging subscriber 保留空 route layer 的 reload handle，只提供泛型 layer 安装/移除接口。安装与移除原位修改 layer 和 filter，保留 subscriber 初始化时注册的 FilterId。具体 `ArchiveTracingLayer` 由 Logservice 提供，Strategy Runtime 负责装配；Core 与 common-telemetry 不引用 Logservice。现有 stderr、日志格式和 OTel layer 保留。
 
 ## 身份与采集范围
 
-每个安装的 capture 持有固定 `env/tenant_id/space_id/workflow_id/node_id/run_id`。这些值来自宿主运行配置，事件字段不能覆盖；不使用全局用户上下文。进程已安装一个归档 route 时，第二次安装会失败，避免把多个身份的宿主日志混入同一流。
+每个安装的 capture 持有固定 `env/tenant_id/workflow_id/node_id/run_id`。这些值来自宿主运行配置，事件字段不能覆盖；不使用全局用户上下文。进程已安装一个归档 route 时，第二次安装会失败，避免把多个身份的宿主日志混入同一流。
 
 首个接入宿主是配置了 `log_archive` 的 Strategy 进程，采集该进程内 `sigbot_` 和 `common_telemetry` target 的 INFO/WARN/ERROR tracing 事件。第三方库、其他服务进程、DEBUG/TRACE 以及 `sigbot_archive_internal` 诊断不进入该归档。配置安装前的进程启动日志也不在此范围。
 

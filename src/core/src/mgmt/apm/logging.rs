@@ -19,27 +19,27 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use sigbot_utils::time_format::Iso8601TimeFormatter;
-use std::{
-    fmt::{self, Display},
-    io::{IsTerminal, LineWriter},
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, OnceLock,
-    },
-};
+use std::fmt;
+use std::fmt::Display;
+use std::io::IsTerminal;
+use std::io::LineWriter;
+use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{
-    filter::Targets,
-    fmt::{
-        format::{FormatEvent, FormatFields},
-        time::FormatTime,
-        FmtContext, FormatFields as FormatFieldsTrait,
-    },
-    EnvFilter, Layer,
-};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::fmt::format::FormatEvent;
+use tracing_subscriber::fmt::format::FormatFields;
+use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::fmt::FmtContext;
+use tracing_subscriber::fmt::FormatFields as FormatFieldsTrait;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 
 pub type LogRouteHandle = tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
 
@@ -139,8 +139,8 @@ impl FromStr for LogMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
-            "HUMAN" => Ok(LogMode::HUMAN),
-            "JSON" => Ok(LogMode::JSON),
+            "human" => Ok(LogMode::HUMAN),
+            "json" => Ok(LogMode::JSON),
             _ => Err(LogModeError(s.to_owned())),
         }
     }
@@ -231,8 +231,8 @@ mod ansi {
 /// Simplify the module path by removing the crate name (the part before the first `::`)
 ///
 /// # Examples
-/// - `sigbot_cmd::cmd::internal::management_server` -> `cmd::internal::management_server`
-/// - `sigbot_order::server::order_server` -> `server::order_server`
+/// - `sigbot_cmd::startup::internal::management` -> `startup::internal::management`
+/// - `sigbot_order::server` -> `server`
 /// - `datafeed::client::market::datafeed_binance` -> `client::market::datafeed_binance`
 fn simplify_target(target: &str) -> String {
     // Remove the crate name (the part before the first `::`)
@@ -363,7 +363,7 @@ pub(super) fn default_log_stderr_layer(config: &Arc<AppConfig>) -> LogStderrType
 
     layer.with_filter(
         tracing_subscriber::filter::Targets::new()
-            .with_target("", LevelFilter::from_str(&config.logging.level.to_string()).unwrap()),
+            .with_target("", LevelFilter::from_str(&config.logging.level.clone()).unwrap()),
     )
 }
 

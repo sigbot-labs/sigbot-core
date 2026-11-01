@@ -1,0 +1,36 @@
+[package]
+autotests = false
+name = "sigbot-exporter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+common-context.workspace = true
+# Other modules dependencies.
+common-telemetry.workspace = true
+sigbot-types.workspace = true
+sigbot-utils.workspace = true
+sigbot-core.workspace = true
+sigbot-messager.workspace = true
+
+# Thirdparty dependencies.
+clap.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+lazy_static.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+chrono.workspace = true
+url.workspace = true
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl"] }
+
+[[test]]
+name = "export_delivery"
+path = "tests/exporter_test.rs"

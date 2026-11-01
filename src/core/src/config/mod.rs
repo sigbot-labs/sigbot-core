@@ -18,13 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod config;
-pub mod config_tenant;
-pub mod constant;
-pub mod resources;
-pub mod swagger;
-
 pub mod authguard;
+pub mod config;
+pub mod constant;
 
 pub mod llm;
 pub mod platform;

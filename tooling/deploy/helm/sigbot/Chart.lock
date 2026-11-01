@@ -1,6 +1,0 @@
-dependencies:
-- name: authguard
-  repository: oci://ghcr.io/wl4g/charts
-  version: 1.0.2
-digest: sha256:2a54c82b27541a660a1dabc02081336db8211cd143d141cd07b3aa0493631e45
-generated: "2026-10-28T17:13:58.632544392+08:00"

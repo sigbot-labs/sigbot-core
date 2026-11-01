@@ -28,13 +28,13 @@ class Deployer(ABC):
         raise NotImplementedError
 
 
-class DeployerFactory:
+class ControllerFactory:
     @staticmethod
     def create(context):
         if context.deployer == "docker":
-            from deploy.deployer.docker import DockerDeployer
-            return DockerDeployer(context)
+            from deploy.deployer.docker import DockerController
+            return DockerController(context)
         if context.deployer == "kubernetes":
-            from deploy.deployer.kubernetes import KubernetesDeployer
-            return KubernetesDeployer(context)
+            from deploy.deployer.kubernetes import KubernetesController
+            return KubernetesController(context)
         raise ValueError("unsupported deployer")

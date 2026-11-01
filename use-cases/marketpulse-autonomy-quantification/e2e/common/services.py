@@ -25,26 +25,27 @@ class ProductServices:
         self.manifest = context.report_root / "runtime" / "processes.json"
 
     def seed(self):
-        if self.context.config["scope"] != {"env": "e2e", "tenant_id": 1, "space_id": 1}:
-            raise ValueError("the supplied seed is restricted to the isolated e2e/1/1 scope")
+        scope = self.context.config["scope"]
+        if scope["env"] != "e2e":
+            raise ValueError("the supplied seed is restricted to the isolated e2e environment")
         with psycopg.connect(self.context.secret("database_url_env"), connect_timeout=10) as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT env,tenant_id,space_id,account_id,mode FROM s_wallets WHERE id=1")
+                cursor.execute("SELECT env,tenant_id::text,account_id::text,mode FROM wlt_wallet WHERE id=%s", (self.configuration.wallet_id,))
                 existing = cursor.fetchone()
-                if existing is not None and existing != ("e2e", "1", 1, 1, "backtest"):
+                if existing is not None and existing != ("e2e", scope["tenant_id"], self.configuration.account_id, self.configuration.mode):
                     raise RuntimeError("seed wallet ID belongs to another environment; use a dedicated case database")
-                if self.configuration.workflow_id != 10001:
-                    raise ValueError("the supplied bootstrap reserves Workflow ID 10001")
-                cursor.execute("SELECT env,tenant_id,space_id FROM s_workflow WHERE id=%s", (self.configuration.workflow_id,))
+                cursor.execute("SELECT env,tenant_id::text FROM wf_workflow WHERE id=%s", (self.configuration.workflow_id,))
                 existing = cursor.fetchone()
-                if existing is not None and existing != ("e2e", 1, 1):
+                if existing is not None and existing != ("e2e", scope["tenant_id"]):
                     raise RuntimeError("seed workflow ID belongs to another environment; use a dedicated case database")
                 cursor.execute((self.context.root / "config/sigbot/init_01.dml.sql").read_text())
-                cursor.execute("INSERT INTO workflow_run(run_id,workflow_id,env,tenant_id,space_id,state) VALUES(%s,%s,'e2e',1,1,'running') ON CONFLICT DO NOTHING",
-                               (self.configuration.run_id, self.configuration.workflow_id))
-                cursor.execute("SELECT workflow_id,env,tenant_id,space_id FROM workflow_run WHERE run_id=%s", (self.configuration.run_id,))
-                if cursor.fetchone() != (self.configuration.workflow_id, "e2e", 1, 1):
+                cursor.execute("INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state) VALUES(%s,%s,%s,%s,'running') ON CONFLICT DO NOTHING",
+                               (self.configuration.run_id, self.configuration.workflow_id, scope["env"], scope["tenant_id"]))
+                cursor.execute("SELECT workflow_id::text,env,tenant_id::text FROM wf_run WHERE run_id=%s", (self.configuration.run_id,))
+                if cursor.fetchone() != (self.configuration.workflow_id, scope["env"], scope["tenant_id"]):
                     raise RuntimeError("run_id already belongs to a different Workflow scope")
+                cursor.execute("UPDATE wf_run SET state='failed',ended_at=now() WHERE env=%s AND tenant_id=%s AND workflow_id=%s AND run_id<>%s AND state IN ('queued','running')",
+                               (scope["env"], scope["tenant_id"], self.configuration.workflow_id, self.configuration.run_id))
 
     def start(self):
         records = []
@@ -53,7 +54,7 @@ class ProductServices:
             if any(record.get("run_id") != self.configuration.run_id for record in records):
                 raise RuntimeError("runtime manifest belongs to a different run_id")
             if len(records) == len(self.configuration.services()) and all(self.is_running(record) for record in records):
-                os.environ[self.context.config["pipeline"]["run_id_env"]] = self.configuration.run_id
+                os.environ[self.context.config["workflow"]["run_id_env"]] = self.configuration.run_id
                 return {"run_id": self.configuration.run_id, "processes": records, "reused": True}
         if not self.binary.is_file():
             raise RuntimeError(f"real sigbot binary is missing: {self.binary}; build the product before runtime verification")
@@ -66,14 +67,26 @@ class ProductServices:
         environment = {**os.environ, "SIGBOT_CFG_VERBOSE": "false", "SIGBOT_CFG_PATH": str(self.repository / "etc/sigbot.yaml"),
             "SIGBOT__MGMT__HOST": "127.0.0.1", "SIGBOT__MGMT__OTEL__ENABLED": "false",
             "SIGBOT__MGMT__TOKIO_CONSOLE__ENABLED": "false", "SIGBOT__LOGGING__LEVEL": "INFO",
+            "SIGBOT__STORAGE__POSTGRES__MIN_CONNECTIONS": "1",
+            "SIGBOT__STORAGE__POSTGRES__MAX_CONNECTIONS": "3",
+            "SIGBOT__AUTHGUARD__SERVICE_TENANT_ID": self.configuration.scope["tenant_id"],
+            "SIGBOT__AUTHGUARD__SERVICE_ENV": self.configuration.scope["env"],
+            "SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID": "marketpulse-e2e-runtime",
             "SIGBOT_STRATEGY_WORKER_BINARY": str(worker), "HTTPS_PROXY": "http://127.0.0.1:8800"}
         connection = psycopg.conninfo.conninfo_to_dict(self.context.secret("database_url_env"))
         for field, target in {"host": "HOST", "port": "PORT", "dbname": "DATABASE", "user": "USERNAME", "password": "PASSWORD"}.items():
             if field in connection:
-                environment["SIGBOT__APPDB__POSTGRES__" + target] = connection[field]
-        environment["SIGBOT__APPDB__TYPE"] = "POSTGRESQL"
-        if not environment.get(self.context.config["mqtt"]["password_env"]):
+                environment["SIGBOT__STORAGE__POSTGRES__" + target] = connection[field]
+        environment["SIGBOT__STORAGE__PROVIDER"] = "Postgres"
+        environment["SIGBOT__SECRETS__VALUES__MARKETPULSE_API_TOKEN"] = self.context.secret("token_env")
+        environment["SIGBOT__SECRETS__VALUES__MINIO_ACCESS_KEY"] = self.context.secret(
+            self.context.config["log_archive"]["access_key_env"])
+        environment["SIGBOT__SECRETS__VALUES__MINIO_SECRET_KEY"] = self.context.secret(
+            self.context.config["log_archive"]["secret_key_env"])
+        mqtt_password = environment.get(self.context.config["mqtt"]["password_env"])
+        if not mqtt_password:
             raise RuntimeError("runtime requires a scoped authenticated MQTT credential")
+        environment["SIGBOT__SECRETS__VALUES__MQTT_PASSWORD"] = mqtt_password
         processes = [record for record in records if self.is_running(record)]
         try:
             for index, (name, command, option, config) in enumerate(self.configuration.services()):
@@ -96,9 +109,9 @@ class ProductServices:
                 if process.poll() is not None:
                     raise RuntimeError(f"real {name} process exited with {process.returncode}; inspect {log_path}")
             FundingFixture.publish(self.context, self.configuration.run_id)
-            os.environ[self.context.config["pipeline"]["run_id_env"]] = self.configuration.run_id
+            os.environ[self.context.config["workflow"]["run_id_env"]] = self.configuration.run_id
             return {"run_id": self.configuration.run_id, "processes": processes,
-                    "mode": "real product binaries; isolated simulated execution; live public Binance market facts"}
+                    "mode": self.configuration.mode, "execution": "real product binaries and isolated matching API; live public Binance market facts"}
         except Exception:
             self.stop(self.manifest)
             raise

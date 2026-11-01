@@ -1,18 +1,17 @@
-# 通用编码规范
+# General Coding Guidelines
 
-- 1.YOU MUST STRICT SATISFY THE REQUIREMENTS FOR FILES STRUCTURE SPECIFICATIONS DEFINED IN EACH OF THE FOLLOWING SECTIONS.
+[Chinese translation](AGENT_CN.md)
 
-- 2.库优先：实现领域功能，必须优先使用官方库或社区成熟库，仅当库缺失时才需要自研, 协议级和核心流程须直接复用库里的结构体和逻辑；确需扩展时，必须通过继承或组合/嵌入，避免重复定义同语义属性;
+- 1. You MUST strictly follow the file and directory structures specified in every section below.
+- 2. Prefer libraries: use official or established community libraries for domain capabilities. Reuse their data structures and protocol or core workflow logic directly. Implement custom logic only when a suitable library is unavailable. Extend existing types through inheritance or composition instead of duplicating attributes with the same meaning.
+- 3. Organize capabilities by domain with one-way dependencies, high cohesion, low coupling, and consolidated responsibilities. Each enabled capability needs configuration, contracts, tests, resilience, and observability.
+- 4. **IMPORTANT:** The code volume of any official source code file (`rs|go|py|java|ts`) under src **MUST NOT exceed `800` lines** (excluding comments); otherwise, it indicates that the code **you generated is of unqualified quality** and must be redone to be refined and converged while also reasonably split. It is forbidden to split arbitrarily without satisfying the following directory structure specification. Each source code file must be named reasonably and standardly (if there are internal source code files of a module that is reasonably split, they must also reflect the hierarchical relationship; otherwise, it will be considered an **non-compliant split and MUST BE DELETED**). **It is forbidden to satisfy the specification at the cost of weakening functionality**.
 
-- 3.领域纵切、单向依赖、高内聚低耦合且收敛；能力启用有配置/契约/测试/弹性/可观测;
-
-- 4.任何 src 下正式源码文件(rs|go|py|java|ts)的代码量不应超过 800 行(不含注释), 否则说明生成的代码质量不合格, 必须精炼或合理的拆分, 但禁止不合理乱拆分, 且每个源码文件命名都应合理且规范;
-
-## 0. Specification of Global structure (Multiple Sub-modules)
+## 0. Global Structure for Multiple Submodules
 
 ```text
 <src-dir-as-(rust|java|typescript)-source-root>|<pkg-dir-as-golang-source-root>|<app-dir-as-python-source-root>/
-    ├── [adapters/{rust/,golang/,python/,java/}]  # Multiple language client SDK libraries.
+    ├── [adapters/{rust/,golang/,python/,java/}]  # Client SDKs for multiple languages.
     ├── common/<src|pkg|app>/{[audit-log/,error/,macro/,mem-prof,pprof/,telemetry/],...}
     ├── utils/<src|pkg|app>/
     ├── types/<src|pkg|app>/
@@ -22,7 +21,7 @@
         ├── mgmt/
         ├── cache/
         ├── storage/{postgres.(rs|go|py|ts),sqlite.(rs|go|py|ts),[mongo.(rs|go|py|ts),timescaledb.(rs|go|py|ts)]}
-        ├── modules/<domain>/{route/,handler/,storage/}  # 每个源码文件代码量不应超过 500 行(不含注释), 否则说明代码质量不合格
+        ├── modules/<domain>/{route/,handler/,storage/}  # At most 500 lines of code per source file, excluding comments.
         └── ...
     ├── <module>/<src|pkg|app>/
     ├── cmd/<src|pkg|app>/{[bin/<myapp>.(rs|go|py|ts)],cmd/{console.(rs|go|py|ts),...}}
@@ -33,39 +32,39 @@
         ├── tests/
         └── ...
 use-cases/<case-name>/e2e/
-    ├── common/{context.py,<domain>/*.py,}  # 针对当前 E2E case 的通用或 util 相关脚本 (禁止任何非 py 文件)
-    ├── config/{<myapp>/{init_0x.(ddl|dml).sql,init.import.yaml,values-override.yaml},<domain>/<file>.(json|yaml|conf|toml|env|gz)}  # 不同领域的初始化/运行时配置文件
+    ├── common/{context.py,<domain>/*.py,}  # Shared helpers for this E2E case; Python files only.
+    ├── config/{<myapp>/{init_0x.(ddl|dml).sql,init.import.yaml,values-override.yaml},<domain>/<file>.(json|yaml|conf|toml|env|gz)}  # Domain-specific initialization and runtime configuration.
     ├── deploy/
-    │   ├── deployer/{base.py,docker.py,kubernetes.py}  # 2种模式部署器(含对应 XxxCleaner 卸载清理程序)
+    │   ├── deployer/{base.py,docker.py,kubernetes.py}  # Both deployment modes, with corresponding XxxCleaner cleanup implementations.
     │   ├── <middleware>/{docker-compose.yaml,helm/}
     │   └── mock-<external>-service[-<language>]/{(src|pkg|app)/{<package>/,Dockerfile,docker-compose.yaml,helm/}}
-    ├── verifier/{infra/s00_infra.py,infra/s01_structure.py,<module>/sNN_<scenario>.py,web/sNN_<scenario>.py}  # 其中 web/ 下一定是使用 playwright 真实截图测试 UI
+    ├── verifier/{infra/s00_infra.py,infra/s01_structure.py,<module>/sNN_<scenario>.py,web/sNN_<scenario>.py}  # Web verifiers MUST use Playwright and capture real UI screenshots.
     ├── reports/<yyyyMMddHHmmss>/{summary.md,<module>/s0x_<scenario>.md}
     ├── README.md
     ├── README_CN.md
-    ├── requirements.txt  # Unified and Unique Dependency Definition
-    └── runner.py  # This E2E only execution entrypoint
-Makefile  # Non-Java projects are required.
-benches/  # Rust/Golang/Python projects are required.
+    ├── requirements.txt  # One unified dependency definition.
+    └── runner.py  # The only E2E execution entry point.
+Makefile  # Required for non-Java projects.
+benches/  # Required for Rust, Go, and Python projects.
 ...
 ```
 
-- 0.1 依赖顺序默认从顶层依次向下;
-- 0.2 类似如正则或GNU命令行风格, 即其中`<>`表示必须有; `[]`表示可选; `|`表示选其一; `,`表多个; `{}`表示指定目录层;
-- 0.3 `runner.py` 统一 CLI/部署/报告/cleanup，支持多 `--scenario`、rounds/deployer/timeout、复用构建及按需清理；生成时间戳报告。Verifier 仅 `verify(context)`、按领域 `sNN_`；默认保留环境供验收;
+- 0.1. Dependencies follow the layers from top to bottom by default.
+- 0.2. In this notation, `<>` is required, `[]` is optional, `|` selects one alternative, `,` lists multiple entries, and `{}` specifies a directory level, similarly to regular expressions or GNU command syntax.
+- 0.3. `runner.py` owns the CLI, deployment, reporting, and cleanup. Support multiple `--scenario` values, rounds, deployer selection, timeouts, build reuse, and cleanup as needed. Generate timestamped reports. Each verifier exposes only `verify(context)` and follows the domain-specific `sNN_` convention. Preserve the environment for acceptance by default.
 
-## 1. Specification of Unique config YAML
+## 1. Single YAML Configuration
 
-- 配置 typed、分层；键 `snake_case`，env `<MYAPP>__`，敏感走 Secret。
+- Use typed, layered configuration, `snake_case` keys, `<MYAPP>__` environment variables, and Secrets for sensitive values.
 
 ```text
 config/
-└── config.(go|rs|py|ts) # 唯一入口；类型/默认/env
+└── config.(go|rs|py|ts) # The single entry point for types, defaults, and environment overrides.
 
 <App>Config { server,mgmt,logging,cache,storage,secrets,<myapp>/<domain>... }
 ```
 
-- 类型/YAML 同层，按“基础→领域→业务”；默认值 < YAML < env，禁未知项。
+- Keep types and YAML at the same layer, organized from infrastructure to domain to business configuration. Precedence is defaults < YAML < environment variables. Reject unknown fields.
 
 ```yaml
 server: { host: 0.0.0.0, port: 8080 }
@@ -84,107 +83,108 @@ cache:
 <myapp>: ...
 ```
 
-- 标量支持 `${MYAPP__A__B:default}`。Mgmt 仅私网 health/metrics，禁写；日志附 time/level/service/component/run/trace/span 并脱敏。
+- Support `${MYAPP__A__B:default}` interpolation in scalar values. Expose management health and metrics only on private networks, with no write operations. Logs include time, level, service, component, run, trace, and span fields, with sensitive data redacted.
 
-## 2. Specification of Domain component
+## 2. Domain Components
 
-- 任何独立的领域组件(即子模块)**必须**实现为统一的 Provider SPI 体系结构; 严格结构模版代码请参考如下 `<domain>/src/`
+- Every independent domain component or submodule MUST use the shared Provider SPI architecture. Follow the `<domain>/src/` structure below strictly.
 
-```bash
+```text
 src/
 ├── common/
 │   ├── context/
 │   │   ├── src/
-│   │   │   ├── lib.rs                   # 公共模块/结构导出
+│   │   │   ├── lib.rs                   # Public module and type exports.
 │   │   │   └── lifecycle/
-│   │   │       ├── application.rs       # ApplicationContext 统一注册、获取和生命周期管理
-│   │   │       └── provider.rs          # IProvider 顶级接口定义
+│   │   │       ├── application.rs       # ApplicationContext registration, retrieval, and lifecycle management.
+│   │   │       └── provider.rs          # The top-level IProvider contract.
 │   ├── audit-log/src/
 │   ├── mem-prof/src/
 │   ├── ...
 ├── <domain>/src/
-│   ├── lib.rs                           # 独立领域模块/结构导出
-│   ├── <domain>.rs                      # I<Domain>: IProvider 独立领域接口定义(继承)
+│   ├── lib.rs                           # Independent domain module and type exports.
+│   ├── <domain>.rs                      # Domain interface I<Domain>: IProvider.
 │   └── <domain>/
-│       ├── <spec_impl_name_1>.rs        # <SpecImplName1><Domain>
-│       └── <spec_impl_name_2>.rs        # <SpecImplName2><Domain>
+│       ├── <spec_impl_name_1>.rs        # <SpecImplName1><Domain>.
+│       └── <spec_impl_name_2>.rs        # <SpecImplName2><Domain>.
 │       └── <spec_impl_name_N>/
-│           └── <meaningful_name>.rs     # 可选：仅复杂内部逻辑才拆分
-└── ingestor/src/                        # ↓↓↓ 示例：如下为 ingestion 领域模块
+│           └── <meaningful_name>.rs     # Optional private modules for complex internal logic only.
+└── ingestor/src/                        # Example ingestion domain module.
     ├── lib.rs
-    ├── ingestor.rs                      # ITestIngestor: IProvider 继承定义
+    ├── ingestor.rs                      # ITestIngestor: IProvider.
     └── ingestor/
-        ├── web.rs                       # WebTestIngestor: ITestIngestor 领域实现
-        └── twitter.rs                   # TwitterTestIngestor: ITestIngestor 领域实现
+        ├── web.rs                       # WebTestIngestor: ITestIngestor.
+        └── twitter.rs                   # TwitterTestIngestor: ITestIngestor.
         └── twitter/
-            └── twitter_client.rs        # 使用不同的第三方库连接 Twitter 的内部逻辑
+            └── twitter_client.rs        # Internal Twitter integration through a third-party library.
 ```
 
-- 使用示例
+- Usage example:
 
 ```rust
-let ctx = ApplicationContext::new(); // 应用创建一次，并共享给各业务组件
+let ctx = ApplicationContext::global(); // All application modules share this process-level context.
 ctx.register::<dyn ITestIngestor, _>("web-default", web_ingestor_instantiator)?;
 ctx.register::<dyn ITestIngestor, _>("twitter-default", twitter_ingestor_instantiator)?;
-ctx.init().await?; // 启动上下文，实例仍在首次 get 时初始化
+ctx.init().await?; // The entry point starts the context; providers remain lazy until their first get.
 let web = ctx.get::<dyn ITestIngestor>("web-default").await?;
 let twitter = ctx.get::<dyn ITestIngestor>("twitter-default").await?;
 let page = web.ingest("https://example.test/news/42", "Market update");
 let tweet = twitter.ingest("tweet-42", "Latest update");
 
-ctx.close_for::<dyn ITestIngestor>("web-default").await?; // 可选：单独关闭一个实例
-ctx.shutdown().await?; // 整体停机，关闭其余所有注册实例
+// Stop accepting work and wait for active tasks before closing providers.
+ctx.close_for::<dyn ITestIngestor>("web-default").await?; // Optional: close one instance.
+ctx.shutdown().await?; // Close the remaining instances and stop the context.
 ```
 
-- 如上示例为数据摄入领域组件：`ITestIngestor`、`WebTestIngestor`、`TwitterTestIngestor`;
-- 注册表按领域接口类型和 `instance_id` 两层索引，不额外传入实现名, 同一领域的不同实现使用不同实例 ID;
-- 同一对象暴露多个领域接口时，使用 `register_with::<Target, Source>(instance_id, projection)` 共享生命周期;
+- The ingestion example uses `ITestIngestor`, `WebTestIngestor`, and `TwitterTestIngestor`. Domain interfaces inherit `IProvider`; registered asynchronous constructors return `Result<Arc<dyn ITestIngestor>>`.
+- Each domain module obtains the same context through `ApplicationContext::global()`. The application entry point owns registration, `init`, and `shutdown`. Accessing `global()` neither starts the context nor replaces it after shutdown. Use `ApplicationContext::new()` for deliberately independent contexts, such as isolated tests.
+- The registry is indexed by domain interface type and then `instance_id`. Do not pass a separate implementation name; use different instance IDs for different implementations in the same domain.
+- Expose multiple interfaces of one object through `register_with::<Target, Source>(instance_id, projection)` to share its lifecycle.
+- **IMPORTANT: In production Go, Rust, and Python source files, define an appropriate struct or class first and place functions in its implementation; do not define standalone functions directly.**
 
-- **IMPORTANT: 如上模版示例针对 Go/Rust/Python 任何主源码文件里，都禁止直接定义函数，而必须先定义合理的结构体再在结构体里面定义函数;**
-
-## 3. Specification of Storage / Repository
+## 3. Storage and Repositories
 
 ```text
 storage/
-├── storage.(go|rs|py|ts)      # IGenericRepository 通用基础 CRUD 操作接口函数定义、契约/工厂/共享 SQL 拼接
-├── postgres.(go|rs|py|ts)     # PostgresRepository impl IGenericRepository: 适配 Postgres 的通用基础 CRUD 实现，供业务子类重写/组合
-├── sqlite.(go|rs|py|ts)       # 同上
-└── <domain>/                  # 具体领域模块
-    ├── postgres.(go|rs|py|ts) # <Domain>PostgresRepository impl PostgresRepository 基类, 必须优先使用基类 CRUD 函数, 且不应超过 250 行
-    └── sqlite.(go|rs|py|ts)   # 同上
+├── storage.(go|rs|py|ts)     # IGenericRepository contracts, generic CRUD operations, factory behavior, and shared SQL composition.
+├── postgres.(go|rs|py|ts)    # Generic PostgreSQL repository implementation, reusable or overridable by domain repositories.
+├── sqlite.(go|rs|py|ts)      # Generic SQLite repository implementation.
+└── <domain>/
+    ├── postgres.(go|rs|py|ts) # Domain PostgreSQL repository; reuse base CRUD operations first; at most 250 lines.
+    └── sqlite.(go|rs|py|ts)   # Domain SQLite repository.
 ```
 
-- `IGenericRepository` 里必须有 CRUD 通用函数(反射/宏动态生成函数)：`select(entity,page)/select_by(id)/insert(entity)/update(entity)/upsert(entity)/delete_by(id)`;
+- `IGenericRepository` MUST provide generic CRUD contracts such as `select(entity,page)`, `select_by(id)`, `insert(entity)`, `update(entity)`, `upsert(entity)`, and `delete_by(id)`, using reflection or generated macros where applicable.
 
-## 4. Specification of Cache
+## 4. Cache
 
 ```text
 cache/
-├── cache.(go|rs|py|ts)        # ICache 通用缓存操作接口函数定义、契约/工厂, 包括不限于如 get/set/delete/exists/clear/close
-├── redis.(go|rs|py|ts)        # RedisCache 适配 Redis signle/cluster 的通用 cache 操作实现类
-└── memory.(go|rs|py|ts)       # 同上
+├── cache.(go|rs|py|ts)  # ICache contracts, factory behavior, and shared operations such as get/set/delete/exists/clear/close.
+├── redis.(go|rs|py|ts)  # RedisCache adapter for Redis single-node and cluster modes.
+└── memory.(go|rs|py|ts) # MemoryCache adapter.
 ```
 
-## 5. Job / Scheduler
+## 5. Jobs and Scheduling
 
-- `job/<domain>.(go|rs|py|ts)` 仅负责 cron/并发/锁/生命周期/观测并调用组件；未获锁跳过，非法 cron 启动失败；处理、幂等、重试归组件。
+- `job/<domain>.(go|rs|py|ts)` handles only cron scheduling, concurrency, locking, lifecycle, observability, and component invocation. Skip execution when a lock cannot be acquired. Reject invalid cron expressions at startup. Components own processing, idempotency, and retries.
 
-## 6. Observability / OpenLineage Specification
+## 6. Observability and OpenLineage
 
-- `run_id` 是通用唯一可公开幂等键，可以进日志或业务表、Span、OpenLineage Facet；OTel 禁用于约束/恢复。
-- 禁止另建独立关联标识。HTTP/gRPC 自配对；异步 wire 的 `requestSpanId` 必须等于 W3C `traceparent` 中的 producer `span_id`，响应原样回显并创建 consumer Span；不得持久化或参与业务约束，仅可作为 MQ QoS 重投递的短生命周期回复缓存键。重试新建 Span，`run_id` 不变、`attempt_no` 递增。
-- 服务调用传播 W3C Trace Context；关键转移定义低基数 counter/histogram/gauge，记录结果/耗时/错误。
+- `run_id` is the shared, publicly exposable idempotency and correlation identifier. It may appear in logs, business tables, spans, and OpenLineage facets. OpenTelemetry MUST NOT enforce business constraints or recovery.
+- Do not create a separate correlation identifier. HTTP/gRPC carry their own matching context. For asynchronous messages, `requestSpanId` MUST equal the producer `span_id` in W3C `traceparent`; responses echo it unchanged and create a consumer span. Do not persist it or use it for business constraints, except as a short-lived response-cache key for MQ QoS retries. Retries create new spans while keeping `run_id` and incrementing `attempt_no`.
+- Propagate W3C Trace Context across service calls. Record low-cardinality counters, histograms, and gauges for important transitions, including outcomes, latency, and errors.
 
-| 字段/场景 | OLTP·事务场景 | OLAP·ETL场景 |
+| Field or scenario | OLTP transactions | OLAP / ETL |
 |---|---|---|
-| 步骤 | 支付→按需审批→执行→回调→对账 | UI→API→Airflow Driver DAG→N-Worker DAG→各 1 Flink Job→ODS |
-| `run_id` | 同笔支付固定；跨重试/重启/审批/对账 | 每 Worker 独立；Flink 沿用，入 ODS 供 DWD 血缘 |
-| `trace_id` | 长事务分段恢复：**1-runId→N-traceId** | 连续链路覆盖多 Worker：**1-traceId→N-runId** |
-| `span_id` | OTel 管理；每调用/消费/操作/重试独立 | 同左 |
-| `parent_span_id` | 仅引用父 Span，非业务 ID | 同左 |
-| 共同规则 | Run/Trace 无固定层级；重试保持 `run_id`、递增 `attempt_no`、创建新 Span | 同左 |
+| Steps | Payment → approval when needed → execution → callback → reconciliation | UI → API → Airflow Driver DAG → N Worker DAGs → one Flink job per worker → ODS |
+| `run_id` | Fixed for one payment, including retries, restarts, approval, and reconciliation | Independent per worker; retained by Flink and written to ODS for DWD lineage |
+| `trace_id` | Long-running transactions trace separate stages: **1 runId → N traceIds** | Continuous propagation across workers: **1 traceId → N runIds** |
+| `span_id` | Managed by OpenTelemetry; separate for each call, message processing step, or retry | Same |
+| `parent_span_id` | References only a parent span, never a business identifier | Same |
+| Shared rules | Run and trace identifiers have no fixed hierarchy; retries retain `run_id`, increment `attempt_no`, and create a new span | Same |
 
-## 7. Multi langusage SDKs
+## 7. Client SDKs for Multiple Languages
 
 ```text
 src/adapters/
@@ -197,22 +197,22 @@ src/adapters/
 └── <facade>.(go|rs|py|ts|java)
 ```
 
-- 主文件唯一状态机；Adapter 转类型；Transport 管通信/超时/Trace/错误；Facade 统一入口。
+- Keep one state machine in the main file. Adapters convert types. Transport owns communication, timeouts, tracing, and errors. The facade is the unified entry point.
 
-## 8. Specification of Makefile
+## 8. Makefile
 
-- image/E2E/release 探测可覆盖的 `IN_CN_GFW`：registry 200/401=false，否则 true；`IMAGE_SOURCE` 选 aliyun|global 并透传代理。
+- Image, E2E, and release tasks support an overridable `IN_CN_GFW` detection: registry HTTP 200/401 means false; other results mean true. `IMAGE_SOURCE` selects aliyun or global registries and propagates proxy settings.
 
-## 9. Specification of Unit Test
+## 9. Unit Tests
 
-- 源码须有同义 UT，`tests/` 镜像目录；禁内联/巨型/孤儿测试。
+- Provide corresponding unit tests for source files. Mirror the source layout under `tests/`; avoid inline, oversized, or orphaned tests.
 
 ```text
 ├── src/<package>/<file>.(go|rs|py|ts)
 └── tests/<package>/<file>_test.(go|rs|py|ts)
 ```
 
-## 10. Specification of Helm chart（Modulars/Layers）
+## 10. Modular Helm Charts
 
 ```text
 helm/<chart>/
@@ -221,22 +221,22 @@ helm/<chart>/
 └── templates/{_helpers.tpl,platform/,gateway/,web/,<module>/}
 ```
 
-- 按模块分层；ConfigMap/Secret 独立，Deployment 用 checksum；Gateway 仅边界。
-- install 前 `bootstrap/` 最小权限创建/同步 K8s/GCP/AWS/Vault Secret；失败禁安装，明文禁入 Chart/values/日志。
+- Split templates by domain and layer. Keep ConfigMaps and Secrets separate. Deployment annotations include configuration checksums.
+- Before installation, `bootstrap/` creates or synchronizes K8s, GCP, AWS, or Vault secrets with least privilege. Installation MUST fail if bootstrap fails. Never place plaintext secrets in charts, values, or logs.
 
-## 11. Specification of CI Pipelines
+## 11. CI Pipelines
 
-| CI | 触发/检出 | 行为 | 产物边界 |
+| CI | Trigger and checkout | Behavior | Artifact boundary |
 |---|---|---|---|
-| PR | 新建/更新/重开；head SHA；取消旧任务 | 构建 `dirty-<sha8>`；UT+E2E 复用镜像 | 仅 dirty/短期证据；禁 `latest` |
-| Merged | 已合并；merge SHA；串行 | 不重复测试；构建 binary、多架构 image、Helm | 全成功才发 version/`latest`/OCI Chart并回拉 |
+| PR | Created, updated, or reopened PR, using its head SHA; cancel superseded runs | Build `dirty-<sha8>`; unit tests and E2E reuse the image | Only temporary dirty-build evidence; no `latest` tag |
+| Merged | Merge SHA; serialized execution | Do not repeat tests; build binaries, multi-architecture images, and Helm charts | Publish version tags, `latest`, and OCI charts only after all builds succeed; then pull them back for verification |
 
-- 流水线 upsert 原 PR 唯一评论，覆盖全部结果及证据；marker 定位，reporter 用 `if: always()` 读取 `needs.*.result`。
+- Upsert one persistent comment per PR, covering all results and evidence. Identify it with a marker and run the reporter with `if: always()`, reading `needs.*.result`.
 
-## 12. Specification of Quality Gate
+## 12. Quality Gates
 
 ```text
-结构/文件矩阵 → API/依赖方向 → format/lint → UT → 集成测试 → 配置/部署渲染 → E2E → 清理
+Structure and file matrix → APIs and dependency direction → formatting and lint → unit tests → integration tests → configuration and deployment rendering → E2E → cleanup
 ```
 
-- 拒绝多余源码/旧符号；写入 owner 唯一；验证乱序/幂等；代码/配置/迁移/部署/文档同步；全绿并清理。
+- Reject redundant source files and obsolete symbols. Each write has one owning component. Verify out-of-order handling and idempotency. Keep code, configuration, migrations, deployment, and documentation synchronized. Require all checks to pass and complete cleanup.

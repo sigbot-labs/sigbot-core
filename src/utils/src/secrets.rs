@@ -19,7 +19,8 @@
 // This includes modifications and derived works.
 
 use crate::base64s::Base64Helper;
-use ring::rand::{SecureRandom, SystemRandom};
+use ring::rand::SecureRandom;
+use ring::rand::SystemRandom;
 
 pub struct SecretHelper {}
 

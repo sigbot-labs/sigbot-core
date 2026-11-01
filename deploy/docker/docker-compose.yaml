@@ -1,0 +1,193 @@
+x-platform-environment: &platform-environment
+  SIGBOT_CFG_PATH: /app/config/sigbot.yaml
+  SIGBOT__MGMT__HOST: 0.0.0.0
+  SIGBOT__MGMT__PORT: '9091'
+  SIGBOT__STORAGE__PROVIDER: Postgres
+  SIGBOT__STORAGE__POSTGRES__HOST: storage
+  SIGBOT__STORAGE__POSTGRES__USERNAME: sigbot
+  SIGBOT__STORAGE__POSTGRES__DATABASE: sigbot
+  SIGBOT__STORAGE__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:?required}
+  SIGBOT__CACHE__PROVIDER: Redis
+  SIGBOT__CACHE__REDIS__NODES: redis://redis:6379
+  SIGBOT__CACHE__REDIS__PASSWORD: ${REDIS_PASSWORD:?required}
+  SIGBOT__SECRETS__VALUES__MQTT_PASSWORD: ${MQTT_PASSWORD:?required}
+  SIGBOT__AUTHGUARD__SERVICE_ENV: ${SIGBOT_SERVICE_ENV:-dev}
+  SIGBOT__AUTHGUARD__SERVICE_TENANT_ID: ${SIGBOT_TENANT_ID:-018f0000-0000-7000-8000-000000000001}
+x-platform-service: &platform-service
+  image: ${SIGBOT_IMAGE:?select images using make docker-up}
+  env_file: ${SIGBOT_ENV_FILE:-.env}
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+    redis: {condition: service_healthy}
+    emqx: {condition: service_started}
+  restart: unless-stopped
+  mem_limit: 512m
+  cpus: '0.5'
+  pids_limit: 128
+  init: true
+services:
+  storage:
+    image: ${POSTGRES_IMAGE:?select images using make docker-up}
+    environment:
+      POSTGRES_USER: sigbot
+      POSTGRES_DB: sigbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      PGDATA: /home/postgres/pgdata/data/pgdata
+      TIMESCALEDB_TELEMETRY: 'off'
+      TS_TUNE_MEMORY: 1GB
+      TS_TUNE_NUM_CPUS: '1'
+      TS_TUNE_MAX_CONNS: '120'
+    volumes:
+      - storage-v2:/home/postgres/pgdata/data
+      - ../helm/sigbot/bootstrap/postgres-extensions.sql:/docker-entrypoint-initdb.d/20-extensions.sql:ro
+    networks: [default, worker]
+    mem_limit: 1g
+    cpus: '1'
+    healthcheck:
+      test: [CMD, pg_isready, -U, sigbot, -d, sigbot]
+      interval: 5s
+      retries: 30
+  migrate:
+    image: ${SIGBOT_IMAGE:?select images using make docker-up}
+    entrypoint: [python3, /app/migration/migrate.py, --provider, postgres]
+    environment:
+      PGHOST: storage
+      PGUSER: sigbot
+      PGDATABASE: sigbot
+      PGPASSWORD: ${POSTGRES_PASSWORD:?required}
+    depends_on:
+      storage: {condition: service_healthy}
+    mem_limit: 256m
+    cpus: '0.5'
+  redis:
+    image: ${REDIS_IMAGE:?select images using make docker-up}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?required}
+    command: [sh, -c, 'exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"']
+    volumes: [redis-data:/data]
+    networks: [default, worker]
+    mem_limit: 512m
+    cpus: '0.5'
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      retries: 20
+  emqx:
+    image: ${EMQX_IMAGE:?select images using make docker-up}
+    environment:
+      EMQX_DURABLE_SESSIONS__ENABLE: 'true'
+      EMQX_DURABLE_SESSIONS__MESSAGE_RETENTION_PERIOD: 7d
+      EMQX_MQTT__SESSION_EXPIRY_INTERVAL: 7d
+      EMQX_AUTHENTICATION__1__MECHANISM: jwt
+      EMQX_AUTHENTICATION__1__USE_JWKS: 'false'
+      EMQX_AUTHENTICATION__1__ALGORITHM: hmac-based
+      EMQX_AUTHENTICATION__1__FROM: password
+      EMQX_AUTHENTICATION__1__SECRET: ${MQTT_SIGNING_KEY:?required}
+      EMQX_AUTHENTICATION__1__VERIFY_CLAIMS: '{"username":"$${username}"}'
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+    volumes: [emqx-data:/opt/emqx/data]
+    networks: [default, worker]
+    mem_limit: 512m
+    cpus: '1'
+  minio:
+    image: ${MINIO_IMAGE:?select images using make docker-up}
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?required}
+    volumes: [logs-data:/data]
+    networks: [default, worker]
+    mem_limit: 512m
+    cpus: '0.5'
+  api:
+    image: ${SIGBOT_IMAGE:?select images using make docker-up}
+    command: [api]
+    env_file: ${SIGBOT_ENV_FILE:-.env}
+    environment:
+      SIGBOT_CFG_PATH: /app/config/sigbot.yaml
+      SIGBOT__SERVER__HOST: 0.0.0.0
+      SIGBOT__SERVER__PORT: '9000'
+      SIGBOT__MGMT__HOST: 0.0.0.0
+      SIGBOT__MGMT__PORT: '9091'
+      SIGBOT__STORAGE__PROVIDER: Postgres
+      SIGBOT__STORAGE__POSTGRES__HOST: storage
+      SIGBOT__STORAGE__POSTGRES__USERNAME: sigbot
+      SIGBOT__STORAGE__POSTGRES__DATABASE: sigbot
+      SIGBOT__STORAGE__POSTGRES__PASSWORD: ${POSTGRES_PASSWORD:?required}
+      SIGBOT__CACHE__PROVIDER: Redis
+      SIGBOT__CACHE__REDIS__NODES: redis://redis:6379
+      SIGBOT__CACHE__REDIS__PASSWORD: ${REDIS_PASSWORD:?required}
+      SIGBOT__SERVICES__CONTROLLER__IMAGES__SIGBOT: ${SIGBOT_IMAGE:?select images using make docker-up}
+      SIGBOT__LLM__VECDB__PG_VECTOR__HOST: storage
+      SIGBOT__LLM__VECDB__PG_VECTOR__DATABASE: sigbot
+      SIGBOT__LLM__VECDB__PG_VECTOR__USERNAME: sigbot
+      SIGBOT__LLM__VECDB__PG_VECTOR__PASSWORD: ${POSTGRES_PASSWORD:?required}
+    volumes: [runtime-data:/var/lib/sigbot]
+    ports: ['127.0.0.1:${API_PORT:-9000}:9000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    mem_limit: 2g
+    cpus: '2'
+    pids_limit: 256
+    init: true
+  controller:
+    image: ${SIGBOT_IMAGE:?select images using make docker-up}
+    command: [controller]
+    env_file: ${SIGBOT_ENV_FILE:-.env}
+    environment:
+      <<: *platform-environment
+      SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID: platform:controller
+      SIGBOT__SERVICES__CONTROLLER__WORKERS__ENABLED: 'true'
+      SIGBOT__SERVICES__CONTROLLER__IMAGES__SIGBOT: ${SIGBOT_IMAGE:?select images using make docker-up}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${SIGBOT_ENV_FILE:-./.env}:/run/sigbot/workers/tenant-${SIGBOT_TENANT_ID:-1}-default.env:ro
+    group_add: ['${DOCKER_GID:-999}']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: '1'
+    pids_limit: 256
+    init: true
+  order:
+    <<: *platform-service
+    command:
+      - order
+      - --messager-provider
+      - MQTT
+      - --order-manager-configuration
+      - '{"messager_config":{"properties":{"mqtt_server":"emqx","mqtt_port":"1883","mqtt_username":"sigbot","mqtt_client_id":"sigbot-platform-order","mqtt_timeout":"10","mqtt_clean_start":"false","mqtt_qos":"1"},"secrets":{"mqtt_password_secret":"mqtt_password"}},"properties":{"refresh_interval_ms":"2000"},"secrets":{}}'
+    environment:
+      <<: *platform-environment
+      SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID: platform:order
+  wallet:
+    <<: *platform-service
+    command:
+      - wallet
+      - --messager-provider
+      - MQTT
+      - --wallet-manager-configuration
+      - '{"messager_config":{"properties":{"mqtt_server":"emqx","mqtt_port":"1883","mqtt_username":"sigbot","mqtt_client_id":"sigbot-platform-wallet","mqtt_timeout":"10","mqtt_clean_start":"false","mqtt_qos":"1"},"secrets":{"mqtt_password_secret":"mqtt_password"}},"properties":{"refresh_interval_ms":"2000"},"secrets":{}}'
+    environment:
+      <<: *platform-environment
+      SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID: platform:wallet
+  web:
+    image: ${SIGBOT_WEB_IMAGE:?select images using make docker-up}
+    ports: ['127.0.0.1:${WEB_PORT:-8080}:8080']
+    mem_limit: 256m
+    cpus: '0.5'
+# New PGDATA layout has a dedicated volume; old financial volumes are never adopted.
+volumes:
+  storage-v2: {}
+  redis-data: {}
+  emqx-data: {}
+  logs-data: {}
+  runtime-data: {}
+networks:
+  worker:
+    name: ${SIGBOT_WORKER_NETWORK:-sigbot-worker}
+    labels:
+      sigbot.io/scope: ${SIGBOT_SERVICE_ENV:-dev}:${SIGBOT_TENANT_ID:-018f0000-0000-7000-8000-000000000001}

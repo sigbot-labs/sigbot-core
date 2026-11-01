@@ -15,6 +15,7 @@ import time
 import yaml
 
 from common.rust import RustIntegration
+from common.containers import LocalContainerEngine
 
 
 class PostgresExtensions:
@@ -29,18 +30,14 @@ class PostgresExtensions:
         self.context = context
         self.repository = context.root.parents[2]
         self.compose = context.root / 'deploy/postgres-extensions/docker-compose.yaml'
-        self.bootstrap = self.repository / 'tooling/deploy/helm/sigbot/bootstrap/postgres-extensions.sql'
+        self.bootstrap = self.repository / 'deploy/helm/sigbot/bootstrap/postgres-extensions.sql'
         config = yaml.safe_load(self.compose.read_text())
-        self.image = config['services']['postgres']['image']
+        self.image = os.environ['MARKETPULSE_POSTGRES_IMAGE']
         self.digest = self.image.split('@sha256:')[-1]
-        if len(self.digest) != 64 or config['volumes']['extensions-data']['name'] != self.volume:
+        if (len(self.digest) != 64 or any(character.isspace() for character in self.image)
+                or config['volumes']['extensions-data']['name'] != self.volume):
             raise ValueError('extension fixture must pin its verified image and dedicated volume')
-        self.engine = shlex.split(os.environ.get('MARKETPULSE_EXTENSIONS_COMMAND', 'sudo -n podman'))
-        if self.engine not in [['podman'], ['docker'], ['sudo', '-n', 'podman'], ['sudo', '-n', 'docker']]:
-            raise ValueError('extension fixture requires a local Docker or Podman engine')
-        if self.engine[0] == 'sudo':
-            self.engine.insert(2, '--preserve-env=HTTPS_PROXY,HTTP_PROXY')
-        self.engine += ['--remote=false'] if self.engine[-1] == 'podman' else ['--host', 'unix:///var/run/docker.sock']
+        self.engine = LocalContainerEngine("MARKETPULSE_EXTENSIONS_COMMAND").arguments()
         self.password = secrets.token_urlsafe(32)
         self.url = f'postgresql://postgres:{self.password}@127.0.0.1:15440/sigbot_extensions'
         self.deadline = time.monotonic() + context.timeout_seconds
@@ -152,14 +149,15 @@ class PostgresExtensions:
         self.result.update(actual)
         self.result['container_id'] = self.container_id
         self.result['bootstrap_sha256'] = hashlib.sha256(script.encode()).hexdigest()
-        migration = self.repository / 'tooling/deploy/migrations/migrate.py'
+        migration = self.repository / 'migration/migrate.py'
         spec = importlib.util.spec_from_file_location('sigbot_extension_migrations', migration)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        rendered = module.MigrationRunner(migration.parent / 'postgresql').script()
+        rendered = module.MigrationRunner(migration.parent, 'postgres').postgres_script()
         self.sql(rendered)
-        count = int(self.sql('SELECT count(*) FROM schema_migration;', scalar=True))
-        if count != len(list((migration.parent / 'postgresql').glob('*/*.ddl.sql'))):
+        count = int(self.sql('SELECT count(*) FROM mig_version;', scalar=True))
+        if count != len([path for path in migration.parent.iterdir()
+                        if path.is_dir() and path.name.isdigit() and len(path.name) == 14]):
             raise AssertionError('isolated extension fixture did not apply every migration')
         self.result['schema_migrations'] = count
         self.result['migration_script_sha256'] = hashlib.sha256(rendered.encode()).hexdigest()
@@ -169,7 +167,8 @@ class PostgresExtensions:
         with lock_path.open('a') as lock, tempfile.TemporaryDirectory(prefix='sigbot-extensions-') as private:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             env_file = Path(private) / 'fixture.env'
-            env_file.write_text(f'MARKETPULSE_EXTENSIONS_PASSWORD={self.password}\n')
+            env_file.write_text(f'MARKETPULSE_EXTENSIONS_PASSWORD={self.password}\n'
+                                f'MARKETPULSE_POSTGRES_IMAGE={self.image}\n')
             env_file.chmod(0o600)
             try:
                 self.prepare(env_file)

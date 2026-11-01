@@ -34,7 +34,7 @@ component logs -> Messager
 | 角色 | 契约 | 示例 |
 |---|---|---|
 | Service Root | `SigbotLogService` | Real-time 与 Archive Supervisor |
-| Processing | `ISigbotLogManager` | `SigbotDefaultLogManager` |
+| Processing | `ILogservice` | `DefaultLogservice` |
 | Archive | `ISigbotLogArchive` | 显式选择 PostgreSQL/TimescaleDB、Object Storage 或 Log Backend |
 | Live Stream | `ISigbotLogStream` | Bounded WebSocket Fan-out |
 
@@ -55,17 +55,13 @@ Proxy Log Query，但其他组件不能共享 Archive Table。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotLogServer`、`ISigbotLogManager`、
-`SigbotDefaultLogManager`、Per-workflow Broadcast State，并通过核心 `LogHandler`
-转换归档。它会初始化 `SigbotState` 访问数据库，Payload 仍面向 Workflow/Node，当前
-Messager 语义也尚不具备文档要求的独立 Shared Consumer 行为。
-
-必须对齐到 `SigbotLogService` Root、Pipeline/Component-scoped 结构化 Event、独立拥有
-Observability Store、两条真实 Consumer Path、Authorization、Redaction、Idempotent
-Archive 与 Bounded Fan-out。
+当前源码由 `SigbotLogServer` 注册 `ILogservice` Provider，组件负责采集、WAL 缓冲、
+不可变 S3 分块和游标读取；核心 `LogserviceHandler` 负责业务边界，数据库操作只存在于
+Logservice Repository。`append` 是逻辑追加：ACK 在 SQLite WAL `FULL` 持久提交后返回，
+随后每个分块以条件创建写入新的 S3 Key，绝不修改已经存在的 S3 对象。
 
 ## 源码地图
 
-- Log Service：`src/logservice/`
-- Log API 与当前 Persistence Handler：`src/core/src/sys/`
-- 共享 Log 类型：`src/types/`
+- Log Service：`src/component/logservice/`
+- Log Handler 与 Repository：`src/core/src/modules/logservice/`
+- 共享 Log 类型：`src/types/src/logservice/`

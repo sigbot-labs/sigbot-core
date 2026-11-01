@@ -14,7 +14,7 @@ class GroupStrategy:
         deadline = (datetime.fromisoformat(ctx.clock.now.replace("Z", "+00:00")) + timedelta(seconds=30)).isoformat()
         intents = []
         for index, account_id in enumerate(ctx.configuration.accounts):
-            intents.append({"account_id": account_id, "wallet_id": account_id, "exchange": "BINANCE", "symbol": "BTCUSDT",
+            intents.append({"account_id": account_id, "wallet_id": ctx.configuration.wallets[index], "exchange": "BINANCE", "symbol": "BTCUSDT",
                 "side": "BUY", "quantity": "0.001", "order_type": "MARKET", "limit_price": None, "reduce_only": False,
                 "market": {"source": event.source, "event_time": event.event_time, "available_time": event.available_time,
                            "price": str(event.data.value.price)},

@@ -3,6 +3,9 @@ import threading
 
 import paho.mqtt.client as mqtt
 
+from common.broker import DurableBrokerProbe
+from deploy.deployer.docker import DockerController
+
 
 class BrokerProbe:
     def __init__(self, context, suffix, password):
@@ -64,18 +67,35 @@ def verify(context):
     finally:
         rejected.close()
     scope = context.config["scope"]
-    valid = f"internal/v2/{scope['env']}/{scope['tenant_id']}/{scope['space_id']}/probe/acl"
-    forbidden = [f"internal/v2/{scope['env']}/{scope['tenant_id'] + 1}/{scope['space_id']}/probe/acl",
-                 f"internal/v2/{scope['env']}/{scope['tenant_id']}/{scope['space_id'] + 1}/probe/acl",
-                 f"internal/v2/foreign/{scope['tenant_id']}/{scope['space_id']}/probe/acl"]
+    valid = f"internal/v2/{scope['env']}/{scope['tenant_id']}/probe/acl"
+    forbidden = [f"internal/v2/{scope['env']}/0192f7b2-5c00-7000-8000-000000000099/probe/acl",
+                 f"internal/v2/foreign/{scope['tenant_id']}/probe/acl"]
     for index, topic in enumerate([valid] + forbidden):
         for action in ("subscribe", "publish"):
             probe = BrokerProbe(context, f"{index}-{action}", password)
             try:
                 allowed = probe.operation(action, topic)
-                assert allowed == (index == 0), f"broker {action} did not enforce env/tenant/space isolation"
+                assert allowed == (index == 0), f"broker {action} did not enforce env/tenant isolation"
             finally:
                 probe.close()
+    durable_topic = f"internal/v2/{scope['env']}/{scope['tenant_id']}/probe/durable"
+    durable = DurableBrokerProbe(context, durable_topic, password)
+    try:
+        durable.establish()
+        publisher = BrokerProbe(context, "durable-publisher", password)
+        try:
+            if not publisher.connect():
+                raise AssertionError("durable probe publisher was rejected")
+            publisher.client.publish(durable_topic, DurableBrokerProbe.payload, qos=1)
+            if not publisher.completed.wait(15) or not publisher.reason:
+                raise AssertionError("durable probe publisher did not receive PUBACK")
+        finally:
+            publisher.close()
+        DockerController(context).restart("emqx")
+        durable.resume()
+    finally:
+        durable.close()
     return {"invalid_credentials_rejected": True, "own_scope_permitted": True,
-            "foreign_env_tenant_space_publish_and_subscribe_denied": True, "broker": "actual EMQX MQTT 5 acknowledgments",
+            "foreign_env_tenant_publish_and_subscribe_denied": True, "broker": "actual EMQX MQTT 5 acknowledgments",
+            "durable_qos1_session_survived_broker_restart": True,
             "scope": "local JWT broker identity; independent from Authguard UI/API authentication"}

@@ -60,7 +60,7 @@ SigbotEvaluatorManager
 - 集成 WorkflowManager 进行 workflow 扫描
 - 订阅 messager 事件用于手动触发
 
-#### SigbotEvaluationExecutorFactory
+#### EvaluatorFactory
 - 管理 evaluation executor 的生命周期
 - 维护 executor registry: `executor_id → SigbotEvaluationExecutor`
 - executor_id 格式: `"{workflow_id}:{node_id}"`
@@ -92,7 +92,7 @@ match &node_info.stage {
 }
 
 // 3. 初始化并启动 evaluation executor
-SigbotEvaluationExecutorFactory::init(workflow_id, node_id, provider, argument).await?
+EvaluatorFactory::init(workflow_id, node_id, provider, argument).await?
     .startup(messager).await;
 ```
 
@@ -103,7 +103,7 @@ SigbotEvaluationExecutorFactory::init(workflow_id, node_id, provider, argument).
 let executor_id = format!("{}:{}", workflow_id, node_id);
 
 // 2. 注销并关闭 evaluation executor
-SigbotEvaluationExecutorFactory::close(executor_id).await?;
+EvaluatorFactory::close(executor_id).await?;
 ```
 
 ### 6. **Executor 生命周期**
@@ -174,7 +174,7 @@ executor.shutdown().await;
 | **执行内容** | 静态 Python 策略代码 | Multi-Agent LLM 工作流 |
 | **触发方式** | WorkflowManager (time-driven) | WorkflowManager (time-driven) + Messager (event-driven) |
 | **Executor** | SigbotStrategyExecutor | SigbotEvaluationExecutor |
-| **Factory** | SigbotStrategyExecutorFactory | SigbotEvaluationExecutorFactory |
+| **Factory** | StrategyFactory | EvaluatorFactory |
 | **输出** | 交易信号 | 策略超参 |
 
 ## 配置示例

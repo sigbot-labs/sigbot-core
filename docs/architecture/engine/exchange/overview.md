@@ -7,12 +7,12 @@ must be discovered explicitly.
 
 Exchange is not a standalone daemon. It is a capability-based async SDK
 composed by Datafeed for public market streams, Order Manager for private
-trading, Wallet Manager for account reconciliation, and Backtest for simulated
+trading, Wallet Manager for account reconciliation, and Backtest for deterministic
 execution. Provider details never leak into the fixed pipeline contracts.
 
 ## Capability Model
 
-`ISigbotExchangeClient` identifies a venue/account adapter and exposes only the
+`IExchange` identifies a venue/account adapter and exposes only the
 capability ports it implements:
 
 | Port | Responsibility |
@@ -30,7 +30,7 @@ another market type.
 ## Adapter Structure
 
 ```text
-ISigbotExchangeClient
+IExchange
   -> SigbotBinanceExchangeClient
        -> Spot capabilities
        -> USD-M futures capabilities
@@ -38,7 +38,7 @@ ISigbotExchangeClient
   -> SigbotCoinbaseExchangeClient
   -> SigbotIbkrExchangeClient
   -> SigbotSchwabExchangeClient
-  -> SigbotSimulatedExchangeClient
+  -> BacktestExchange
 ```
 
 Provider names in this diagram express the target adapter boundary, not a claim
@@ -88,7 +88,7 @@ quantity, fee, and balance values use explicit decimal semantics.
 
 Live orders use `ExecutionAdapterFactory` and `LiveExecutionFactory`, selecting
 the official Binance Spot SDK, the mature `ibapi` TWS/Gateway SDK, or the official
-Polymarket V2/V3 SDK. Paper and simulated execution select the backtest adapter;
+Polymarket V2/V3 SDK. Backtest execution selects the dedicated historical adapter;
 they never rewrite a production exchange URL. Existing market-source interfaces
 remain under their original directories and are not these live order paths.
 
@@ -151,4 +151,4 @@ execution. No real order is submitted by the test suite.
 ## Source Map
 
 - Exchange SDK and provider adapters: `src/exchange/`
-- Shared exchange types: `src/types/src/modules/exchange/`
+- Shared exchange types: `src/types/src/exchange/`

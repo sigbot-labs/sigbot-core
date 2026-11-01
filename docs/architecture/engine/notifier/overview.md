@@ -20,8 +20,8 @@ Email, Telegram, and QQ:
 SigbotNotifier
   -> ISigbotNotifier
   -> ISigbotNotificationChannel
-       -> SigbotEmailNotificationChannel
-       -> SigbotTelegramNotificationChannel
+       -> SigbotEmailNotifierChannel
+       -> SigbotTelegramNotifierChannel
        -> SigbotQqNotificationChannel
 ```
 
@@ -87,8 +87,8 @@ backoff, jitter, and a maximum attempt/dead-letter policy.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotNotificationForwarder`,
-`ISigbotNotificationClient`, and Email/Telegram clients. It consumes raw UTF-8
+Current source exposes `SigbotNotifier`,
+`INotifier`, and Email/Telegram clients. It consumes raw UTF-8
 payloads and broadcasts them to all configured clients. Typed routing,
 preferences, idempotency, durable retry/dead-letter state, rate limits, and
 receipts are absent. QQ is reserved design and is not currently implemented.
@@ -99,5 +99,5 @@ and isolated durable delivery lifecycle.
 
 ## Source Map
 
-- Notification service and adapters: `src/notification/`
-- Notification types: `src/types/src/modules/notification/`
+- Notification service and adapters: `src/component/notifier/`
+- Notification types: `src/types/src/component/notifier/`

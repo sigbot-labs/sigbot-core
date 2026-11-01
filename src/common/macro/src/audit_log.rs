@@ -21,10 +21,19 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn2::{
-    parse::Parse, parse::ParseStream, parse_macro_input, Expr, FnArg, ItemFn, Lit, Meta, MetaNameValue,
-    Pat, PatType, Result, Token,
-};
+use syn2::parse::Parse;
+use syn2::parse::ParseStream;
+use syn2::parse_macro_input;
+use syn2::Expr;
+use syn2::FnArg;
+use syn2::ItemFn;
+use syn2::Lit;
+use syn2::Meta;
+use syn2::MetaNameValue;
+use syn2::Pat;
+use syn2::PatType;
+use syn2::Result;
+use syn2::Token;
 
 /// Configuration for the audit_log attribute
 struct AuditLogAttrs {
@@ -59,46 +68,39 @@ impl Parse for AuditLogAttrs {
             input.parse_terminated(Meta::parse, Token![,])?;
 
         for meta in meta_list.iter() {
-            match &meta {
-                Meta::NameValue(MetaNameValue { path, value, .. }) => {
-                    let ident = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
-                    match ident.as_str() {
-                        "service" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    service = Some(lit.value());
-                                }
+            if let Meta::NameValue(MetaNameValue { path, value, .. }) = &meta {
+                let ident = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                match ident.as_str() {
+                    "service" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                service = Some(lit.value());
                             }
                         }
-                        "level" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    level = lit.value();
-                                }
-                            }
-                        }
-                        "skip_args" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    skip_args = lit
-                                        .value()
-                                        .split(',')
-                                        .filter_map(|s| s.trim().parse().ok())
-                                        .collect();
-                                }
-                            }
-                        }
-                        "metadata" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    metadata = Some(lit.value());
-                                }
-                            }
-                        }
-                        _ => {}
                     }
+                    "level" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                level = lit.value();
+                            }
+                        }
+                    }
+                    "skip_args" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                skip_args = lit.value().split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                            }
+                        }
+                    }
+                    "metadata" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                metadata = Some(lit.value());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 

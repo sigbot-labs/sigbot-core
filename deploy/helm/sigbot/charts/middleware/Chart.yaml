@@ -1,0 +1,10 @@
+apiVersion: v2
+name: middleware
+description: Sigbot control-plane middleware dependency boundary
+type: application
+version: 1.0.0
+dependencies:
+  - name: authguard
+    version: "1.0.2"
+    repository: oci://ghcr.io/wl4g/charts
+    condition: authguard.enabled

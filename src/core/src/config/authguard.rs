@@ -1,24 +1,22 @@
 //! Authguard integration settings. Credentials are supplied through mounted Secrets.
-use serde::{Deserialize, Serialize};
+use anyhow::Context;
+use anyhow::Result;
+use serde::Deserialize;
+use serde::Serialize;
+use sigbot_types::messager::topic::MessageScope;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AuthguardProperties {
     pub provider: AuthguardProviderKind,
-    #[serde(alias = "service-tenant-id")]
-    pub service_tenant_id: Option<i64>,
-    #[serde(alias = "service-space-id")]
-    pub service_space_id: Option<i64>,
-    #[serde(alias = "service-env")]
+    pub service_tenant_id: Option<Uuid>,
     pub service_env: Option<String>,
-    #[serde(alias = "service-principal-id")]
     pub service_principal_id: Option<String>,
     pub service: String,
     pub partition: String,
     pub region: String,
-    #[serde(alias = "read-action")]
     pub read_action: String,
-    #[serde(alias = "write-action")]
     pub write_action: String,
 }
 
@@ -35,7 +33,6 @@ impl Default for AuthguardProperties {
         Self {
             provider: AuthguardProviderKind::SignedHeader,
             service_tenant_id: None,
-            service_space_id: None,
             service_env: None,
             service_principal_id: None,
             service: "sigbot".into(),
@@ -44,5 +41,16 @@ impl Default for AuthguardProperties {
             read_action: "sigbot:read".into(),
             write_action: "sigbot:write".into(),
         }
+    }
+}
+
+impl AuthguardProperties {
+    pub fn message_scope(&self) -> Result<MessageScope> {
+        let scope = MessageScope {
+            env: self.service_env.clone().context("service environment required")?,
+            tenant_id: self.service_tenant_id.context("service tenant required")?,
+        };
+        scope.validate()?;
+        Ok(scope)
     }
 }

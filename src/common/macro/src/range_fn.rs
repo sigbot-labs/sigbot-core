@@ -20,20 +20,22 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse_macro_input;
 use syn::spanned::Spanned;
-use syn::{
-    parse_macro_input,
-    Attribute,
-    AttributeArgs,
-    Ident,
-    ItemFn,
-    Signature,
-    Type,
-    TypeReference,
-    Visibility,
-};
+use syn::Attribute;
+use syn::AttributeArgs;
+use syn::Ident;
+use syn::ItemFn;
+use syn::Signature;
+use syn::Type;
+use syn::TypeReference;
+use syn::Visibility;
 
-use crate::utils::{ extract_arg_map, extract_input_types, get_ident };
+use crate::utils::extract_arg_map;
+
+use crate::utils::extract_input_types;
+
+use crate::utils::get_ident;
 
 macro_rules! ok {
     ($item:expr) => {
@@ -57,7 +59,9 @@ pub(crate) fn process_range_fn(args: TokenStream, input: TokenStream) -> TokenSt
     let ItemFn { attrs, vis, sig, block } = compute_fn;
 
     // extract fn arg list
-    let Signature { inputs, ident: fn_name, .. } = &sig;
+    let Signature {
+        inputs, ident: fn_name, ..
+    } = &sig;
     let arg_types = ok!(extract_input_types(inputs));
 
     // with format like Float64Array
@@ -81,7 +85,7 @@ pub(crate) fn process_range_fn(args: TokenStream, input: TokenStream) -> TokenSt
             ok!(get_ident(&arg_map, "name", arg_span)),
             display_name,
             array_types,
-            ok!(get_ident(&arg_map, "ret", arg_span))
+            ok!(get_ident(&arg_map, "ret", arg_span)),
         );
         result.extend(struct_code);
     }
@@ -90,12 +94,13 @@ pub(crate) fn process_range_fn(args: TokenStream, input: TokenStream) -> TokenSt
         ok!(get_ident(&arg_map, "name", arg_span)),
         arg_types,
         fn_name.clone(),
-        ok!(get_ident(&arg_map, "ret", arg_span))
+        ok!(get_ident(&arg_map, "ret", arg_span)),
     );
     // preserve this fn, but remove its `pub` modifier
     let input_fn_code: TokenStream = (quote! {
         #sig { #block }
-    }).into();
+    })
+    .into();
 
     result.extend(calc_fn_code);
     result.extend(input_fn_code);
@@ -108,11 +113,10 @@ fn build_struct(
     name: Ident,
     display_name_ident: Ident,
     array_types: Vec<Type>,
-    return_array_type: Ident
+    return_array_type: Ident,
 ) -> TokenStream {
     let display_name = display_name_ident.to_string();
-    (
-        quote! {
+    (quote! {
         #(#attrs)*
         #[derive(Debug)]
         #vis struct #name {}
@@ -142,16 +146,11 @@ fn build_struct(
                 #return_array_type::new_null(0).data_type().clone()
             }
         }
-    }
-    ).into()
+    })
+    .into()
 }
 
-fn build_calc_fn(
-    name: Ident,
-    param_types: Vec<Type>,
-    fn_name: Ident,
-    ret_type: Ident
-) -> TokenStream {
+fn build_calc_fn(name: Ident, param_types: Vec<Type>, fn_name: Ident, ret_type: Ident) -> TokenStream {
     let param_names = param_types
         .iter()
         .enumerate()

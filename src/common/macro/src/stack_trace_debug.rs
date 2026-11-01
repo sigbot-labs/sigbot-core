@@ -20,10 +20,17 @@
 
 //! implement `::common_error::ext::StackError`
 
-use proc_macro2::{ Span, TokenStream as TokenStream2 };
-use quote::{ quote, quote_spanned };
+use proc_macro2::Span;
+
+use proc_macro2::TokenStream as TokenStream2;
+use quote::quote;
+use quote::quote_spanned;
+use syn2::parenthesized;
 use syn2::spanned::Spanned;
-use syn2::{ parenthesized, Attribute, Ident, ItemEnum, Variant };
+use syn2::Attribute;
+use syn2::Ident;
+use syn2::ItemEnum;
+use syn2::Variant;
 
 pub fn stack_trace_style_impl(args: TokenStream2, input: TokenStream2) -> TokenStream2 {
     let input_cloned: TokenStream2 = input.clone();
@@ -62,10 +69,7 @@ pub fn stack_trace_style_impl(args: TokenStream2, input: TokenStream2) -> TokenS
 /// fn debug_fmt(&self, layer: usize, buf: &mut Vec<String>);
 /// ```
 fn build_debug_fmt_impl(enum_name: Ident, variants: Vec<ErrorVariant>) -> TokenStream2 {
-    let match_arms = variants
-        .iter()
-        .map(|v| v.to_debug_match_arm())
-        .collect::<Vec<_>>();
+    let match_arms = variants.iter().map(|v| v.to_debug_match_arm()).collect::<Vec<_>>();
 
     quote! {
         fn debug_fmt(&self, layer: usize, buf: &mut Vec<String>) {
@@ -84,10 +88,7 @@ fn build_debug_fmt_impl(enum_name: Ident, variants: Vec<ErrorVariant>) -> TokenS
 /// fn next(&self) -> Option<&dyn ::common_error::ext::StackError>;
 /// ```
 fn build_next_impl(enum_name: Ident, variants: Vec<ErrorVariant>) -> TokenStream2 {
-    let match_arms = variants
-        .iter()
-        .map(|v| v.to_next_match_arm())
-        .collect::<Vec<_>>();
+    let match_arms = variants.iter().map(|v| v.to_next_match_arm()).collect::<Vec<_>>();
 
     quote! {
         fn next(&self) -> Option<&dyn ::common_error::ext::StackError> {
@@ -159,7 +160,8 @@ impl ErrorVariant {
                     } else {
                         Err(meta.error("unrecognized repr"))
                     }
-                }).expect("Each error should contains a display attribute");
+                })
+                .expect("Each error should contains a display attribute");
             }
 
             if attr.path().is_ident("cfg") {
@@ -167,7 +169,8 @@ impl ErrorVariant {
             }
         }
 
-        let field_ident = variant.fields
+        let field_ident = variant
+            .fields
             .iter()
             .map(|f| f.ident.clone().unwrap_or_else(|| Ident::new("_", f.span())))
             .collect();
@@ -208,42 +211,36 @@ impl ErrorVariant {
         };
 
         match (self.has_location, self.has_source, self.has_external_cause) {
-            (true, true, _) =>
-                quote_spanned! {
+            (true, true, _) => quote_spanned! {
                self.span => #cfg #[allow(unused_variables)] #name { #(#fields),*, } => {
                     buf.push(format!("{layer}: {}, at {}", format!(#display), location));
                     source.debug_fmt(layer + 1, buf);
                 },
             },
-            (true, false, true) =>
-                quote_spanned! {
+            (true, false, true) => quote_spanned! {
                 self.span => #cfg #[allow(unused_variables)] #name { #(#fields),* } => {
                     buf.push(format!("{layer}: {}, at {}", format!(#display), location));
                     buf.push(format!("{}: {:?}", layer + 1, error));
                 },
             },
-            (true, false, false) =>
-                quote_spanned! {
+            (true, false, false) => quote_spanned! {
                 self.span => #cfg #[allow(unused_variables)] #name { #(#fields),* } => {
                     buf.push(format!("{layer}: {}, at {}", format!(#display), location));
                 },
             },
-            (false, true, _) =>
-                quote_spanned! {
+            (false, true, _) => quote_spanned! {
                 self.span => #cfg #[allow(unused_variables)] #name { #(#fields),* } => {
                     buf.push(format!("{layer}: {}", format!(#display)));
                     source.debug_fmt(layer + 1, buf);
                 },
             },
-            (false, false, true) =>
-                quote_spanned! {
+            (false, false, true) => quote_spanned! {
                 self.span => #cfg #[allow(unused_variables)] #name { #(#fields),* } => {
                     buf.push(format!("{layer}: {}", format!(#display)));
                     buf.push(format!("{}: {:?}", layer + 1, error));
                 },
             },
-            (false, false, false) =>
-                quote_spanned! {
+            (false, false, false) => quote_spanned! {
                 self.span => #cfg #[allow(unused_variables)] #name { #(#fields),* } => {
                     buf.push(format!("{layer}: {}", format!(#display)));
                 },

@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use base64::{engine::general_purpose, Engine};
+use base64::engine::general_purpose;
+
+use base64::Engine;
 
 pub struct Base64Helper {}
 

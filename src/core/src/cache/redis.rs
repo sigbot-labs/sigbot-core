@@ -23,15 +23,58 @@ use crate::config::config::RedisProperties;
 use anyhow::Error;
 use async_trait::async_trait;
 use common_telemetry::info;
-use redis::{
-    cluster::{ClusterClient, ClusterClientBuilder},
-    cluster_async::ClusterConnection,
-    RedisResult,
-};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use redis::aio::{ConnectionLike, MultiplexedConnection};
+use redis::cluster::ClusterClient;
+use redis::cluster::ClusterClientBuilder;
+use redis::cluster_async::ClusterConnection;
+use redis::RedisResult;
+use redis::{Cmd, IntoConnectionInfo, Pipeline, RedisFuture, Value};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub struct StringRedisCache {
-    client: Arc<ClusterClient>,
+    client: RedisClient,
+}
+
+enum RedisClient {
+    Single {
+        client: redis::Client,
+        response_timeout: Duration,
+        connection_timeout: Duration,
+    },
+    Cluster(Arc<ClusterClient>),
+}
+
+enum RedisConnection {
+    Single(MultiplexedConnection),
+    Cluster(ClusterConnection),
+}
+
+impl ConnectionLike for RedisConnection {
+    fn req_packed_command<'a>(&'a mut self, command: &'a Cmd) -> RedisFuture<'a, Value> {
+        match self {
+            Self::Single(connection) => connection.req_packed_command(command),
+            Self::Cluster(connection) => connection.req_packed_command(command),
+        }
+    }
+    fn req_packed_commands<'a>(
+        &'a mut self,
+        pipeline: &'a Pipeline,
+        offset: usize,
+        count: usize,
+    ) -> RedisFuture<'a, Vec<Value>> {
+        match self {
+            Self::Single(connection) => connection.req_packed_commands(pipeline, offset, count),
+            Self::Cluster(connection) => connection.req_packed_commands(pipeline, offset, count),
+        }
+    }
+    fn get_db(&self) -> i64 {
+        match self {
+            Self::Single(connection) => connection.get_db(),
+            Self::Cluster(connection) => connection.get_db(),
+        }
+    }
 }
 
 impl StringRedisCache {
@@ -41,8 +84,36 @@ impl StringRedisCache {
         desensitized.password = desensitized
             .password
             .map(|f| f.chars().map(|_| '*').collect::<String>());
+        for node in &mut desensitized.nodes {
+            if let Ok(mut url) = url::Url::parse(node) {
+                if url.password().is_some() {
+                    let _ = url.set_password(Some("REDACTED"));
+                    *node = url.to_string();
+                }
+            }
+        }
 
-        info!("Initializing redis cluster client with: {:?}", desensitized);
+        info!("Initializing Redis client with: {:?}", desensitized);
+
+        if let [node] = config.nodes.as_slice() {
+            let mut connection = node
+                .as_str()
+                .into_connection_info()
+                .unwrap_or_else(|_| panic!("invalid Redis endpoint"));
+            if let Some(username) = &config.username {
+                connection.redis.username = Some(username.clone());
+            }
+            if let Some(password) = &config.password {
+                connection.redis.password = Some(password.clone());
+            }
+            return Self {
+                client: RedisClient::Single {
+                    client: redis::Client::open(connection).expect("invalid Redis configuration"),
+                    response_timeout: Duration::from_millis(config.response_timeout.unwrap_or(6000)),
+                    connection_timeout: Duration::from_millis(config.connection_timeout.unwrap_or(3000)),
+                },
+            };
+        }
 
         let mut builder = ClusterClientBuilder::new(config.nodes.clone());
         if config.username.is_some() {
@@ -52,33 +123,44 @@ impl StringRedisCache {
             builder = builder.password(config.password.clone().unwrap());
         }
         if config.connection_timeout.is_some() {
-            builder = builder.connection_timeout(Duration::from_millis(config.connection_timeout.clone().unwrap()));
+            builder = builder.connection_timeout(Duration::from_millis(config.connection_timeout.unwrap()));
         }
         if config.response_timeout.is_some() {
-            builder = builder.response_timeout(Duration::from_millis(config.response_timeout.clone().unwrap()));
+            builder = builder.response_timeout(Duration::from_millis(config.response_timeout.unwrap()));
         }
         if config.retries.is_some() {
-            builder = builder.retries(config.retries.clone().unwrap());
+            builder = builder.retries(config.retries.unwrap());
         }
         if config.max_retry_wait.is_some() {
-            builder = builder.max_retry_wait(config.max_retry_wait.clone().unwrap());
+            builder = builder.max_retry_wait(config.max_retry_wait.unwrap());
         }
         if config.min_retry_wait.is_some() {
-            builder = builder.min_retry_wait(config.min_retry_wait.clone().unwrap());
+            builder = builder.min_retry_wait(config.min_retry_wait.unwrap());
         }
-        if config.read_from_replicas.is_some() {
+        if config.read_from_replicas.unwrap_or(false) {
             builder = builder.read_from_replicas();
         }
         let client = builder.build().expect("Failed to build redis cluster client");
         info!("Initialized the redis cluster client.");
 
         StringRedisCache {
-            client: Arc::new(client),
+            client: RedisClient::Cluster(Arc::new(client)),
         }
     }
 
-    async fn get_async_connection(&self) -> Result<ClusterConnection, Error> {
-        self.client.get_async_connection().await.map_err(Error::from)
+    async fn get_async_connection(&self) -> Result<RedisConnection, Error> {
+        Ok(match &self.client {
+            RedisClient::Single {
+                client,
+                response_timeout,
+                connection_timeout,
+            } => RedisConnection::Single(
+                client
+                    .get_multiplexed_async_connection_with_timeouts(*response_timeout, *connection_timeout)
+                    .await?,
+            ),
+            RedisClient::Cluster(client) => RedisConnection::Cluster(client.get_async_connection().await?),
+        })
     }
 }
 
@@ -175,7 +257,6 @@ impl ICache<String> for StringRedisCache {
         let mut cmd = redis::cmd("PEXPIRE");
         cmd.arg(key);
         cmd.arg(milliseconds);
-        cmd.arg("NX");
         let result: RedisResult<i64> = cmd.query_async(&mut con).await;
         Ok(result.map(|s| s > 0)?)
     }
@@ -199,12 +280,13 @@ impl ICache<String> for StringRedisCache {
             false => 0,
         });
         let result: RedisResult<i64> = cmd.query_async(&mut con).await;
-        Ok(result.map(|s| s >= 1).unwrap_or(false))
+        result?; // SETBIT returns the previous bit, including zero on a successful first write.
+        Ok(true)
     }
 
     async fn del(&self, key: String) -> Result<bool, Error> {
         let mut con = self.get_async_connection().await?;
         let result: RedisResult<i32> = redis::cmd("DEL").arg(key).query_async(&mut con).await;
-        Ok(result.map(|n| n > 0).unwrap_or(false))
+        Ok(result? > 0)
     }
 }

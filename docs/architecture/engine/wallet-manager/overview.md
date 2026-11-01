@@ -60,7 +60,7 @@ Wallet tables.
 | Role | Contract | Examples |
 |---|---|---|
 | Service root | `SigbotWalletManager` | `SigbotTransactionalWalletManager` |
-| Wallet behavior | `ISigbotWalletManager` | Reservation and event application |
+| Wallet behavior | `IWallet` | Reservation and event application |
 | Accounting | `ISigbotPortfolioLedger` | Double-entry ledger implementation |
 | Persistence | `ISigbotPortfolioStore` | `SigbotPostgresPortfolioStore` |
 | Reconciliation source | Exchange account capability | Venue balance/position/fill queries |
@@ -92,7 +92,7 @@ operationally but cannot share writable tables or service credentials.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotWalletServer`, `ISigbotWalletManager`,
+Current source exposes `SigbotWalletServer`, `IWallet`,
 `IWalletUpdater`, and `PostgresWalletUpdater`. It uses the global application
 PostgreSQL configuration. Ledger insertion commits separately from asynchronous
 balance and position updates; a duplicate ledger insert can still allow a
@@ -104,6 +104,6 @@ portfolio snapshots, and exchange reconciliation.
 
 ## Source Map
 
-- Wallet service and persistence adapters: `src/wallet/`
-- Wallet domain types: `src/types/src/modules/wallet/`
-- Wallet migrations: `tooling/deploy/migrations/`
+- Wallet component and persistence adapters: `src/component/wallet/`
+- Wallet domain types: `src/types/src/wallet/`
+- Wallet migrations: `migration/`

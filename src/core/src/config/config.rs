@@ -20,26 +20,33 @@
 
 use anyhow::Result;
 use arc_swap::ArcSwap;
-use config::Config;
+use config::Config as SourceConfig;
 use dotenv::dotenv;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json;
-use std::{env, ops::Deref, sync::Arc};
+use std::collections::BTreeMap;
+use std::env;
+use std::ops::Deref;
+use std::sync::Arc;
 use validator::Validate;
 
-pub use super::{authguard::*, llm::*, platform::*, services::*, storage::*};
+pub use super::authguard::*;
+
+pub use super::llm::*;
+
+pub use super::platform::*;
+
+pub use super::services::*;
+
+pub use super::storage::*;
 
 // Global program information.
 pub const GIT_VERSION: &str = env!("GIT_VERSION");
 pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 pub const GIT_BUILD_DATE: &str = env!("GIT_BUILD_DATE");
-
-// Global static resources.
-pub const DEFAULT_INDEX_HTML: &str = include_str!("../../../../static/index.html");
-pub const DEFAULT_404_HTML: &str = include_str!("../../../../static/404.html");
-pub const DEFAULT_403_HTML: &str = include_str!("../../../../static/403.html");
 
 lazy_static! {
     pub static ref VERSION: String = format!(
@@ -55,7 +62,6 @@ lazy_static! {
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct AppConfigProperties {
-    #[serde(alias = "service-name")]
     #[validate(length(min = 1, max = 32))]
     pub service_name: String,
     #[serde(default = "ServerProperties::default")]
@@ -70,8 +76,10 @@ pub struct AppConfigProperties {
     pub authguard: super::authguard::AuthguardProperties,
     #[serde(default = "CacheProperties::default")]
     pub cache: CacheProperties,
-    #[serde(default = "AppDBProperties::default")]
-    pub appdb: AppDBProperties,
+    #[serde(default = "StorageProperties::default")]
+    pub storage: StorageProperties,
+    #[serde(default)]
+    pub secrets: SecretsProperties,
     #[serde(rename = "llm", default = "LlmProperties::default")]
     pub llm: LlmProperties,
     #[serde(default = "ServicesProperties::default")]
@@ -90,7 +98,8 @@ impl AppConfigProperties {
             swagger: SwaggerProperties::default(),
             authguard: super::authguard::AuthguardProperties::default(),
             cache: CacheProperties::default(),
-            appdb: AppDBProperties::default(),
+            storage: StorageProperties::default(),
+            secrets: SecretsProperties::default(),
             llm: LlmProperties::default(),
             services: ServicesProperties::default(),
         }
@@ -113,9 +122,7 @@ impl Deref for AppConfig {
 
 impl AppConfig {
     pub fn new(config: &AppConfigProperties) -> Arc<AppConfig> {
-        let mut inner = config.clone();
-        inner.appdb.normalize_provider();
-        Arc::new(AppConfig { inner })
+        Arc::new(AppConfig { inner: config.clone() })
     }
 
     pub fn validate(self) -> Result<AppConfig, anyhow::Error> {
@@ -124,21 +131,43 @@ impl AppConfig {
     }
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecretsProperties {
+    /// Named secrets are populated by a mounted YAML Secret or by
+    /// `SIGBOT__SECRETS__VALUES__<NAME>` overrides. Domain configuration stores
+    /// only the stable key, never an environment-variable name.
+    pub values: BTreeMap<String, String>,
+}
+
+impl SecretsProperties {
+    pub fn require(&self, key: &str) -> Result<&str> {
+        let canonical = key.trim().to_ascii_lowercase();
+        let value = self
+            .values
+            .get(&canonical)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("configured secret is missing: {canonical}"))?;
+        Ok(value)
+    }
+}
+
 // Global the single refreshable configuration instance.
 // see: https://github.com/wl4g-collect/openobserve/blob/v0.10.9/src/config/src/config.rs#L186
-static CONFIG: Lazy<ArcSwap<AppConfig>> = Lazy::new(|| ArcSwap::from(init()));
+static CONFIG: Lazy<ArcSwap<AppConfig>> = Lazy::new(|| ArcSwap::from(ConfigLoader::load()));
 
 /// Sole configuration loading entry; public wrappers preserve the existing API.
 pub struct ConfigLoader;
 impl ConfigLoader {
-    fn load(custom_config_json: Option<&str>) -> Arc<AppConfig> {
+    fn load() -> Arc<AppConfig> {
         dotenv().ok();
         let defaults =
             serde_json::to_string(&AppConfigProperties::default()).expect("configuration defaults must serialize");
-        let mut builder = Config::builder().add_source(config::File::from_str(&defaults, config::FileFormat::Json));
+        let mut builder =
+            SourceConfig::builder().add_source(config::File::from_str(&defaults, config::FileFormat::Json));
         if let Ok(path) = env::var("SIGBOT_CFG_PATH") {
             if !path.trim().is_empty() {
-                let value = Config::builder()
+                let value = SourceConfig::builder()
                     .add_source(config::File::with_name(path.trim()))
                     .build()
                     .and_then(|config| config.try_deserialize::<serde_json::Value>())
@@ -149,24 +178,27 @@ impl ConfigLoader {
                 builder = builder.add_source(config::File::from_str(&json, config::FileFormat::Json));
             }
         }
-        builder = builder.add_source(
-            config::Environment::with_prefix("SIGBOT")
-                .separator("__")
-                .prefix_separator("__")
-                .keep_prefix(false),
-        );
+        let environment = SourceConfig::builder()
+            .add_source(
+                config::Environment::with_prefix("SIGBOT")
+                    .separator("__")
+                    .prefix_separator("__")
+                    .keep_prefix(false),
+            )
+            .build()
+            .and_then(|source| source.try_deserialize::<serde_json::Value>())
+            .unwrap_or_else(|_| panic!("configuration environment cannot be loaded"));
+        let environment = Self::normalize_environment(environment)
+            .unwrap_or_else(|_| panic!("configuration environment contains invalid typed values"));
+        builder = builder.add_source(config::File::from_str(
+            &serde_json::to_string(&environment).expect("environment configuration must serialize"),
+            config::FileFormat::Json,
+        ));
         // Errors may contain supplied values; never print raw deserialization errors.
         let value = builder
             .build()
             .unwrap_or_else(|_| panic!("configuration sources cannot be merged"));
-        let mut properties = Self::deserialize(value).unwrap_or_else(|error| panic!("{error}"));
-        if let Some(custom) = custom_config_json {
-            if let Some(ref configurer) = **CUSTOM_CONFIGURER.load() {
-                properties = configurer
-                    .configure(&properties, custom)
-                    .unwrap_or_else(|_| panic!("tenant configuration validation failed"));
-            }
-        }
+        let properties = Self::deserialize(value).unwrap_or_else(|error| panic!("{error}"));
         properties
             .validate()
             .expect("application configuration constraints failed");
@@ -174,8 +206,8 @@ impl ConfigLoader {
         AppConfig::new(&properties)
     }
 
-    pub fn deserialize(value: Config) -> Result<AppConfigProperties> {
-        let mut properties: AppConfigProperties = serde_path_to_error::deserialize(value).map_err(|error| {
+    pub fn deserialize(value: SourceConfig) -> Result<AppConfigProperties> {
+        let properties: AppConfigProperties = serde_path_to_error::deserialize(value).map_err(|error| {
             // Paths name typed fields; the underlying error can contain secret values.
             let path = error.path().to_string();
             let safe_path = if path.len() <= 160
@@ -189,8 +221,24 @@ impl ConfigLoader {
             };
             anyhow::anyhow!("configuration validation failed at {safe_path}; expected typed key/value")
         })?;
-        properties.appdb.normalize_provider();
         Ok(properties)
+    }
+
+    pub fn normalize_environment(mut value: serde_json::Value) -> Result<serde_json::Value> {
+        if let Some(nodes) = value.pointer_mut("/cache/redis/nodes") {
+            let text = nodes
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("cache.redis.nodes must be a comma-separated string"))?;
+            let values = text
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(|item| serde_json::Value::String(item.to_owned()))
+                .collect::<Vec<_>>();
+            anyhow::ensure!(!values.is_empty(), "cache.redis.nodes cannot be empty");
+            *nodes = serde_json::Value::Array(values);
+        }
+        Self::normalize(value)
     }
 
     pub fn normalize(value: serde_json::Value) -> Result<serde_json::Value> {
@@ -199,17 +247,22 @@ impl ConfigLoader {
             Value::Object(object) => {
                 let mut result = serde_json::Map::new();
                 for (key, value) in object {
-                    let canonical = key.replace('-', "_");
                     anyhow::ensure!(
-                        !result.contains_key(&canonical),
-                        "duplicate canonical configuration key"
+                        !key.is_empty()
+                            && !key.starts_with('_')
+                            && !key.ends_with('_')
+                            && !key.contains("__")
+                            && key
+                                .bytes()
+                                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'),
+                        "configuration keys must use canonical snake_case"
                     );
-                    let value = if matches!(canonical.as_str(), "tags" | "input_schema") {
+                    let value = if matches!(key.as_str(), "tags" | "input_schema") {
                         value
                     } else {
                         Self::normalize(value)?
                     };
-                    result.insert(canonical, value);
+                    result.insert(key, value);
                 }
                 Value::Object(result)
             }
@@ -250,25 +303,11 @@ impl ConfigLoader {
     }
 }
 
-pub(crate) fn init() -> Arc<AppConfig> {
-    ConfigLoader::load(None)
-}
 pub fn get_config() -> Arc<AppConfig> {
     CONFIG.load().clone()
 }
-pub fn refresh_config() -> Result<(), anyhow::Error> {
-    CONFIG.store(init());
-    Ok(())
-}
 
-pub trait CustomConfigConfigurer: Send + Sync {
-    fn configure(&self, base_config: &AppConfigProperties, custom_config_json: &str) -> Result<AppConfigProperties>;
-}
-pub(crate) static CUSTOM_CONFIGURER: Lazy<ArcSwap<Option<Arc<dyn CustomConfigConfigurer>>>> =
-    Lazy::new(|| ArcSwap::from(Arc::new(None)));
-pub fn register_custom_configurer(configurer: Arc<dyn CustomConfigConfigurer>) {
-    CUSTOM_CONFIGURER.store(Arc::new(Some(configurer)));
-}
-pub(crate) fn init_with_custom(custom_config_json: &str) -> Arc<AppConfig> {
-    ConfigLoader::load(Some(custom_config_json))
+pub fn refresh_config() -> Result<(), anyhow::Error> {
+    CONFIG.store(ConfigLoader::load());
+    Ok(())
 }

@@ -81,8 +81,8 @@ Tool 可以补充上下文证据，但不能替代规范 Datafeed Event；Replay
 
 ## 实现对齐
 
-当前源码暴露 `SigbotEvaluatorRunner`、`ISigbotEvaluationExecutor`、
-`SigbotMasEvaluationExecutor` 及 Boot、Loader、Alpha、Auditor Agent 结构。Event-driven
+当前源码暴露 `SigbotEvaluatorRunner`、`IEvaluator`、
+`MasEvaluator` 及 Boot、Loader、Alpha、Auditor Agent 结构。Event-driven
 Datafeed Subscription 尚未完成，部分数据准备仍是 Placeholder；当前 Hyperparameter
 Event 缺少完整 Regime、Confidence、Watermark、Expiry 与 Provenance 契约，部分标识
 仍硬编码，Runtime 也存在直连核心数据库路径。
@@ -92,6 +92,6 @@ Event 缺少完整 Regime、Confidence、Watermark、Expiry 与 Provenance 契�
 
 ## 源码地图
 
-- Evaluator Runtime 与 Executor：`src/evaluator/src/`
-- Multi-agent 实现：`src/evaluator/src/executor/adk/`
-- 共享 Evaluation/Message 类型：`src/types/src/modules/evaluator/`
+- Evaluator Runtime 与 Executor：`src/component/evaluator/src/`
+- Multi-agent 实现：`src/component/evaluator/src/executor/adk/`
+- 共享 Evaluation/Message 类型：`src/types/src/evaluator/`

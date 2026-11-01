@@ -18,7 +18,7 @@ For each decision event, the runner assembles one immutable
 tenant_id / pipeline_id / strategy_id
 decision_time
 market_window + terminal_feed_event_id
-evaluation_snapshot + evaluation_id
+eval_snapshot + evaluation_id
 portfolio_snapshot + portfolio_version
 strategy_code_version
 validated_hyperparameters
@@ -70,7 +70,7 @@ retained as audit/metrics records without entering the execution queue.
 | Role | Contract | Implementations |
 |---|---|---|
 | Service root | `SigbotStrategyRunner` | Strategy-scoped runtime |
-| Execution engine | `ISigbotStrategyExecutor` | `SigbotPythonStrategyExecutor`; future sandboxed runtimes require explicit contracts |
+| Execution engine | `IStrategy` | `PythonStrategy`; future sandboxed runtimes require explicit contracts |
 | Input join | `ISigbotStrategyContextAssembler` | Event-time and version-aware assembler |
 | Signal validation | `ISigbotTradeSignalValidator` | Schema and hard boundary validation before publication |
 
@@ -94,7 +94,7 @@ an approved, immutable strategy artifact.
 ## Implementation Alignment
 
 Current source exposes `SigbotStrategyRunner`,
-`ISigbotStrategyExecutor`, and `SigbotPythonStrategyExecutor`. Its execution
+`IStrategy`, and `PythonStrategy`. Its execution
 input currently lacks the complete evaluation and portfolio contracts, does
 not subscribe to the evaluation stream, and includes a path that calls a
 Binance exchange client directly after Python execution. Batch execution is
@@ -107,6 +107,6 @@ executor and compatibility tests exist.
 
 ## Source Map
 
-- Runner: `src/strategy/runner/`
-- Python executor and SDK: `src/strategy/sdk/`
-- Shared strategy types: `src/types/src/modules/strategy/`
+- Runner: `src/component/strategy/runner/`
+- Python executor and SDK: `src/component/strategy/sdk/`
+- Shared strategy types: `src/types/src/strategy/`

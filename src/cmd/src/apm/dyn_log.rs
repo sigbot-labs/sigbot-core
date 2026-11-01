@@ -19,9 +19,11 @@
 // This includes modifications and derived works.
 
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::IntoResponse;
+use axum::response::Response;
+use common_telemetry::info;
 use common_telemetry::tracing_subscriber::filter;
-use common_telemetry::{info, RELOAD_HANDLE};
+use common_telemetry::RELOAD_HANDLE;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

@@ -1,7 +1,11 @@
 //! Explicit trusted identity passed from HTTP middleware to business handlers.
-use anyhow::{ensure, Result};
-use authguard_adapter_rust::{RequestAccess, ResourceUrn, UrnPattern};
+use anyhow::ensure;
+use anyhow::Result;
+use authguard_adapter_rust::RequestAccess;
+use authguard_adapter_rust::ResourceUrn;
+use authguard_adapter_rust::UrnPattern;
 use std::str::FromStr;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct RequestIdentity {
@@ -43,33 +47,26 @@ impl RequestIdentity {
         &self.resource.tenant
     }
 
-    pub fn require_tenant(&self, tenant_id: i64) -> Result<()> {
+    pub fn require_tenant(&self, tenant_id: Uuid) -> Result<()> {
         ensure!(self.tenant_id() == tenant_id.to_string(), "tenant binding mismatch");
         Ok(())
     }
-    pub fn require_workflow(&self, env: &str, space_id: i64, workflow_id: Option<i64>) -> Result<()> {
+    pub fn require_workflow(&self, env: &str, workflow_id: Option<Uuid>) -> Result<()> {
         self.require_resource(
             env,
-            space_id,
             "workflow",
             &workflow_id.map(|id| id.to_string()).unwrap_or_else(|| "new".into()),
         )
     }
 
-    pub fn require_resource(&self, env: &str, space_id: i64, domain: &str, id: &str) -> Result<()> {
-        ensure!(
-            matches!(env, "live" | "paper" | "simulated" | "backtest") && space_id > 0,
-            "invalid resource scope"
-        );
+    pub fn require_resource(&self, env: &str, domain: &str, id: &str) -> Result<()> {
+        sigbot_types::messager::topic::MessageScope {
+            env: env.to_owned(),
+            tenant_id: self.tenant_id().parse()?,
+        }
+        .validate()?;
         let mut resource = self.resource.clone();
-        resource.path = vec![
-            "environment".into(),
-            env.into(),
-            "space".into(),
-            space_id.to_string(),
-            domain.into(),
-            id.into(),
-        ];
+        resource.path = vec!["environment".into(), env.into(), domain.into(), id.into()];
         let allowed = self
             .access
             .grants
@@ -96,12 +93,11 @@ impl RequestIdentity {
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct ScopeQuery {
     pub env: String,
-    pub space_id: i64,
 }
 
 impl ScopeQuery {
-    pub fn authorize(&self, identity: &RequestIdentity, domain: &str) -> Result<i64> {
-        identity.require_resource(&self.env, self.space_id, domain, "all")?;
+    pub fn authorize(&self, identity: &RequestIdentity, domain: &str) -> Result<Uuid> {
+        identity.require_resource(&self.env, domain, "all")?;
         Ok(identity.tenant_id().parse()?)
     }
 }

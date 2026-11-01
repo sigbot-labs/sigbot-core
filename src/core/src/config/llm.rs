@@ -19,11 +19,13 @@
 // This includes modifications and derived works.
 
 use super::storage::PostgresPropertiesBase;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use std::ops::Deref;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+#[derive(Default)]
 pub struct LlmProperties {
     #[serde(default = "VectorDBProperties::default")]
     pub vecdb: VectorDBProperties,
@@ -41,18 +43,17 @@ pub struct LlmProperties {
 pub struct VectorDBProperties {
     #[serde(rename = "type")]
     pub db_type: VectorDBType,
-    #[serde(alias = "pg-vector", default = "PgVectorDBProperties::default")]
+    #[serde(default = "PgVectorDBProperties::default")]
     pub pg_vector: PgVectorDBProperties,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum VectorDBType {
-    #[serde(alias = "PGVECTOR")]
-    PGVECTOR,
+    PgVector,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct PgVectorDBProperties {
     #[serde(flatten)]
     pub inner: PostgresPropertiesBase,
@@ -61,46 +62,31 @@ pub struct PgVectorDBProperties {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct EmbeddingLLMProperties {
-    #[serde(alias = "api-uri")]
     pub api_uri: String,
-    #[serde(alias = "api-key")]
     pub api_key: Option<String>,
-    #[serde(alias = "org-id")]
     pub org_id: Option<String>,
-    #[serde(alias = "project-id")]
     pub project_id: Option<String>,
     #[serde(rename = "model")]
     pub model: String,
-    #[serde(alias = "pre-delete-collection")]
     pub pre_delete_collection: bool,
-    #[serde(alias = "vector-dimensions")]
     pub vector_dimensions: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct GenerateLLMProperties {
-    #[serde(alias = "api-uri")]
     pub api_uri: String,
-    #[serde(alias = "api-key")]
     pub api_key: Option<String>,
-    #[serde(alias = "org-id")]
     pub org_id: Option<String>,
-    #[serde(alias = "project-id")]
     pub project_id: Option<String>,
     #[serde(rename = "model")]
     pub model: String,
-    #[serde(alias = "max-tokens")]
     pub max_tokens: u32,
     #[serde(rename = "temperature")]
     pub temperature: f32,
-    #[serde(alias = "candidate-count")]
     pub candidate_count: usize,
-    #[serde(alias = "top-k")]
     pub top_k: usize,
-    #[serde(alias = "top-p")]
     pub top_p: f32,
-    #[serde(alias = "system-prompt")]
     pub system_prompt: String,
 }
 
@@ -109,16 +95,8 @@ pub struct GenerateLLMProperties {
 impl Default for VectorDBProperties {
     fn default() -> Self {
         VectorDBProperties {
-            db_type: VectorDBType::PGVECTOR,
+            db_type: VectorDBType::PgVector,
             pg_vector: PgVectorDBProperties::default(),
-        }
-    }
-}
-
-impl Default for PgVectorDBProperties {
-    fn default() -> Self {
-        PgVectorDBProperties {
-            inner: PostgresPropertiesBase::default(),
         }
     }
 }
@@ -128,16 +106,6 @@ impl Deref for PgVectorDBProperties {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl Default for LlmProperties {
-    fn default() -> Self {
-        LlmProperties {
-            vecdb: VectorDBProperties::default(),
-            embedding: EmbeddingLLMProperties::default(),
-            generate: GenerateLLMProperties::default(),
-        }
     }
 }
 

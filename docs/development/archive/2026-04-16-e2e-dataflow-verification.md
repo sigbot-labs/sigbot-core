@@ -50,17 +50,17 @@
 
 | Flow | Status | Implementation File |
 |------|--------|---------------------|
-| datafeed → mqtt → evaluator | ✅ Partial | `src/datafeed/src/server/datafeed_ingestor.rs`, `src/evaluator/src/executor/adk/executor_mas.rs` |
-| evaluator → mqtt → strategy | ⚠️ Missing | `src/evaluator/src/executor/adk/executor_mas.rs`, `src/strategy/runner/src/server/strategy_runner.rs` |
-| strategy → mqtt → order | ✅ Complete | `src/strategy/runner/src/server/strategy_runner.rs`, `src/order/src/server/order_server.rs` |
+| datafeed → mqtt → evaluator | ✅ Partial | `src/component/datafeed/src/server/datafeed_ingestor.rs`, `src/component/evaluator/src/executor/adk/executor_mas.rs` |
+| evaluator → mqtt → strategy | ⚠️ Missing | `src/component/evaluator/src/executor/adk/executor_mas.rs`, `src/component/strategy/runner/src/server/strategy_runner.rs` |
+| strategy → mqtt → order | ✅ Complete | `src/component/strategy/runner/src/server/strategy_runner.rs`, `src/order/src/server/order_server.rs` |
 | order → exchange | ✅ Complete | `src/order/src/manager/order_default.rs`, `src/exchange/src/client/` |
 | order → mqtt → wallet | ✅ Complete | `src/order/src/manager/order_default.rs`, `src/wallet/src/server/wallet_server.rs` |
 | wallet → postgresql | ✅ Complete | `src/wallet/src/manager/wallet_default.rs`, `src/core/src/modules/wallet/store/` |
-| order → mqtt → exporter | ⚠️ Placeholder | `src/exporter/src/manager/exporter_kafka.rs`, `src/exporter/src/manager/exporter_googlestreet.rs` |
-| all services → mqtt → log service | ✅ Complete | `src/logservice/src/server/log_server.rs` |
-| log service → postgresql | ✅ Complete | `src/logservice/src/manager/logmanager_default.rs`, `src/core/src/sys/store/log_postgres.rs` |
+| order → mqtt → exporter | ⚠️ Placeholder | `src/component/exporter/src/manager/exporter_kafka.rs`, `src/component/exporter/src/manager/exporter_googlestreet.rs` |
+| all services → mqtt → log service | ✅ Complete | `src/component/logservice/src/server/log_server.rs` |
+| log service → postgresql | ✅ Complete | `src/component/logservice/src/manager/logmanager_default.rs`, `src/core/src/sys/store/log_postgres.rs` |
 | log service → minio/oss | ❌ Missing | Not implemented |
-| log service → websocket | ✅ Complete | `src/logservice/src/server/log_server.rs` |
+| log service → websocket | ✅ Complete | `src/component/logservice/src/server/log_server.rs` |
 
 ## Issues Found
 
@@ -71,7 +71,7 @@
 **Description**: Logs are only archived to database (PostgreSQL/SQLite/MongoDB), not to object storage (MinIO/OSS) as specified in the requirements.
 
 **Current Implementation**:
-- `src/logservice/src/manager/logmanager_default.rs` - Only archives to database via `LogHandler.append()`
+- `src/component/logservice/src/manager/logmanager_default.rs` - Only archives to database via `LogHandler.append()`
 
 **Required Fix**:
 1. Add MinIO/OSS client configuration
@@ -86,7 +86,7 @@
 **Description**: The `subscribe_from_input_stage()` method in evaluator executor only logs information but doesn't actually subscribe to datafeed events.
 
 **Current Implementation**:
-- `src/evaluator/src/executor/adk/executor_mas.rs:129-170` - Empty implementation with TODO comments
+- `src/component/evaluator/src/executor/adk/executor_mas.rs:129-170` - Empty implementation with TODO comments
 
 **Required Fix**:
 1. Subscribe to datafeed topics (Twitter, TruthSocial, Kline)
@@ -101,8 +101,8 @@
 **Description**: Strategy runner doesn't subscribe to `TOPIC_WF_HYPERPARAMETER_UPDATE` topic, so evaluator-calculated hyperparameters cannot be dynamically applied to running strategies.
 
 **Current Implementation**:
-- `src/evaluator/src/executor/adk/executor_mas.rs:233-253` - Publishes hyperparameter updates
-- `src/strategy/runner/src/server/strategy_runner.rs` - No subscription to hyperparameter updates
+- `src/component/evaluator/src/executor/adk/executor_mas.rs:233-253` - Publishes hyperparameter updates
+- `src/component/strategy/runner/src/server/strategy_runner.rs` - No subscription to hyperparameter updates
 
 **Required Fix**:
 1. Add hyperparameter update handler in strategy runner
@@ -117,8 +117,8 @@
 **Description**: Kafka and Google Sheets exporters are placeholders that only log data instead of actually exporting.
 
 **Current Implementation**:
-- `src/exporter/src/manager/exporter_kafka.rs:53-62` - Placeholder Kafka writer
-- `src/exporter/src/manager/exporter_googlestreet.rs:48-62` - Placeholder Google Sheets writer
+- `src/component/exporter/src/manager/exporter_kafka.rs:53-62` - Placeholder Kafka writer
+- `src/component/exporter/src/manager/exporter_googlestreet.rs:48-62` - Placeholder Google Sheets writer
 
 **Required Fix**:
 1. Implement Kafka producer using `rdkafka` crate

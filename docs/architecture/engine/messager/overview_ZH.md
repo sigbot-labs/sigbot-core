@@ -6,13 +6,13 @@
 尚不具备等价的持久会话、广播和恢复保证，不能作为金融链路的可靠传输替代。
 
 Messager 是 SigBot 集群内部异步通信 SDK，不是业务 Service，也不拥有 Trading
-Payload。Service 依赖 `ISigbotMessagerClient`；即使多个业务组件在同一宿主中运行，v2 金融
+Payload。Service 依赖 `IMessager`；即使多个业务组件在同一宿主中运行，v2 金融
 链路仍使用受 scope 隔离的 MQTT 会话和各领域自己的持久事务。
 
 ## 异步 Port
 
 ```text
-ISigbotMessagerClient
+IMessager
   async publish(topic, message)
   async publish_confirmed(topic, message)
   async subscribe(topic, handler)
@@ -22,7 +22,7 @@ ISigbotMessagerClient
 `publish_confirmed` 等待 broker PUBACK；`subscribe` 等待 SUBACK。Callback 只有在其承诺
 的持久处理完成后返回，MQTT 才 ACK。关闭客户端终止连接和内部任务。
 
-实现为 `SigbotLocalMessagerClient` 与 `SigbotMqttMessagerClient`。Local 当前为单 topic
+实现为 `LocalMessager` 与 `MqttMessager`。Local 当前为单 topic
 内存队列；其限制必须在配置和验收中明确，不能宣称与 MQTT 重启恢复等价。
 
 ## Topic 与单 owner 语义
@@ -30,8 +30,8 @@ ISigbotMessagerClient
 规范内部 Topic：
 
 ```text
-internal/v2/{env}/{tenant_id}/{space_id}/workflow/{workflow_id}/{suffix}
-internal/v2/{env}/{tenant_id}/{space_id}/account/{account_id}/{suffix}
+internal/v2/{env}/{tenant_id}/workflow/{workflow_id}/{suffix}
+internal/v2/{env}/{tenant_id}/account/{account_id}/{suffix}
 ```
 
 Evaluator 与 Strategy 使用不同会话订阅相同 feed topic，各自收到完整输入。
@@ -68,7 +68,7 @@ Metadata 与 Transport Error Mapping，不拥有业务 Schema。
 
 ## 安全不变量
 
-- Topic Authorization 在 Publisher 与 Subscriber 边界都校验 env/tenant/space Scope。
+- Topic Authorization 在 Publisher 与 Subscriber 边界都校验 env/tenant Scope。
 - 分布式环境的 MQTT 使用 TLS 与 Scoped Credential。
 - 调用 Handler 前校验 Payload Size、Decompression、Schema 与 Deserialization。
 - Trace/Log Metadata 必须脱敏，不包含 Payload Secret。
@@ -84,20 +84,20 @@ MQTT 按实际 topic 路由 handler，持久队列在订阅注册前等待。消
 ## 源码地图
 
 - Messager SDK 与 Client：`src/messager/`
-- Topic Constant 与 Message 类型：`src/types/src/modules/messager/`
+- Topic Constant 与 Message 类型：`src/types/src/messager/`
 
 ## v2 可靠消息契约与迁移
 
-唯一 topic 生成器位于 `sigbot_types::modules::messager::topic`，完整展开 17 个 Workflow 后缀和 5 个 Account 后缀。路径无前导 `/`，env/tenant/space 和资源 ID 禁止通配符或占位符。旧 v1 常量仅供兼容迁移，不会自动桥接跨租户事件。Workflow 消费者还必须校验 source/target 节点对应的边。
+唯一 topic 生成器位于 `sigbot_types::messager::topic`，完整展开 17 个 Workflow 后缀和 5 个 Account 后缀。路径无前导 `/`，env/tenant 和资源 ID 禁止通配符或占位符。Workflow 消费者还必须校验 source/target 节点对应的边。
 
 `MessageEnvelope<T>` 是 wire DTO；`DurableMessage<T>` 是唯一可持久化表示。它们包含版本、隔离范围、节点、run_id、seq、attempt_no、事件/可得/生产时间和 traceparent。请求的 `requestSpanId` 等于 producer span_id，响应通过有上限、有 TTL 的 `ReplyPairingCache` 临时回显；该字段不会写入数据库，重启后的补放不依赖它。应用重试保持 run_id/seq，递增 attempt_no 并创建新的 producer span。
 
 MQTT 使用 QoS 1、非 clean start、七天 session expiry 和手动 ACK。客户端从初始化开始持续轮询，发送方不需要先订阅。订阅完成必须收到成功的 QoS 1 SUBACK；Outbox 发送完成必须收到 broker PUBACK。业务 handler 返回成功表示已经提交 inbox/业务事务，之后才 ACK 消费消息。输入队列和并发有界、消费者串行处理；连接失败指数退避，持久会话消息等待 handler 注册完成。MQTT broker 的租户/角色 ACL 仍必须由部署配置启用，客户端校验不能替代 broker 授权。
 
-`PostgresMessageStore::{accept,complete,enqueue,next_sequence}` 参与调用方事务。Inbox/Outbox 键包含 env/tenant/space、consumer/producer、源节点、run_id、seq。原子入库后由宿主中的 `OutboxRelay` 限批发送；失败保留 pending 和退避时间。收到 PUBACK 后再提交 sent 标记；这两个动作之间的崩溃会重投，因此下游必须使用 Inbox。共享库按 broker/client 会话隔离工厂实例，不再仅按 provider 复用所有租户连接。
+`MessagerPostgresRepository::{accept,complete,enqueue,next_sequence}` 参与调用方事务。Inbox/Outbox 键包含 env/tenant、consumer/producer、源节点、run_id、seq。原子入库后由宿主中的出箱转发任务限批发送；失败保留 pending 和退避时间。收到 PUBACK 后再提交 sent 标记；这两个动作之间的崩溃会重投，因此下游必须使用 Inbox。共享库按 broker/client 会话隔离 Provider 实例，不按实现类型复用所有租户连接。
 ## 显式补放与隔离
 
-`PostgresMessageStore::replay(producer, scope, node_id, run_id, first..=last)` 只重新排队指定域、生产者、节点、run 和有界序号区间中的 `sent` Outbox。调用方必须先验证运维权限；不会跨租户扫描或创造关联 ID。下一次真实发布保留业务键，递增 `attempt_no` 并创建新的 producer span。已完成或持久隔离的 Inbox 重投会校验事实一致性后直接 ACK；同身份而事实变化仍拒绝。
+`MessagerPostgresRepository::replay(producer, scope, node_id, run_id, first..=last)` 只重新排队指定域、生产者、节点、run 和有界序号区间中的 `sent` Outbox。调用方必须先验证运维权限；不会跨租户扫描或创造关联 ID。下一次真实发布保留业务键，递增 `attempt_no` 并创建新的 producer span。已完成或持久隔离的 Inbox 重投会校验事实一致性后直接 ACK；同身份而事实变化仍拒绝。
 
 `src/messager/tests/postgres_replay.rs` 提供真实 PostgreSQL 与认证 EMQX 的集成验证，通过 `SIGBOT_TEST_DATABASE_URL`、`SIGBOT_TEST_MESSAGE_SCOPE` 和 `SIGBOT_TEST_MQTT_CONFIG` 注入测试配置。MQTT JSON 只保存密码环境变量名；测试从实际接收消息验证补放次数和 span，不修改捕获消息模拟重试。
 

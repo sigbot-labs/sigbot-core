@@ -9,7 +9,8 @@
 //! Register another interface of the same object with
 //! [`ApplicationContext::register_with`] to share one initialization and close.
 //!
-//! Create one context for the application and share it with its components.
+//! Application modules obtain the same context from [`ApplicationContext::global`].
+//! The entry point registers providers, starts the context and shuts it down.
 //! Registration uses the domain interface type and a single instance ID:
 //!
 //! ```
@@ -45,7 +46,7 @@
 //! # async fn main() -> Result<()> {
 //! # let web_ingestor_instantiator = || async { Ok(Arc::new(WebTestIngestor) as Arc<dyn ITestIngestor>) };
 //! # let twitter_ingestor_instantiator = || async { Ok(Arc::new(TwitterTestIngestor) as Arc<dyn ITestIngestor>) };
-//! let ctx = ApplicationContext::new();
+//! let ctx = ApplicationContext::global();
 //! ctx.register::<dyn ITestIngestor, _>("web-default", web_ingestor_instantiator)?;
 //! ctx.register::<dyn ITestIngestor, _>("twitter-default", twitter_ingestor_instantiator)?;
 //! ctx.init().await?;
@@ -63,8 +64,10 @@
 //! # }
 //! ```
 //!
-//! A Twitter ingestor can expose ingestion metrics through another interface
-//! of the same object. Fixed input payloads keep this example deterministic:
+//! [`ApplicationContext::new`] creates an independent context for tests or
+//! separately managed applications. The following isolated example exposes
+//! ingestion metrics through another interface of the same Twitter ingestor.
+//! Fixed input payloads keep the example deterministic:
 //!
 //! ```
 //! use std::{any::Any, sync::{Arc, Mutex}};
@@ -133,7 +136,7 @@
 //!
 //! ```compile_fail
 //! use std::sync::Arc;
-//! use common_context::ApplicationContext;
+//! use ApplicationContext;
 //!
 //! struct Unmanaged;
 //!
@@ -148,4 +151,9 @@ pub mod lifecycle {
     pub mod provider;
 }
 
-pub use lifecycle::{application::ApplicationContext, provider::IProvider};
+/// Cross-project process utilities owned by the application lifecycle layer.
+pub mod util;
+
+pub use lifecycle::application::ApplicationContext;
+
+pub use lifecycle::provider::IProvider;

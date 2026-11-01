@@ -81,7 +81,7 @@ checkpointing, and lifecycle once.
 ## Implementation Alignment
 
 Current source exposes `SigbotExporterServer`,
-`ISigbotExporterManager`, Google Sheets and Kafka managers, and subscription to
+`IExporter`, Google Sheets and Kafka managers, and subscription to
 the placed-trade topic. The writers currently log intended writes rather than
 performing real delivery. MQTT and HTTP sinks, typed target routing,
 idempotency, checkpointing, retry/dead-letter state, and isolation are not yet
@@ -93,5 +93,5 @@ per-target delivery semantics.
 
 ## Source Map
 
-- Exporter service and managers: `src/exporter/`
-- Export configuration and event types: `src/types/src/modules/`
+- Exporter service and managers: `src/component/exporter/`
+- Export configuration and event types: `src/types/src/`

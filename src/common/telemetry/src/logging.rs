@@ -18,25 +18,31 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::tracing_sampler::{create_sampler, TracingSampleOptions};
+use crate::tracing_sampler::create_sampler;
+
+use crate::tracing_sampler::TracingSampleOptions;
 use once_cell::sync::OnceCell;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::global;
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::Sampler;
 use opentelemetry_semantic_conventions::resource;
-use serde::{Deserialize, Serialize};
-use std::env;
+use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Once;
 use std::time::Duration;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_appender::rolling::RollingFileAppender;
+use tracing_appender::rolling::Rotation;
 use tracing_log::LogTracer;
-use tracing_subscriber::filter::{FilterFn, Targets};
+use tracing_subscriber::filter;
+use tracing_subscriber::filter::FilterFn;
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{filter, EnvFilter, Registry};
+use tracing_subscriber::Registry;
 
 pub const DEFAULT_LOG_TARGETS: &str = "info";
 pub const DEFAULT_OTLP_ENDPOINT: &str = "http://localhost:4317";
@@ -262,14 +268,11 @@ pub fn init_global_logging(
             None
         };
 
-        // resolve log level settings from:
-        // - options from command line or config files
-        // - environment variable: RUST_LOG
-        // - default settings
+        // The application configuration has already applied its YAML and
+        // SIGBOT__-prefixed overrides before constructing these options.
         let filter = opts
             .level
             .as_deref()
-            .or(env::var(EnvFilter::DEFAULT_ENV).ok().as_deref())
             .unwrap_or(DEFAULT_LOG_TARGETS)
             .parse::<filter::Targets>()
             .expect("error parsing log level string");
@@ -344,7 +347,7 @@ pub fn init_global_logging(
                     .as_ref()
                     .map(|e| {
                         if e.starts_with("http") {
-                            e.to_string()
+                            e.clone()
                         } else {
                             format!("http://{}", e)
                         }

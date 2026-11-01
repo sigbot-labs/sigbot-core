@@ -1,62 +1,51 @@
-# A2A Adapter
+# A2A Protocol Outlet
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Optional protocol adapter; the current request handler is partial.
+**Status:** Optional, implemented Workflow control-plane protocol outlet.
 
-`SigbotA2aServer` exposes explicitly approved SigBot agent capabilities through
-the Agent-to-Agent protocol. It is an external interoperability adapter, not a
-trading-pipeline stage and not an alternate authorization boundary.
+The API process uses the Linux Foundation `a2a-lf` and `a2a-server-lf` crates
+for Agent Card discovery, JSON-RPC, streaming responses, and protocol errors.
+A2A is not a Workflow compute node and owns no business state.
 
-## Boundary
+## Capability Boundary
 
-- Publish an Agent Card that describes only implemented, policy-approved
-  capabilities and protocol versions.
-- Authenticate the caller, resolve tenant/namespace scope, and invoke the same
-  application services and policy decisions as APIServer.
-- Translate A2A JSON-RPC messages, task lifecycle, errors, and streaming updates
-  into internal typed requests without exposing internal message topics.
-- Carry correlation, trace, idempotency, and cancellation identifiers across
-  the protocol boundary.
+`WorkflowA2aApi` advertises and executes only implemented operations:
 
-A2A cannot access private component databases, inject arbitrary pipeline nodes,
-call an exchange directly, or turn an AI response into an order. Trading
-actions, if ever exposed, still require a validated strategy/order contract and
-the normal hard-risk boundary.
+- read a tenant-scoped Workflow overview;
+- read ordered events for one Workflow;
+- idempotently request a Workflow Run start or stop.
 
-## Extension Points
+The executor delegates to Repositories under
+`src/core/src/modules/workflow/storage/`. It contains no SQL, does not access
+component-private storage, inject arbitrary nodes, call an exchange, or turn a
+model response into an order. Trading remains behind Strategy, Order, and
+Wallet boundaries.
 
-| Role | Contract | Purpose |
-|---|---|---|
-| Protocol root | `SigbotA2aServer` | Discovery and JSON-RPC transport |
-| Task handler | `ISigbotA2aTaskHandler` | Maps an approved A2A skill to an application service |
-| Agent implementation | `ISigbotAgent` | Reuses approved evaluator/research agent behavior |
+## Identity and Lifecycle
 
-Protocol types and authentication remain outside domain agents. A handler must
-declare input/output schema, timeout, cancellation, idempotency, side-effect
-class, and required permission.
+- Authguard validates every `/a2a` request. Verified tenant and principal data
+  is passed to the official handler only as request-local headers.
+- The Agent Card declares an Authguard security scheme. The Helm Gateway
+  protects `/a2a` and exposes `/.well-known/agent-card.json` for discovery.
+- A2A, HTTP, and MCP share one `ApplicationContext`; shutdown stops the listener
+  and awaits its task.
+- Configuration lives under `services.api.a2a`; `public_url` is the JSON-RPC
+  address advertised by the Agent Card.
 
-## Security and Reliability
+## Reliability Rules
 
-- Deny unregistered skills and undeclared side effects.
-- Validate JSON-RPC size, schema, content type, task transition, and replay
-  token before dispatch.
-- Stream backpressure and cancellation propagate to the owned task; abandoned
-  client connections do not leak unbounded work.
-- Agent cards never advertise placeholder capabilities.
-- Errors are protocol-safe and redact prompts, tools, credentials, private
-  strategy code, and internal topology.
-
-## Implementation Alignment
-
-Current `src/agents/a2a/` contains server-builder and ADK type integration.
-The primary handler remains placeholder behavior and does not yet invoke a
-complete agent capability; advertised capabilities are limited. End-to-end
-authentication, scoped authorization, durable task state, streaming, and
-contract tests remain required before enabling external use.
+- Commands are typed JSON; unknown fields and operations are rejected.
+- Repositories enforce tenant, environment, Workflow ownership, and
+  idempotency.
+- Client errors are sanitized while complete causes remain in structured logs
+  and traces.
+- A2A task IDs remain protocol-local. Business retries and recovery use
+  `run_id`; no additional business correlation ID is introduced.
 
 ## Source Map
 
-- A2A adapter: `src/agents/a2a/`
-- Shared agent abstractions: `src/agents/`
-- Evaluator agents: `src/evaluator/src/executor/adk/`
+- Contract: `src/api/a2a/src/a2a.rs`
+- Agent Card, Authguard, Workflow executor: `src/api/a2a/src/a2a/workflow.rs`
+- API composition: `src/cmd/src/startup/api.rs`
+- Helm ports and routes: `deploy/helm/sigbot/templates/`

@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::error::BuildTempPathSnafu;
+use crate::error::DumpProfileDataSnafu;
+use crate::error::OpenTempFileSnafu;
+use crate::error::ProfilingNotEnabledSnafu;
+use crate::error::ReadOptProfSnafu;
 use crate::error::Result;
-use crate::error::{
-    BuildTempPathSnafu, DumpProfileDataSnafu, OpenTempFileSnafu, ProfilingNotEnabledSnafu, ReadOptProfSnafu,
-};
-use snafu::{ensure, ResultExt};
-use std::{
-    ffi::{c_char, CString},
-    path::PathBuf,
-};
+use snafu::ensure;
+use snafu::ResultExt;
+use std::ffi::c_char;
+use std::ffi::CString;
+use std::path::PathBuf;
 use tokio::io::AsyncReadExt;
 
 const PROF_DUMP: &[u8] = b"prof.dump\0";

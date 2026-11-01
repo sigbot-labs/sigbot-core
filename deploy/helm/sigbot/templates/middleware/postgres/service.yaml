@@ -1,0 +1,14 @@
+{{- if .Values.middleware.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-postgres
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: postgres
+spec:
+  ports: [{name: postgresql, port: 5432, targetPort: postgresql}]
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    sigbot.io/component: postgres
+{{- end }}

@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+use serde::Serialize;
 
 pub mod knowledge;
 

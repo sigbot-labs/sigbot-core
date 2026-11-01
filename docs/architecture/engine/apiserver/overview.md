@@ -1,105 +1,88 @@
-# APIServer
+# API Services
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with current implementation gaps.
+**Status:** Current architecture specification.
 
-`SigbotApiServer` is SigBot's control-plane boundary. Like the Kubernetes API
-Server, it is the only component allowed to read or write the core persistent
-database. Every controller or engine obtains desired state through versioned
-APIs, watches, immutable configuration snapshots, or events.
+The API is the platform control-plane protocol boundary and consists of HTTP,
+A2A, and MCP adapters. All three reuse business logic from
+`src/core/src/modules/<domain>/handler`; they do not duplicate authorization,
+validation, or persistence rules. HTTP exposes the complete necessary CRUD
+surface. A2A and MCP expose only bounded capabilities required by agent use
+cases.
 
 ## Responsibilities
 
-- Authenticate principals and apply the policy contract owned by
-  [Tenant Governance & IAM](tenant-governance-and-iam.md).
-- Validate, default, version, and persist control-plane resources, including
-  tenant configuration and fixed `StrategyPipeline` specifications.
-- Provide CRUD, list, watch, optimistic-concurrency, status, and audit APIs.
-- Publish lifecycle events only after the corresponding persistent change is
-  committed, using a transactional outbox where events are required.
-- Aggregate Order and Wallet read APIs for clients when a unified public API is
-  useful; aggregation never grants access to their private databases.
-- Generate OpenAPI from registered routes and keep authentication, validation,
-  pagination, and error envelopes consistent.
+- Verify Authguard-signed identity and apply tenant authorization without
+  implementing local user, tenant, or IAM CRUD.
+- Manage Sigbot workflow, connection, and Controller worker configuration.
+- Persist immutable run snapshots and invoke explicit start, stop, and status
+  operations through handlers.
+- Serve workflow metrics, event/log tracing, notifications, market views, and
+  worker configuration to the Web application.
+- Standardize pagination, error envelopes, idempotency keys, W3C Trace Context,
+  and audit fields.
+- Generate OpenAPI from real HTTP routes. Swagger UI assets are bundled with
+  the binary and are not downloaded during builds.
 
-It does not deploy workloads, ingest market data, run AI or Python strategy
-code, place orders, or update portfolio ledgers.
+The API does not deploy pods or containers, ingest market data, run strategies,
+submit trades, or spell SQL directly. The independent Controller manages the
+nine tenant components from persisted desired state.
 
-## Control-plane Contract
+## Invocation boundary
 
 ```mermaid
 flowchart LR
-    Client --> Transport[ISigbotApiTransport]
-    Transport --> Auth[Authentication / Authorization]
-    Auth --> Service[Control-plane services]
-    Service --> Repo[ISigbotCoreRepository]
-    Repo --> DB[(Core DB)]
-    Service --> Outbox[(Lifecycle outbox)]
-    Controller -->|list / watch| Transport
-    Controller -->|status + observed generation| Transport
-    Transport -->|read aggregation| OrderApi[Order API]
-    Transport -->|read aggregation| WalletApi[Wallet API]
+    Client --> Gateway[Envoy Gateway]
+    Gateway --> Authguard
+    Authguard --> Adapter[HTTP / A2A / MCP]
+    Adapter --> Handler[Core Domain Handler]
+    Handler --> Repository[Domain Repository]
+    Repository --> DB[(Postgres / SQLite)]
+    Handler --> Controller[Controller lifecycle request]
 ```
 
-Every mutable resource has a stable ID, tenant and optional namespace scope,
-spec generation, resource version, audit metadata, and status subresource.
-Status writers cannot mutate desired-state fields. Watch consumers resume from
-a resource version and recover with a full list after compaction or gaps.
+A route, tool, or skill adapter performs protocol conversion only. A handler
+is the business service layer, and a repository is the database CRUD layer.
+Each domain fact has one designated handler/repository transaction writer.
+Components use that same handler for configuration reads or status writes and
+do not create another SQL path.
 
-## Extension Points
+## Resource scope
 
-| Role | Contract | Examples |
-|---|---|---|
-| Service root | `SigbotApiServer` | Axum-based process composition |
-| Transport | `ISigbotApiTransport` | `SigbotHttpApiTransport`; optional protocol adapters link to the same application services |
-| Core persistence | `ISigbotCoreRepository` and domain-specific repositories | PostgreSQL, SQLite for local development, Mongo where explicitly supported |
-| Authentication | `ISigbotAuthenticator` | Password, OIDC, GitHub, Ethers wallet |
-| Authorization | `ISigbotAuthorizer` | Tenant-scoped policy decision implementation |
+| Resource | API capability | Sole write boundary |
+| --- | --- | --- |
+| Workflow / run snapshot | CRUD, validation, start/stop, observation | Workflow handler/repository |
+| Connection | CRUD and Secret-reference validation | Controller handler/repository |
+| Worker / dynamic middleware | CRUD, defaults, health status | Controller handler/repository |
+| Market / evaluation / log / notification reads | Bounded queries and cursors | Owning domain handler/repository |
+| Identities, users, tenants, roles, permissions | No local CRUD | Authguard |
 
-Interfaces sit at replaceable boundaries. Route handlers remain thin and do
-not duplicate repository, authorization, or pipeline semantics.
+Every resource carries an explicit `tenant_id`. A process-global current user,
+implicit default tenant, or second workspace identifier is forbidden. Entity
+IDs and `run_id` use UUIDv7. `run_id` owns business idempotency and public
+correlation; Trace Context owns observability propagation only.
 
-## Data Ownership
+## Security and failure invariants
 
-The core database contains control-plane desired state and system-domain data:
-users, tenants, IAM, strategy and pipeline specifications, channel/export
-configuration, and backtest job metadata. APIServer owns its schemas,
-migrations, connection pools, and transactions.
+- Unauthenticated, forged, cross-tenant, or unauthorized requests are rejected
+  before a business transaction begins.
+- Only external Secret key references are stored. Responses, logs, and workflow
+  snapshots never contain plaintext credentials.
+- A write succeeds only after its transaction commits. Asynchronous publication
+  uses an outbox in that same transaction.
+- Retries retain `run_id`, increment `attempt_no`, and create a new span. No
+  second correlation identifier is introduced.
+- The management listener exposes private health and metrics only and has no
+  write operations.
 
-Order facts and portfolio accounting do not belong to the core database.
-Order Manager and Wallet Manager exclusively own their stores. APIServer
-queries their service APIs or purpose-built read models and never joins their
-tables with core data.
+## Source map
 
-## Security and Failure Invariants
-
-- Authentication state is request-local. Process-global mutable principal
-  state is forbidden.
-- Every tenant-scoped request resolves principal, tenant, namespace, resource,
-  and action before a handler runs; missing scope denies by default.
-- Secrets and password material are write-only or redacted in responses and
-  logs.
-- Write requests use idempotency keys where retries can repeat a side effect.
-- Resource-version conflicts return a deterministic conflict response rather
-  than silently overwriting newer state.
-- An API success response is sent only after the owning transaction commits.
-
-## Implementation Alignment
-
-Current source exposes `SigbotAPIServer` and already contains authentication,
-user, tenant, handler, and repository building blocks. The normal startup path
-currently mounts only a subset of available routes. Several engine processes
-also construct `SigbotState` and access core repositories directly; request
-identity is not yet fully request-local, and tenant-scoped RBAC is incomplete.
-
-The target public name is `SigbotApiServer`. API acronym casing, exclusive core
-database ownership, complete pipeline resources, list/watch/status semantics,
-route registration, and policy enforcement remain required alignment work.
-
-## Source Map
-
-- Process composition: `src/cmd/`
-- Application services, routes, handlers, context, and repositories: `src/core/`
-- System-domain types: `src/types/src/sys/`
-- Relational migrations: `tooling/deploy/migrations/`
+- HTTP: `src/api/http/`
+- A2A: `src/api/a2a/`
+- MCP: `src/api/mcp/`
+- Handlers and repositories: `src/core/src/modules/`
+- Identity context: `src/core/src/context/`
+- OpenAPI and Swagger: `src/api/http/src/swagger/`
+- Process startup: `src/cmd/src/startup/api.rs`
+- Migrations: `migration/`

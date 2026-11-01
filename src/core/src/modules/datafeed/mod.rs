@@ -19,5 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod handler;
-pub mod route;
-pub mod store;
+pub(crate) mod storage;

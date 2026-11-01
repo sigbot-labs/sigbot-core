@@ -93,30 +93,30 @@ cache:
     min_retry_wait: 1280
     read_from_replicas: true
 
-appdb:
-  type: "SQLITE" # Options: SQLITE|POSTGRESQL|MONGODB
+storage:
+  provider: "SQLite" # Options: SQLite|Postgres
   sqlite:
-    dir: "/tmp/sigbot/appdb/sqlite"
+    dir: "/tmp/sigbot/storage/sqlite"
   postgres: # App DB for PostgreSQL
+    # A mounted secret may override all connection fields with
+    # SIGBOT__STORAGE__POSTGRES__URL.
+    url: ""
     host: "127.0.0.1"
     port: 5432
     database: "postgres"
     schema: "public"
     username: postgres
-    password: "${SIGBOT__APPDB__POSTGRES__PASSWORD:}"
+    password: "${SIGBOT__STORAGE__POSTGRES__PASSWORD:}"
     min_connections: 1
     max_connections: 10
     use_ssl: false
-  mongodb:
-    url: mongodb://127.0.0.1:27017/sigbot
-    database: sigbot
 
 # see:https://platform.openai.com/docs/guides/completions
 # see:https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-completion
 # see:https://help.aliyun.com/zh/model-studio/getting-started/what-is-model-studio#16693d2e3fmir
 llm:
   vecdb:
-    type: "PGVECTOR" # Options: PGVECTOR
+    type: "pgvector" # Options: pgvector
     pg_vector: # Vector DB for PostgreSQL
       host: "127.0.0.1"
       port: 5432
@@ -159,31 +159,25 @@ llm:
 
 services:
   # Deploy configuration for tenant-level component deployment.
-  deployer:
-    # e.g: export SIGBOT__SERVICES__DEPLOYER__CRON="0 * * * * *"
+  controller:
+    # e.g: export SIGBOT__SERVICES__CONTROLLER__CRON="0 * * * * *"
     cron: "0 * * * * *"
     channel_size: 200
     images:
-      postgresql: "postgres:16"
-      emqx: "emqx/emqx:latest"
-      timescaledb: "timescale/timescaledb:latest-pg16"
-      redis: "redis:7-alpine"
       sigbot: "sigbot:latest"
-    network:
-      tenant_network_prefix: "sigbot-t"
     middleware:
-      postgresql:
-        mode: "standalone" # Options: standalone|cluster
-        replicas: 1
-      emqx:
-        mode: "standalone" # Options: standalone|cluster
-        replicas: 1
       redis:
-        mode: "standalone" # Options: standalone|cluster
-        replicas: 1
+        image: "docker.io/bitnami/redis-cluster:8.10"
+        resources: { cpu_millis: 500, memory_mb: 512, storage_gb: 8 }
+      pgvector:
+        image: "docker.io/pgvector/pgvector:pg18"
+        resources: { cpu_millis: 1000, memory_mb: 2048, storage_gb: 20 }
       timescaledb:
-        mode: "standalone" # Options: standalone|cluster
-        replicas: 1
+        image: "docker.io/timescale/timescaledb-ha:pg18"
+        resources: { cpu_millis: 1000, memory_mb: 2048, storage_gb: 50 }
+      emqx:
+        image: "docker.io/emqx/emqx:6.3.2"
+        resources: { cpu_millis: 1000, memory_mb: 1024, storage_gb: 20 }
   # The tenant exchange component hyperparameters and default configuration.
   exchanges:
     binance:
@@ -211,24 +205,21 @@ services:
       # Coin-derivatives-market
       coin_market_api_mainnet_endpoint: https://dapi.binance.com/dapi/v1
       coin_market_ws_mainnet_endpoint: wss://ws-dapi.binance.com/ws-dapi/v1
-  # The tenant evaluator component hyperparameters and default configuration.
-  # Evaluator runner handles ANALYSIS stage nodes with MAS (Multi-Agent System) provider
-  # for LLM-based dynamic market analysis and hyperparameter calculation
-  evaluator:
-    # Cron expression for time-driven evaluation scanning (every 30 seconds)
-    # Controls how frequently the evaluator scans TimescaleDB for latest market data
-    cron: "0/30 * * * * *"
-    # Channel size for the cron scheduler (internal queue size for scheduled jobs)
-    channel_size: 5
-    # Data fetch window for time-driven scans (in hours)
-    # Controls how much historical data to fetch from TimescaleDB
-    data_window_hours: 4
-    # Execution timeout for multi-agent orchestrator (in seconds)
-    # Prevents long-running evaluations from blocking the system
-    execution_timeout_secs: 300
   # The tenant backtest component hyperparameters and default configuration.
   backtest:
-    name: "defaultVerifier"
-    enabled: true
     cron: "0 * * * * *"
     channel_size: 200
+  # Protocol outlets share the API process and ApplicationContext lifecycle.
+  api:
+    mcp:
+      enabled: false
+      name: sigbot-api
+      transport: streamable_http
+      bind_address: 0.0.0.0:9002
+      auth_enabled: true
+    a2a:
+      enabled: false
+      bind_address: 0.0.0.0:9003
+      public_url: http://127.0.0.1:9003/a2a
+      auth_enabled: true
+      agents: []

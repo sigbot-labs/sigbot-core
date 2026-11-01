@@ -25,10 +25,15 @@ use common_telemetry::error;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use prometheus::*;
-use snafu::{Location, ResultExt, Snafu};
+use snafu::Location;
+use snafu::ResultExt;
+use snafu::Snafu;
 use std::any::Any;
-use tikv_jemalloc_ctl::stats::{allocated_mib, resident_mib};
-use tikv_jemalloc_ctl::{epoch, epoch_mib, stats};
+use tikv_jemalloc_ctl::epoch;
+use tikv_jemalloc_ctl::epoch_mib;
+use tikv_jemalloc_ctl::stats;
+use tikv_jemalloc_ctl::stats::allocated_mib;
+use tikv_jemalloc_ctl::stats::resident_mib;
 
 lazy_static! {
     pub static ref SYS_JEMALLOC_RESIDEN: IntGauge = register_int_gauge!(

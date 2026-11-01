@@ -1,6 +1,8 @@
 use rust_decimal::Decimal;
-use sigbot_core::modules::wallet::store::transaction::projection::{PositionProjection, TradeProjection};
-use sigbot_types::modules::order::{execution::ExecutionFact, intent::OrderSide};
+use sigbot_types::order::execution::ExecutionFact;
+use sigbot_types::order::intent::OrderSide;
+use sigbot_types::wallet::projection::{PositionProjection, TradeProjection};
+use sigbot_types::Uuid;
 use std::str::FromStr;
 
 #[test]
@@ -24,8 +26,8 @@ fn execution_assets_are_authoritative_for_opaque_instruments_and_third_asset_fee
     let mut execution = ExecutionFact {
         reservation_node_id: 5,
         reservation_seq: 0,
-        wallet_id: 1,
-        account_id: 1,
+        wallet_id: Uuid::now_v7(),
+        account_id: Uuid::now_v7(),
         exchange: "polymarket".into(),
         exchange_order_id: "venue-order".into(),
         exchange_trade_id: "venue-fill".into(),
@@ -57,7 +59,9 @@ fn execution_assets_are_authoritative_for_opaque_instruments_and_third_asset_fee
 #[test]
 fn actual_quote_amount_survives_recurring_price_rounding_and_separate_fee_postings() {
     let mut execution: ExecutionFact = serde_json::from_value(serde_json::json!({
-        "reservation_node_id":5,"reservation_seq":0,"wallet_id":1,"account_id":1,
+        "reservation_node_id":5,"reservation_seq":0,
+        "wallet_id":"0192f7b2-5c00-7000-8000-000000000401",
+        "account_id":"0192f7b2-5c00-7000-8000-000000000402",
         "exchange":"polymarket","exchange_order_id":"observed-order","exchange_trade_id":"observed-fill",
         "symbol":"outcome-token","base_asset":"outcome-token","quote_asset":"USDC","side":"BUY",
         "price":"0.3333333333333333333333333333","quantity":"3","quote_quantity":"1",

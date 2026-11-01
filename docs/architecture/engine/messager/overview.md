@@ -8,12 +8,12 @@ but their observable subscription behavior is not yet equivalent.
 Messager is SigBot's internal asynchronous communication SDK. It is not a
 business service and owns no trading payload. All-in-one mode uses a local
 in-memory implementation; distributed mode uses MQTT through EMQX. Services
-program only against `ISigbotMessagerClient`.
+program only against `IMessager`.
 
 ## Async Port
 
 ```text
-ISigbotMessagerClient
+IMessager
   async publish(topic, envelope, delivery_options)
   async subscribe(SubscriptionSpec, handler) -> SubscriptionHandle
   async close()
@@ -30,8 +30,8 @@ SubscriptionSpec
 only when its processing outcome is known; durable transports acknowledge
 according to the selected delivery contract.
 
-Implementations are `SigbotLocalMessagerClient` and
-`SigbotMqttMessagerClient`. Local mode must model the same fan-out and consumer
+Implementations are `LocalMessager` and
+`MqttMessager`. Local mode must model the same fan-out and consumer
 group semantics as MQTT, not a simplified single-handler queue that changes
 application behavior.
 
@@ -106,7 +106,7 @@ delivery metadata, and transport error mapping—not the business schemas.
 
 ## Implementation Alignment
 
-Current source exposes `ISigbotMessagerClient`, Local and MQTT clients, and
+Current source exposes `IMessager`, Local and MQTT clients, and
 asynchronous publish/subscribe calls. It has no explicit consumer-group model.
 Local mode effectively allows one receiver per exact topic and lacks equivalent
 fan-out/wildcards; MQTT's event loop can route later subscriptions through the
@@ -121,4 +121,4 @@ implementations.
 ## Source Map
 
 - Messager SDK and clients: `src/messager/`
-- Topic constants and message types: `src/types/src/modules/messager/`
+- Topic constants and message types: `src/types/src/messager/`

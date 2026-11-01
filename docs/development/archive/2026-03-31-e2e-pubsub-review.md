@@ -137,13 +137,13 @@ pub const TOPIC_EVALUATOR_TRIGGER: &str      = "/internal/v1/{TENANT_ID}/evaluat
 
 | Service | Publishes To | Subscribes To | File |
 |---------|-------------|---------------|------|
-| **Datafeed** | `TOPIC_WF_MARKET_STREAM` | - | `src/datafeed/src/server/datafeed_ingestor.rs:59` |
-| **Strategy** | `TOPIC_WF_TRADING_SIGNAL` | `TOPIC_WF_MARKET_STREAM` | `src/strategy/runner/src/executor/strategy_pycode.rs:170` |
+| **Datafeed** | `TOPIC_WF_MARKET_STREAM` | - | `src/component/datafeed/src/server/datafeed_ingestor.rs:59` |
+| **Strategy** | `TOPIC_WF_TRADING_SIGNAL` | `TOPIC_WF_MARKET_STREAM` | `src/component/strategy/runner/src/executor/strategy_pycode.rs:170` |
 | **Order** | `TOPIC_WF_TRADING_PLACED` | `TOPIC_WF_TRADING_SIGNAL` | `src/order/src/server/order_server.rs:54` |
 | **Wallet** | - | `TOPIC_WF_TRADING_PLACED` | `src/wallet/src/server/wallet_server.rs:53` |
-| **Exporter** | - | `TOPIC_WF_TRADING_PLACED` | `src/exporter/src/manager/exporter_kafka.rs:139` |
-| **Log Service** | - | `TOPIC_WF_LOG` (+/+/+) | `src/logservice/src/server/log_server.rs:150` |
-| **Evaluator** | `TOPIC_WF_HYPERPARAMETER_UPDATE` | - (TODO: datafeed events) | `src/evaluator/src/executor/adk/executor_mas.rs:129` |
+| **Exporter** | - | `TOPIC_WF_TRADING_PLACED` | `src/component/exporter/src/manager/exporter_kafka.rs:139` |
+| **Log Service** | - | `TOPIC_WF_LOG` (+/+/+) | `src/component/logservice/src/server/log_server.rs:150` |
+| **Evaluator** | `TOPIC_WF_HYPERPARAMETER_UPDATE` | - (TODO: datafeed events) | `src/component/evaluator/src/executor/adk/executor_mas.rs:129` |
 
 ---
 
@@ -199,7 +199,7 @@ The Log Service uses **two separate subscriptions** (not shared):
 2. **Real-time Subscription** (via `LogServer`): Broadcasts to WebSocket clients
 
 ```rust
-// src/logservice/src/server/log_server.rs:150-157
+// src/component/logservice/src/server/log_server.rs:150-157
 let topic = TOPIC_WF_LOG
     .replace("{TENANT_ID}", "+")
     .replace("{WORKFLOW_ID}", "+")
@@ -242,7 +242,7 @@ MinIO:    sigbot_e2e_<PID>_minio
 
 ### 6.1 High Priority
 
-1. **Implement Kafka Writer** (`src/exporter/src/manager/exporter_kafka.rs:53`)
+1. **Implement Kafka Writer** (`src/component/exporter/src/manager/exporter_kafka.rs:53`)
    - Currently a placeholder
    - Blocks end-to-end export verification
 
@@ -253,7 +253,7 @@ MinIO:    sigbot_e2e_<PID>_minio
 
 ### 6.2 Medium Priority
 
-3. **Complete Evaluator Subscription** (`src/evaluator/src/executor/adk/executor_mas.rs:129`)
+3. **Complete Evaluator Subscription** (`src/component/evaluator/src/executor/adk/executor_mas.rs:129`)
    - Currently TODO for datafeed event subscription
    - Add test for hyperparameter update flow
 
