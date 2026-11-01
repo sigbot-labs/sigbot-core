@@ -2,14 +2,13 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with partial Email and Telegram
-adapters.
+**Status:** Implemented tenant/Workflow delivery component with Email,
+Telegram, and in-product persistence; QQ remains reserved design.
 
-`SigbotNotifier` is the shared notification daemon. It consumes typed
-operational notification events, resolves tenant/user preferences and policy,
-renders channel-specific content, and delivers it through independently
-isolated channels. It does not consume a trading signal as an instruction to
-trade and does not own order or wallet facts.
+`SigbotNotifier` is a Controller-managed tenant/Workflow component. It consumes
+typed notification requests, renders the selected template, and delivers it
+through independently isolated channels. It does not consume a trading signal
+as an instruction to trade and does not own order or wallet facts.
 
 ## Naming Model
 
@@ -18,28 +17,28 @@ Email, Telegram, and QQ:
 
 ```text
 SigbotNotifier
-  -> ISigbotNotifier
-  -> ISigbotNotificationChannel
-       -> SigbotEmailNotifierChannel
-       -> SigbotTelegramNotifierChannel
-       -> SigbotQqNotificationChannel
+  -> INotifier
+  -> NotificationProviderConfig
+       -> EmailNotifier
+       -> TelegramNotifier
+       -> in-app persistence
 ```
 
 `Provider` is reserved for multiple vendors behind one channel—for example
-SMTP, SES, or SendGrid behind the Email channel. A concrete delivery medium is
-therefore not named `EmailNotifierProvider`.
+SMTP, SES, or SendGrid behind the Email channel. Concrete delivery media use
+the channel-oriented names exported by the current implementation.
 
 ## Input and Routing
 
-`SigbotNotificationEvent` contains event ID, tenant/pipeline/user scope,
-category, severity, template ID/version, locale, structured template data,
-deduplication key, source/correlation references, and expiry. It contains no
-channel credential.
+The durable envelope contains env/tenant/Workflow/node/run scope and W3C trace
+context. `NotificationRequest` contains only `channel`, `recipient`, `template`,
+and bounded template `variables`; it contains no channel credential. The
+envelope identity supplies idempotency, and no second business correlation ID
+is created.
 
-`ISigbotNotifier` resolves the current channel bindings and preferences from an
-APIServer-provided configuration snapshot, applies category/severity policy,
-and creates one delivery task per selected channel. A failure in one channel
-does not block another channel.
+`INotifier` validates that the requested channel is configured for this node
+and creates the corresponding delivery task. Channel preference/policy CRUD is
+not yet a separate runtime subsystem.
 
 Typical events include order rejection/fill, liquidation or margin warning,
 portfolio threshold, pipeline condition, backtest completion, and system
@@ -51,26 +50,27 @@ routing.
 Each task has a stable delivery ID and state:
 
 ```text
-PENDING -> DELIVERING -> DELIVERED
-                    \-> RETRY_WAIT -> DELIVERING
-                    \-> DEAD_LETTER
-                    \-> EXPIRED
+pending -> sending -> delivered
+                  \-> pending (bounded retry)
+                  \-> rejected
+                  \-> unknown
 ```
 
-The daemon persists an inbox/deduplication record, retry schedule, provider
-receipt, and redacted terminal error in a Notifier-owned store when durable
-delivery is configured. Retries use channel-aware rate limits, exponential
-backoff, jitter, and a maximum attempt/dead-letter policy.
+The daemon persists an inbox/deduplication record, attempt number, retry
+availability time, provider receipt, and terminal state in the Notifier-owned
+store. Retryable delivery uses exponential backoff and a maximum of five
+attempts. A durable dead-letter queue, expiry policy, and per-channel rate
+limiter are enhancements rather than current behavior.
 
 ## Extension Points
 
 | Role | Contract | Implementations |
 |---|---|---|
-| Service root | `SigbotNotifier` | Shared routing and delivery daemon |
-| Routing | `ISigbotNotifier` | `SigbotPolicyNotifier` |
-| Delivery medium | `ISigbotNotificationChannel` | Email, Telegram, QQ channels |
-| Vendor inside a medium | Channel-specific provider port | SMTP/SES/SendGrid only when multiple email vendors are needed |
-| Template rendering | `ISigbotNotificationRenderer` | Locale- and channel-aware renderer |
+| Service root | `SigbotNotifier` | Scoped routing and delivery runtime |
+| Routing | `INotifier` | `NotifierService` |
+| Delivery medium | `NotificationProviderConfig` | `EmailNotifier`, `TelegramNotifier`, in-app persistence |
+| Template rendering | `NotificationTemplate` | Strict versioned channel template |
+| Persistence | Core Handler/Repository | `NotifierPostgresRepository`, `NotifierSQLiteRepository` |
 
 ## Safety Invariants
 
@@ -80,24 +80,24 @@ backoff, jitter, and a maximum attempt/dead-letter policy.
   size/attachment limits.
 - Deduplication is scoped to recipient, channel, and semantic event; retrying a
   task does not create another user-visible notification.
-- A user or tenant cannot select a channel binding owned by another scope.
-- Rate-limit exhaustion delays delivery without blocking the event consumer.
-- Expired low-priority notifications are not sent late; critical security
-  policy may define separate escalation behavior.
+- A tenant cannot route a request to a node outside its envelope scope or
+  configured Workflow edge.
+- Retry waiting is persisted and does not busy-loop the event consumer.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotNotifier`,
-`INotifier`, and Email/Telegram clients. It consumes raw UTF-8
-payloads and broadcasts them to all configured clients. Typed routing,
-preferences, idempotency, durable retry/dead-letter state, rate limits, and
-receipts are absent. QQ is reserved design and is not currently implemented.
+`NotifierService` consumes typed requests only from declared input nodes,
+strictly renders versioned templates, persists delivery/in-product read state,
+and emits typed results. Owner leases, deduplication, crash recovery, bounded
+attempts, and the distinction between provider rejection and unknown
+acceptance are implemented. Email and Telegram credentials are resolved from
+central secret references.
 
-Required alignment is the `SigbotNotifier` root,
-`ISigbotNotificationChannel` adapters, typed event contract, policy routing,
-and isolated durable delivery lifecycle.
+Real SMTP/Telegram delivery has not been accepted against production
+recipients, and a third-party unknown result cannot be described as exactly
+once. QQ remains reserved and is not implemented.
 
 ## Source Map
 
 - Notification service and adapters: `src/component/notifier/`
-- Notification types: `src/types/src/component/notifier/`
+- Notification types: `src/types/src/notifier/`

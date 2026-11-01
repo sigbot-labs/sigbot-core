@@ -42,7 +42,7 @@ SDK 原生成交的检查点分区为 `market:{source}:{symbol}:last_trade`，�
 
 ## 验证入口与范围
 
-`src/exchange/tests/client/public_market_test.rs` 覆盖配置、真实交易编号、未来时间和缺失字段；其中 ignored 测试只读真实 Binance/Hyperliquid API，不需要资金凭据。`src/component/datafeed/tests/server/market_query_test.rs` 使用真实 PG 验证 AS_OF 不调用主动来源、失败不写部分事实、重复请求及重启；第二个 ignored 测试同时调用两个真实公共 API 并核对原子持久结果。
+`src/exchange/tests/market/market_test.rs` 覆盖配置、真实交易编号、未来时间和缺失字段；其中 ignored 测试只读真实 Binance/Hyperliquid API，不需要资金凭据。`src/component/datafeed/tests/query/market_test.rs` 使用真实 PG 验证 AS_OF 不调用主动来源、失败不写部分事实、重复请求及重启；第二个 ignored 测试同时调用两个真实公共 API 并核对原子持久结果。
 
 这些测试需由统一构建和验收入口执行；代码中的 ignored 标记不代表已通过。此功能没有实现深度撮合、流动性承诺、清算热力图或衍生指标。
 

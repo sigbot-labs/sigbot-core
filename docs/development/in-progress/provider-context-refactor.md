@@ -1,6 +1,9 @@
 # 领域组件与 ApplicationContext 收敛重构
 
-日期：2026-10-31 至 2026-11-01。状态：本轮结构、迁移、Docker 全矩阵与 Kubernetes worker 生命周期验收已完成。本文记录本轮已确认的改动范围、目录映射和验证证据；后写阶段覆盖前面阶段的历史状态。
+日期：2026-10-31 至 2026-11-01。状态：本文是该轮重构的历史实施记录，不是当前能力清单。
+当本文的阶段性结论与现行架构或最新验收边界冲突时，以
+[`HARDCOVER.md`](../HARDCOVER.md)、架构总览和领域 Overview 为准。本文记录本轮已确认
+的改动范围、目录映射和当时的验证证据；后写阶段覆盖前面阶段的历史状态。
 
 ## 1. 范围与约束
 
@@ -422,8 +425,8 @@ cargo fmt --all -- --check
 git diff --check
   PASS
 
-python3 -m pytest deploy/tests
-  PASS（6 passed）
+Marketpulse runner --scenario structure --scenario deployment
+  PASS（原独立 deploy/tests 已删除，验收已并入唯一 case runner）
 
 e2e/runner.py --scenario database
   PASS（SQLite 幂等/漂移/Worker 外键及真实 PostgreSQL 钱包约束）

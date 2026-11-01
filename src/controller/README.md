@@ -1,72 +1,117 @@
-# Central Workflow controller
+# Central Workflow Controller
 
-The controller is a platform service deployed independently by Helm when `controller.enabled` is true. One `CentralController` owns scheduling and routes every Workflow to the Docker or Kubernetes provider recorded by its selected `ctl_worker`; there is no process-wide runtime provider switch.
+Controller 是独立平台服务。API 负责经过 Authguard 授权的 Worker/Workflow CRUD 与
+Run 创建；Controller 使用平台 service principal 扫描待处理 Run，在对应租户 Worker
+上调和九个数据面组件及其租户中间件。Controller 不嵌入 API，也不借用用户上下文。
 
-`POST /api/v1/workflows/{id}/start` locks the scoped workflow and atomically inserts a `wf_run` with an immutable graph snapshot before marking the workflow `PENDING`. Repeating start while that run is active returns the same `run_id`. On the first claim, the controller selects an online Worker in the same environment and tenant, preferring a Workflow-specific target over a shared target and enforcing capacity. The selected `worker_id` is pinned to the run for retries, recovery and stop. PostgreSQL row locks and `SKIP LOCKED` prevent concurrent controllers from deploying the same workflow. Stop is complete only after the bound provider has removed every worker; it then marks both workflow and run stopped.
+## Run 与 Worker 选择
 
-The API manages targets at `/api/v1/workers`. `auth_config` is a tagged JSON object whose `auth_type` is `docker_anonymous`, `docker_jwt`, `kubernetes_jwt` or `kubernetes_private_key`. Authentication fields contain only host Secret environment-variable names; JWT, certificate and private-key values are never stored in `ctl_worker`. Docker endpoints accept `unix`, `http` or `https`; Kubernetes endpoints require `https`. A Worker may be shared within a tenant or bound to one Workflow and has explicit priority, capacity, heartbeat and lifecycle status.
+`POST /api/v1/workflows/{id}/start` 在 Core Repository 中锁定作用域 Workflow，保存
+不可变图快照并创建或返回活动 `run_id`。Controller 使用 PostgreSQL 行锁与
+`SKIP LOCKED` 保证同一 Run 只有一个部署 owner，再按以下规则选择 `ctl_worker`：
 
-Each node supplies `config.module` and `config.argument_json`. The latter is the existing service argument DTO, either a JSON object or a JSON string, with credentials expressed only as environment-variable references. Before persistence, shared validation rejects plaintext secret maps and custom process environments. At deployment, the controller overwrites scope, workflow, node and run fields, including nested strategy identity and account-service runtime configuration. Graph connections accept an optional `kind` containing the v2 topic enum name. Connections without `kind` use module-based routing. Strategy-to-datafeed edges authorize snapshot/compute requests, and datafeed return edges authorize bounded results.
+1. `env` 和 Authguard 租户必须完全相同；
+2. Workflow 专用 Worker 优先于租户共享 Worker；
+3. Worker 必须在线且未超过 `max_concurrent_workflows`；
+4. 选定的 `worker_id` 固定到该 Run，用于恢复、更新和停止。
 
-Kubernetes uses the official `kube` client and server-side apply. Deterministic names, `Recreate`, one replica and stable specification hashes prevent duplicate decision owners. Hosts run without service-account tokens, root privileges, extra capabilities or a writable root filesystem. Requests/limits, management probes, scratch quotas and a deny-by-default NetworkPolicy bound the hosts. DNS is allowed; operators must explicitly configure middleware/venue CIDRs and ports. Python strategy execution uses the separately packaged Rust worker's existing process sandbox. Kubernetes PID limits also require the operator's kubelet `podPidsLimit`; the chart does not change host kubelet policy.
+Controller 从不可变图生成 WorkerPlan。当前允许的模块是 `datafeed`、`evaluator`、
+`strategy`、`logservice`、`order`、`wallet`、`notifier`、`exporter` 和 `backtest`。
+订阅者在生产者之前启动；停止在 Provider 确认资源删除后才更新 Run 终态。
 
-Backtest execution hosts receive a stable, internal ClusterIP Service on their configured `bind_addr` port. The host binds that port on `0.0.0.0`; management stays on its separate port. A Paper or Backtest Order node must identify exactly one Backtest node in its `execution_node_ids`. The controller derives its endpoint from that worker's deterministic DNS name and port, which also resolves on the dedicated Docker network. Kubernetes allows the execution port only from those declared Order workers in the same namespace and permits their corresponding outbound connection. Other ingress remains denied. Service ownership is checked before updates/deletion, and stopping a worker removes its Service and policy after its Deployment terminates. The controller Role therefore includes scoped Service CRUD, without permission to change Secrets or namespaces.
+## Worker API 与强类型配置
 
-Docker uses the official `bollard` client. It compares the stored specification hash, updates by stop/remove/create, restarts failed hosts, and polls actual container health. CPU, memory, PID count, temporary filesystems and capabilities are bounded. It requires an operator-provisioned network labelled `sigbot.io/scope=<env>:<tenant>`; `host` and the default bridge are rejected. Docker network egress firewall rules are an operator prerequisite, whereas the Python process itself remains unable to open network connections. A mode-0600 runtime env file under `/run/sigbot/workers/<environment_file>.env` supplies credentials to the Rust host; `environment_file` must begin with `tenant-<tenant_id>-`, and the file is never shell-evaluated or logged.
+平台 API 暴露：
 
-Example configuration (the regular application defaults and Secret environment still apply):
+- `GET/POST /api/v1/workers`
+- `GET /api/v1/workers/defaults`
+- `DELETE /api/v1/workers/{id}`
+- `POST /api/v1/workers/{id}/status`
+
+`auth_config` 是 `deny_unknown_fields` 的 tagged DTO：
+
+- `docker_anonymous`
+- `docker_jwt { token_secret }`
+- `kubernetes_jwt { token_secret, certificate_authority_secret? }`
+- `kubernetes_private_key { client_certificate_secret, private_key_secret,
+  certificate_authority_secret }`
+
+字段值是中央 Secret map 中的 key，不是 Secret 明文或任意环境变量表达式。
+`configuration` 同样按 Provider 强类型校验：
+
+- Docker：`network`、`environment_file`、可选 `log_volume_prefix`；
+- Kubernetes：`namespace`、`runtime_secret`、`runtime_config_map`、
+  `service_account`、`secret_revision`、可选日志 PVC 前缀和出站 CIDR/端口。
+
+Web 的表单和 YAML 编辑器提交同一个 `SaveWorker` DTO；未知字段、明文 token/password/
+private key、自定义命令或进程环境都会被拒绝。
+
+## 租户中间件
+
+`ctl_worker.middleware` 可按租户声明 Redis、pgvector、TimescaleDB 和 EMQX。每个条目
+只允许：
 
 ```yaml
-authguard:
-  service_principal_id: workflow-controller
-services:
-  controller:
-    cron: "0/10 * * * * *"
-    images:
-      sigbot: registry.example.invalid/sigbot:reviewed-version
-    workers:
-      enabled: true
-      cpu_millis: 1000
-      memory_mb: 512
-      pids_limit: 64
-      reconciliation_timeout_seconds: 45
+image: reviewed-registry/example:immutable-tag
+resources:
+  cpu_millis: 1000
+  memory_mb: 1024
+  storage_gb: 20
 ```
 
-The runtime configuration above describes resource policy, not a target cluster. Targets are created through the Worker API, for example:
+Controller 在九组件启动前调用同一 Provider 的 middleware prepare 阶段。资源名称、
+标签和规格 hash 都是确定性的；只有带当前 Sigbot ownership 标签的资源可更新或删除。
+禁用中间件不会自动删除持久卷/PVC。远端运行 Secret 必须预先存在，Controller 不创建
+或读取业务明文 Secret。
 
-```json
-{
-  "env": "paper",
-  "workflow_id": null,
-  "name": "tenant-kubernetes",
-  "provider": "kubernetes",
-  "conn_url": "https://cluster.example.invalid:6443",
-  "auth_config": {
-    "auth_type": "kubernetes_jwt",
-    "token_env": "TENANT_KUBERNETES_TOKEN",
-    "certificate_authority_env": "TENANT_KUBERNETES_CA"
-  },
-  "configuration": {
-    "runtime_type": "kubernetes",
-    "namespace": "tenant-1",
-    "runtime_secret": "sigbot-runtime",
-    "runtime_config_map": "sigbot-runtime",
-    "service_account": "sigbot-worker",
-    "secret_revision": "1",
-    "log_pvc_prefix": "tenant-1-logs-",
-    "egress_cidrs": ["10.42.0.0/16"],
-    "egress_ports": [1883, 5432, 6379, 443]
-  },
-  "labels": {},
-  "priority": 100,
-  "max_concurrent_workflows": 16
-}
+控制面 Helm 的 PostgreSQL/Redis 与租户中间件是两个职责域：前者保存平台配置和缓存，
+后者服务该租户的数据面 Workflow。不要把租户行情、向量或 MQTT 事实写入控制面库。
+
+## Kubernetes Provider
+
+Kubernetes 使用官方 `kube` client 和 server-side apply。组件 Deployment 固定一个
+decision owner，使用确定性名称、`Recreate` 和规格 hash；管理探针只有在消息订阅与
+关键消费任务就绪后才报告 ready。Pod 默认无 service-account token、无 root、无额外
+capability、只读根文件系统，并配置 request/limit、临时盘和 deny-by-default
+NetworkPolicy。DNS 默认允许；远端中间件和交易所出站必须通过 Worker 的批准 CIDR/
+端口配置。
+
+Backtest 节点额外获得稳定 ClusterIP Service。Order 的 Paper/Backtest 模式必须声明
+唯一的 Backtest execution node；Controller 派生内部 DNS，并只向声明的 Order Pod
+开放执行端口。Controller RBAC 仅限所属 namespace 的必要 Deployment、Service、
+ConfigMap、Job、StatefulSet、PVC 读取和 NetworkPolicy 权限，不包含 Secret 写权限或
+namespace 管理权限。
+
+## Docker Provider
+
+Docker 使用 `bollard`。Controller 要求预先存在且带
+`sigbot.io/scope=<env>:<tenant_id>` 标签的隔离网络，拒绝 `host` 和默认 bridge。
+容器按规格 hash 幂等替换并检查实际 health；CPU、内存、PID、scratch、capability 和
+只读根文件系统受限。Docker 网络出站防火墙由宿主运维负责。
+
+`environment_file` 必须位于 `/run/sigbot/workers/`、权限 0600，并以
+`tenant-<tenant_id>-` 开头。文件只作为容器 env-file 使用，不被 shell 执行或打印。
+租户中间件使用独立具名卷；停止 Workflow 不会误删租户共享数据。
+
+## 日志持久卷
+
+启用 Strategy/Logservice 的本地日志归档时，每个 Worker 必须有独占、支持 SQLite WAL
+的持久文件系统：Kubernetes 用 `log_pvc_prefix`，Docker 用 `log_volume_prefix`。
+Controller 校验 ownership 并挂载到 `/var/lib/sigbot/logs`。缺失或错误归属会拒绝部署；
+替换/停止保留卷，只有归档校验完成后才能由运维回收。不要让多个 Worker 共享一个
+NFS SQLite 文件。
+
+## 验证与证据边界
+
+```bash
+cargo test -p sigbot-controller --test worker_lifecycle
+python3 use-cases/marketpulse-autonomy-quantification/e2e/runner.py \
+  --scenario kubernetes-prepare --scenario rust-deployment \
+  --deployer kubernetes
 ```
 
-The image above is an illustrative configuration value, not a deployment target. Use the actual reviewed image and actual cluster network ranges. Middleware stays under Helm ownership: TimescaleDB and pgvector are extensions in the existing PostgreSQL instance. The runtime controller cannot create namespaces, databases, Secrets, PVCs or shared-library deployments.
-
-After rotating a remote runtime Secret or Docker environment file, increment that Worker's `configuration.secret_revision` or update its typed Docker configuration. The configuration participates in the specification hash, so the controller replaces existing hosts and they load the new credentials. Keep old submission-encryption key versions until all orders that use them are terminal.
-
-Enabling Strategy `log_archive` requires an existing persistent volume for that worker. Set `configuration.log_pvc_prefix` for Kubernetes or `configuration.log_volume_prefix` for Docker; the volume name is that prefix followed by the deterministic worker name. Provision it with label `sigbot.io/worker=<worker-name>` and UID/GID 1000 write access. Each worker gets its own local/block filesystem supporting SQLite WAL; do not use an NFS-shared SQLite file. The controller verifies the volume and mounts it at `/var/lib/sigbot/logs`, rewriting the spool path to `archive.sqlite` there. Missing configuration or an incorrectly owned volume fails deployment. Replacement and stop retain the volume; operators reclaim it only after archived logs are verified. Kubernetes grants the controller `get` on PVCs, never create/delete. Temporary scratch storage remains separate from this durable log buffer.
-
-`cargo test -p sigbot-controller --test worker_plan_test` checks scope override resistance, stable reconciliation plans, typed edge routing, single-owner manifests, execution Service routing and Secret references. `worker_lifecycle` is an explicit integration target for actual Kubernetes containers, PostgreSQL, EMQX and Python execution; its environment is prepared through the Marketpulse case runner. Docker/Kubernetes lifecycle acceptance requires the real daemon/cluster and its configured runtime Secret; pure manifest tests do not establish that acceptance.
+单元/清单测试覆盖作用域覆盖抵抗、Secret 引用、确定性计划、owner 保护、执行 Service
+路由和中间件拓扑。真实 K3s 用例还需要产品镜像、已迁移 PostgreSQL、EMQX、远端
+runtime Secret 和 `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`。清单测试通过不等于真实
+集群生命周期验收；最新已执行范围和缺口统一记录在
+[`docs/development/HARDCOVER.md`](../../docs/development/HARDCOVER.md)。

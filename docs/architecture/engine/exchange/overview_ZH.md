@@ -10,15 +10,14 @@ Stream，Order Manager 组合私有交易，Wallet Manager 用于账户对账，
 
 ## Capability 模型
 
-`IExchange` 标识 Venue/Account Adapter，并只暴露其实际实现的 Capability
-Port：
+`IExchange` 标识 Venue/Account Adapter。当前实际导出的 Capability Port 是：
 
 | Port | 职责 |
 |---|---|
-| `ISigbotMarketDataClient` | REST Snapshot、Instrument、Kline、Trade、Funding 与公共 Reference Data |
-| `ISigbotTradingClient` | 使用稳定 Client ID 下单、取消、改单与查询 Order |
-| `ISigbotAccountClient` | Balance、Position、Fill、Transfer、Fee 与 Account Configuration |
-| `ISigbotExchangeStream` | 带 Cursor/Reconnect 语义的公共与私有 WebSocket/Session Stream |
+| `IOrderBookExchange` | Venue 的价格、Kline 与 Order Book 读取 |
+| `IStockExchange` | 股票订单提交和查询 |
+| `IExecutionAdapter` | 持久 prepare、submit、reconcile 与执行事实读取 |
+| `IPublicMarketAdapter` | 只读的规范化公共行情快照 |
 
 Spot、Margin、Perpetual/Futures、Option、Equity 与 Prediction Market 分别声明 Capability
 与 Product Metadata。不支持的操作返回类型化 Capability Error，禁止 Panic 或静默
@@ -31,15 +30,17 @@ IExchange
   -> SigbotBinanceExchangeClient
        -> Spot capabilities
        -> USD-M futures capabilities
-  -> SigbotBitgetExchangeClient
-  -> SigbotCoinbaseExchangeClient
+  -> SigbotHyperliquidExchangeClient
   -> SigbotIbkrExchangeClient
-  -> SigbotSchwabExchangeClient
+  -> SigbotPolymarketExchangeClient
+  -> SigbotKalshiExchangeClient
+  -> PaperExchange
   -> BacktestExchange
 ```
 
-图中 Provider 名称表达目标 Adapter 边界，不代表每个 Adapter 当前都已实现。Provider
-Factory 在 Caller 启动前校验配置，并返回 Capability Descriptor。
+以上是当前实际 Adapter 目录。Capability 完整度不同：当前只有显式接入执行工厂的
+Binance、IBKR、Polymarket 进入已验收 Live 下单路径；其他 Adapter 对不支持的能力必须
+返回类型化错误，不能 panic 或静默改路由。
 
 ## 规范化
 
@@ -75,10 +76,10 @@ Multiplier、Margin Mode 与支持的 Order Feature。Price、Quantity、Fee、B
 
 ## 实现对齐
 
-真实订单入口为 `ExecutionAdapterFactory` → `LiveExecutionFactory`。它按配置选择
-Binance Spot 官方 SDK、IBKR `ibapi` TWS/Gateway SDK、Polymarket 官方 V2/V3 SDK。
-Backtest 选择专用历史执行接口，禁止改写 Live 交易所 URL。旧市场数据 Source
-接口仍按原目录保留；它们不作为这些真实订单的执行路径。
+真实订单入口由 `ExchangeFactory` 和 `ExecutionAdapterConfig` 按配置选择 Binance
+Spot 官方 SDK、IBKR `ibapi` TWS/Gateway SDK 或 Polymarket 官方 V2/V3 SDK。Backtest
+选择专用历史执行接口，禁止改写 Live 交易所 URL。旧市场数据 Source 接口仍按原目录
+保留；它们不作为这些真实订单的执行路径。
 
 Binance 使用业务键的稳定编码作为 client order ID，关闭 SDK 写入重试。
 IBKR 和 Polymarket 先 `prepare`，随后 Order 仓库在 Wallet 预占成功后持久化
@@ -88,10 +89,10 @@ Polymarket 保存官方 Solidity ABI 编码、签名与 EIP-712 order hash。重
 
 准备负载用 OpenSSL AES-256-GCM 加密，AAD 绑定租户、环境、账户、Workflow、
 节点、run/seq、交易意图及交易所订单 ID。`prepared_keys.active_key` 选择密钥版本，
-`prepared_keys.keys` 映射版本到宿主环境变量名（值为 32 字节十六进制密钥）。轮换时
+`prepared_keys.keys` 映射版本到中央 Secret map key（值为 32 字节十六进制密钥）。轮换时
 保留尚有未终结订单的旧密钥。密钥和交易凭据均不进入策略进程。
 
-IBKR 配置显式网关地址、独占 `client_id`、账户环境变量及 SDK Contract 映射，要求
+IBKR 配置显式网关地址、独占 `client_id`、账户 Secret key 引用及 SDK Contract 映射，要求
 Contract 已有确定的 `contract_id`；每次新连接检查账户归属，禁 SDK 自动重连重发。
 其 SDK 的 f64 边界进行 Decimal 往返校验，不能精确保留的数量或价格直接拒绝。
 Polymarket 限价使用 GTC；市价意图使用 FOK、固定股数以及风控市场证据中的价格上限/
@@ -101,8 +102,8 @@ Order 轮询适配器的真实成交事实，在同一事务中保存交易所�
 Outbox。Binance 使用官方 `myTrades` 的实际成交现金与佣金；IBKR 按执行 ID 连接
 官方成交及佣金报告，仅支持股票/ETF。缺少佣金或收到成交更正时必须对账，不填零费率。
 
-Polymarket 必须配置 `settlement: {rpc_url_env: POLYGON_RPC_URL, min_confirmations: 64}`；
-环境变量保存 HTTPS Polygon RPC 地址，缺少配置时工厂拒绝启动。下单之前验证链 137、
+Polymarket 必须配置 `settlement: {rpc_url_secret: polygon_rpc_url, min_confirmations: 64}`；
+中央 Secret map 项保存 HTTPS Polygon RPC 地址，缺少配置时工厂拒绝启动。下单之前验证链 137、
 官方交易所合约、抵押币精度及 finalized 区块读取能力，并将起始区块一同密封持久化。
 恢复后按已保存订单哈希分页扫描有界区块范围，每页最多处理 32 条回执，使大订单可
 在 RPC 超时内持续推进游标。逐条验证回执成功、区块仍在主链且已

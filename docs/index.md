@@ -10,7 +10,7 @@ its contract.
 ## Architecture
 
 The [system overview](architecture/overview.md) is the single catalog and owner
-for cross-component boundaries, the fixed quantitative-trading pipeline,
+for cross-component boundaries, the constrained typed trading Workflow,
 service/runtime scope, embedded SDKs, naming, data ownership, and links to every
 engine design. Detailed documents remain organized by physical component under
 `architecture/engine/`.
@@ -31,6 +31,10 @@ and use a `*_specification.md` canonical filename.
 | Rust | [Coding specification](development/rust/coding_specification.md) | [编码规范](development/rust/coding_specification_ZH.md) |
 | Solidity | [Coding specification](development/solidity/coding_specification.md) | [编码规范](development/solidity/coding_specification_ZH.md) |
 | Python Strategy SDK | [SDK specification](development/python/strategy-sdk_specification.md) | [SDK 规范](development/python/strategy-sdk_specification_ZH.md) |
+
+The current implementation/evidence/known-gap handoff for coding agents is
+[HARDCOVER](development/HARDCOVER.md). It is an operational snapshot, not a
+replacement for the canonical architecture documents.
 
 High-change plans, drafts, experiments, and implementation notes live under
 `development/in-progress/`; frozen engineering records live under

@@ -30,7 +30,7 @@ second workspace or namespace business identifier.
 1. Envoy Gateway delegates authentication and authorization to Authguard.
 2. An API adapter verifies the Authguard-signed identity and never trusts a
    tenant supplied by the caller.
-3. A handler obtains `tenant_id` from an explicit `IdentityContext` and checks
+3. A handler obtains `tenant_id` from an explicit `RequestIdentity` and checks
    the target resource scope again.
 4. Repository reads and writes always include tenant scope. A global user
    context or implicit default tenant is forbidden.

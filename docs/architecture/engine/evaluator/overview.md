@@ -2,7 +2,8 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with a partial multi-agent executor.
+**Status:** Implemented asynchronous evaluation side path with typed snapshots;
+real-model quality and production memory retrieval remain evidence gaps.
 
 `SigbotEvaluator` is the non-deterministic side path of one strategy pipeline.
 It observes normalized market/news events, evaluates market structure with a
@@ -11,49 +12,37 @@ deterministic Strategy Runner. It never emits an order or trading signal.
 
 ## Input and Output
 
-Evaluator consumes `SigbotFeedEvent` through a strategy-specific consumer
+Evaluator consumes `DatafeedEvent` envelopes through a strategy-specific consumer
 group and maintains a bounded, event-time-ordered context window. A trigger may
 be time-based, event-count-based, volatility-based, or explicitly requested,
 but every run records the exact input watermark.
 
-Its only trading-path output is `SigbotEvaluationSnapshot`:
+Its only trading-path output is `HyperparametersUpdate`:
 
 ```text
-evaluation_id
-tenant_id / pipeline_id / strategy_id
-regime: RANGING | TRENDING_BULLISH | TRENDING_BEARISH | UNKNOWN
-confidence
-hyperparameter_overrides_or_weights
-evaluated_through_event_id / evaluated_through_at
-valid_from / expires_at
-model_ref / prompt_version / tool_versions
-evidence_refs / created_at
+DurableMessage: env / tenant_id / workflow_id / node_id / run_id / seq / traceparent / produced_at
+HyperparametersUpdate: version / as_of / valid_until
+probabilities: trend / range / stabilizing / suppression / unknown
+parameters
+model_version / classification_version
+case_refs
 ```
 
 Hyperparameters must conform to the strategy-declared schema, allowed ranges,
 and version. Evaluator cannot change strategy code, risk hard limits, account,
 venue, or order instructions. Low confidence, conflicting evidence, or an
-unclassifiable market produces `UNKNOWN`; Strategy Runner then defaults to
-`NONE`.
+unclassifiable market produces `UNKNOWN`; Strategy Runner then emits no opening
+intent.
 
-## Multi-agent Implementation
+## Evaluation Implementation
 
-`ISigbotMarketEvaluator` is the replaceable capability. The primary target
-implementation is `SigbotMultiAgentMarketEvaluator`, with a fixed internal
-review sequence rather than a user-authored DAG:
-
-1. `BootAgent` initializes the run, policy, model, and reproducibility metadata.
-2. `LoaderAgent` assembles approved feed windows and optional external evidence.
-3. `AlphaAgent` proposes regime, confidence, and bounded parameter values.
-4. `AuditorAgent` verifies evidence, schema, time boundaries, risk constraints,
-   and contradictory claims.
-5. Alpha and Auditor may iterate up to a configured maximum; exhaustion yields
-   `UNKNOWN`, never an unreviewed recommendation.
-
-Boot and Loader preparation may run concurrently when their inputs are
-independent. The Alpha/Auditor loop is sequential and bounded. MCP tools may
-add contextual evidence but cannot replace canonical Datafeed events or access
-future/live data during replay.
+`IEvaluator` is the replaceable capability and `LlmEvaluator` is the current
+implementation. It claims one admitted source event, loads persisted facts and
+historical cases available at that event's watermark, calls one bounded
+OpenAI-compatible endpoint, validates `EvaluationAnswer`, and atomically commits
+the typed update and Outbox. Facts cited by the model must match facts supplied
+at this boundary. A future multi-agent review loop must be introduced behind
+`IEvaluator`; it is not part of the current implementation.
 
 ## Runtime and Scaling
 
@@ -70,10 +59,10 @@ future/live data during replay.
 
 | Role | Contract | Implementation |
 |---|---|---|
-| Service root | `SigbotEvaluator` | Strategy-scoped evaluation runtime |
-| Market evaluation | `ISigbotMarketEvaluator` | `SigbotMultiAgentMarketEvaluator` |
-| Agent | `ISigbotAgent` | Boot, Loader, Alpha, and Auditor agents |
-| Model/tool access | Provider-specific ports | LLM and MCP adapters constrained by run policy |
+| Service root | `SigbotEvaluatorRunner` | Component startup and Provider registration |
+| Evaluation contract | `IEvaluator` | `LlmEvaluator` |
+| Model result | `EvaluationAnswer` | Validated probabilities, evidence and parameters |
+| Persistence | Core Handler/Repository | `EvaluatorPostgresRepository`, `EvaluatorSQLiteRepository` |
 
 ## Safety and Observability Invariants
 
@@ -90,20 +79,18 @@ future/live data during replay.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotEvaluatorRunner`,
-`IEvaluator`, `MasEvaluator`, and the Boot,
-Loader, Alpha, and Auditor agent structure. Event-driven Datafeed subscription
-is incomplete; some data preparation is placeholder behavior, and published
-hyperparameter events lack the complete regime, confidence, watermark, expiry,
-and provenance contract. Some identifiers are currently hard-coded, and the
-runtime can access the core database directly.
+`SigbotEvaluatorRunner` consumes scoped feed events, loads only facts/cases
+available at the decision watermark, calls the bounded LLM/MAS path, validates
+the five-state probability result, and commits a versioned
+`HyperparametersUpdate` plus Outbox. Facts and inference are stored
+separately and cited cases must come from the admitted input.
 
-Required alignment is `SigbotEvaluator` with `ISigbotMarketEvaluator`,
-APIServer-provided immutable configuration, a real feed subscription, bounded
-agent review, and typed `SigbotEvaluationSnapshot` publication.
+The E2E boundary uses an explicit OpenAI-compatible mock. It proves contracts,
+not model profitability, calibration, or the quality of a production pgvector
+case corpus.
 
 ## Source Map
 
-- Evaluator runtime and executor: `src/component/evaluator/src/`
-- Multi-agent implementation: `src/component/evaluator/src/executor/adk/`
+- Evaluator runtime and LLM adapter: `src/component/evaluator/src/`
+- Evaluator repositories: `src/core/src/modules/evaluator/storage/`
 - Shared evaluation/message types: `src/types/src/evaluator/`

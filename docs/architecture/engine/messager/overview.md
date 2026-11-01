@@ -2,78 +2,59 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative embedded SDK architecture. Local and MQTT clients exist,
-but their observable subscription behavior is not yet equivalent.
+**Status:** The durable v2 runtime uses MQTT/EMQX and PostgreSQL Inbox/Outbox.
+Local transport remains a single-process compatibility adapter and is not a
+durability-equivalent financial transport.
 
 Messager is SigBot's internal asynchronous communication SDK. It is not a
-business service and owns no trading payload. All-in-one mode uses a local
-in-memory implementation; distributed mode uses MQTT through EMQX. Services
-program only against `IMessager`.
+business service and owns no trading payload. Distributed services use MQTT
+through EMQX and program only against `IMessager`; each domain owns its
+transactional Inbox/Outbox boundary.
 
 ## Async Port
 
 ```text
 IMessager
-  async publish(topic, envelope, delivery_options)
-  async subscribe(SubscriptionSpec, handler) -> SubscriptionHandle
-  async close()
-
-SubscriptionSpec
-  topic_filter
-  consumer_group?
-  qos
-  ordering_key?
-  capacity / backpressure_policy
+  async publish(topic, message)
+  async publish_confirmed(topic, message)  // broker PUBACK boundary
+  async subscribe_scoped(topic, consumer, handler)
+  async unsubscribe_scoped(topic, consumer)
 ```
 
-`SubscriptionHandle` owns cancellation and graceful drain. A callback finishes
-only when its processing outcome is known; durable transports acknowledge
-according to the selected delivery contract.
-
-Implementations are `LocalMessager` and
-`MqttMessager`. Local mode must model the same fan-out and consumer
-group semantics as MQTT, not a simplified single-handler queue that changes
-application behavior.
+`SubscriptionSet` owns named subscription cancellation. A callback succeeds
+only after the caller has durably committed its processing result; the MQTT
+transport then acknowledges the delivery.
 
 ## Topic and Consumer-group Semantics
 
 Canonical internal topics follow:
 
 ```text
-/internal/v1/{tenant_id}/{pipeline_id}/{domain}/{event}
+internal/v2/{env}/{tenant_id}/workflow/{workflow_id}/{workflow_suffix}
+internal/v2/{env}/{tenant_id}/account/{account_id}/{account_suffix}
 ```
 
-A publisher always uses a normal topic. For MQTT, a consumer group is encoded
-only in the subscription filter:
-
-```text
-$share/evaluator-{pipeline_id}/internal/v1/.../feed/event
-$share/strategy-{pipeline_id}/internal/v1/.../feed/event
-```
-
-Evaluator and Strategy Runner require different groups so both receive every
-feed event. Replicas of one component share that component's group to divide
-work. Stateful consumers additionally use a stable partition/ownership scheme;
-random shared-subscription delivery alone cannot preserve rolling windows.
-
-Without a group, every active subscription receives its own copy. With a
-group, one active member receives each message. These rules are identical in
-Local and MQTT modes.
+The single generator exposes 17 Workflow suffixes and 5 Account suffixes.
+Published topics never contain `$share`; subscriber grouping is a broker
+filter concern. The envelope and topic scope must match, and Workflow edges
+authorize source/target delivery in addition to broker ACLs.
 
 ## Envelope
 
-`SigbotEventEnvelope<T>` contains event ID, tenant ID, pipeline ID, producer,
-payload schema/version, event time, publication time, correlation and causation
-IDs, partition key, and trace context. It excludes broker credentials and
-provider secrets.
+`MessageEnvelope<T>` is the wire DTO and `DurableMessage<T>` is the only form
+that may be persisted. They contain schema version, env/tenant scope,
+Workflow/Account ID, source/target node, `run_id`, seq, attempt, event/
+available/produced times, and W3C `traceparent`. No separate correlation ID is
+created. `requestSpanId` exists only on the wire for bounded request/reply
+pairing and is deliberately absent from `DurableMessage`.
 
 The producer owns `T` and its compatibility policy:
 
-- Datafeed owns `SigbotFeedEvent`.
-- Evaluator owns `SigbotEvaluationSnapshot`.
-- Strategy Runner owns `SigbotTradeSignal`.
-- Order Manager owns `SigbotExecutionEvent`.
-- Wallet Manager owns `SigbotPortfolioSnapshot`.
+- Datafeed owns `DatafeedEvent`.
+- Evaluator owns `HyperparametersUpdate`.
+- Strategy Runner owns `TradeIntent` payloads published on StrategySignal topics.
+- Order owns `ExecutionFact` and `OrderStatusFact`.
+- Wallet owns the versioned portfolio payload schema.
 
 Messager owns serialization framing, size limits, subscription lifecycle,
 delivery metadata, and transport error mapping—not the business schemas.
@@ -95,7 +76,7 @@ delivery metadata, and transport error mapping—not the business schemas.
 
 ## Security Invariants
 
-- Topic authorization enforces tenant/pipeline scope at both publisher and
+- Topic authorization enforces env/tenant/Workflow or Account scope at both publisher and
   subscriber boundaries.
 - MQTT uses TLS and scoped credentials in distributed environments.
 - Payload size, decompression, schema, and deserialization are validated before
@@ -106,17 +87,16 @@ delivery metadata, and transport error mapping—not the business schemas.
 
 ## Implementation Alignment
 
-Current source exposes `IMessager`, Local and MQTT clients, and
-asynchronous publish/subscribe calls. It has no explicit consumer-group model.
-Local mode effectively allows one receiver per exact topic and lacks equivalent
-fan-out/wildcards; MQTT's event loop can route later subscriptions through the
-first handler. Current topic placeholder expansion is inconsistent across
-producers and consumers, and the repository does not yet use `$share`.
+MQTT uses QoS 1, non-clean start, a seven-day session expiry, successful SUBACK
+before readiness, manual consumer ACK, and PUBACK before Outbox sent state.
+PostgreSQL keys include scope, owner, node, run, and sequence. Explicit replay
+retains business identity, increments `attempt_no`, and creates a new producer
+span. Named handlers on one topic can unsubscribe independently; unacceptable
+but well-formed inputs may be durably quarantined before ACK.
 
-Required alignment is `SubscriptionSpec`, multiple independent handlers,
-consumer groups, equivalent Local/MQTT behavior, canonical topic expansion,
-bounded backpressure, cancellation, and contract tests shared by both
-implementations.
+Open gaps are broker process/disk disaster recovery, sustained-load
+backpressure acceptance, and role-level production ACL hardening. Local mode
+does not provide the persistent-session/replay guarantees above.
 
 ## Source Map
 

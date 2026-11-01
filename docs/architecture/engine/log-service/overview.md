@@ -2,18 +2,19 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Auxiliary observability service with partial real-time and archive
-paths.
+**Status:** Implemented tenant/Workflow log archive component with durable
+local spooling, immutable object chunks, and cursor reads. A live WebSocket
+fan-out API is not implemented.
 
-`SigbotLogService` collects structured operational logs, fans them out to
-authorized real-time clients, and archives them to a dedicated observability
-store. It is outside the trading decision path and never becomes a dependency
-for placing an order or committing wallet accounting.
+`SigbotLogServer` collects structured operational logs and archives them to a
+dedicated observability store. It is outside the trading decision path and
+never becomes a dependency for placing an order or committing wallet
+accounting.
 
 ## Log Contract
 
-`SigbotLogEvent` contains event ID, timestamp, severity, tenant and pipeline
-scope, component, instance, trace/correlation IDs, message, and structured
+`LogLine` contains timestamp, severity, env/tenant/Workflow/node/run
+scope, component, instance, W3C trace/span IDs, message, and structured
 redacted fields. Producers emit one event per logical record; multi-line text
 is represented explicitly rather than parsed back into structure downstream.
 
@@ -25,51 +26,54 @@ queried from its source of truth rather than reconstructed from logs.
 
 ```text
 component logs -> Messager
-  -> real-time consumer -> bounded per-scope stream -> WebSocket/API clients
-  -> archive consumer group -> batch writer -> observability store
+  -> archive consumer -> durable SQLite WAL
+  -> immutable object chunk -> PostgreSQL cursor index
 ```
 
-Real-time fan-out may drop/coalesce low-priority records for a slow client after
-surfacing a gap marker. The archive path uses a distinct consumer group and
-durable checkpoint; the two paths must each receive the event rather than share
-one group.
+The component currently implements only the archive path. A future real-time
+fan-out path must use a distinct named subscription and bounded per-client
+policy so it receives every eligible event without stealing archive delivery.
 
 ## Extension Points
 
 | Role | Contract | Examples |
 |---|---|---|
-| Service root | `SigbotLogService` | Real-time and archive supervisor |
-| Processing | `ILogservice` | `DefaultLogservice` |
-| Archive | `ISigbotLogArchive` | PostgreSQL/TimescaleDB, object storage, or a log backend selected explicitly |
-| Live stream | `ISigbotLogStream` | Bounded WebSocket fan-out |
+| Service root | `SigbotLogServer` | Component startup and capture lifecycle |
+| Processing | `ILogservice` | `S3Logservice` |
+| Capture | `ArchiveCapture`, `ArchiveTracingLayer` | Python streams and Rust tracing |
+| Persistence | `LogserviceSQLiteRepository`, `LogservicePostgresRepository` | Durable spool and chunk index |
 
-The observability store is owned by Log Service. It is not the core
-control-plane database. APIServer may authenticate/proxy log queries but other
-components do not share the archive tables.
+Logservice owns its `log_chunk` table domain and object keys. The current final-
+state schema may physically co-locate that table with control-plane tables, but
+other components do not write it.
 
 ## Invariants
 
 - Producers redact credentials, keys, tokens, prompts, private account data,
   and strategy source before publication; the service applies a second policy
   filter.
-- Tenant/pipeline authorization is enforced when ingesting, querying, and
+- Env/tenant/Workflow authorization is enforced when ingesting, querying, and
   streaming logs.
 - Archive idempotency is keyed by event ID. Retry cannot create duplicate
   records.
-- A slow archive or WebSocket client cannot backpressure the trading message
-  loop without a bounded, observable policy.
+- A slow archive cannot backpressure the trading message loop without a
+  bounded, observable policy. The producer-side capture queue is bounded.
 - Retention, legal hold, deletion, and export rules are explicit per data class.
-- Health and metrics expose lag, drops, gap markers, archive failures, and
-  connected clients without logging payload content.
+- Health and capture statistics expose durable/rejected/write-failure state;
+  richer archive lag and live-client metrics remain enhancements.
 
 ## Implementation Alignment
 
 The current source registers `ILogservice` providers through `SigbotLogServer`.
 The component owns capture, WAL buffering, immutable S3 chunks, and cursor
-reads; the core `LogserviceHandler` owns the business boundary, while database
+reads; the core `LogHandler` owns the business boundary, while database
 operations remain inside Logservice repositories. `append` is logical append:
 ACK follows a SQLite WAL `FULL` durable commit, then every chunk is created at a
 new conditional S3 key. Existing S3 objects are never modified.
+
+Strategy-host Rust tracing and Python stdout/stderr/exception capture use this
+path. Capture from every other Rust host, host-volume loss recovery, and
+production bucket replication/retention remain open operational work.
 
 ## Source Map
 

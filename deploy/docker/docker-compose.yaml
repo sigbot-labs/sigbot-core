@@ -13,18 +13,6 @@ x-platform-environment: &platform-environment
   SIGBOT__SECRETS__VALUES__MQTT_PASSWORD: ${MQTT_PASSWORD:?required}
   SIGBOT__AUTHGUARD__SERVICE_ENV: ${SIGBOT_SERVICE_ENV:-dev}
   SIGBOT__AUTHGUARD__SERVICE_TENANT_ID: ${SIGBOT_TENANT_ID:-018f0000-0000-7000-8000-000000000001}
-x-platform-service: &platform-service
-  image: ${SIGBOT_IMAGE:?select images using make docker-up}
-  env_file: ${SIGBOT_ENV_FILE:-.env}
-  depends_on:
-    migrate: {condition: service_completed_successfully}
-    redis: {condition: service_healthy}
-    emqx: {condition: service_started}
-  restart: unless-stopped
-  mem_limit: 512m
-  cpus: '0.5'
-  pids_limit: 128
-  init: true
 services:
   storage:
     image: ${POSTGRES_IMAGE:?select images using make docker-up}
@@ -152,28 +140,6 @@ services:
     cpus: '1'
     pids_limit: 256
     init: true
-  order:
-    <<: *platform-service
-    command:
-      - order
-      - --messager-provider
-      - MQTT
-      - --order-manager-configuration
-      - '{"messager_config":{"properties":{"mqtt_server":"emqx","mqtt_port":"1883","mqtt_username":"sigbot","mqtt_client_id":"sigbot-platform-order","mqtt_timeout":"10","mqtt_clean_start":"false","mqtt_qos":"1"},"secrets":{"mqtt_password_secret":"mqtt_password"}},"properties":{"refresh_interval_ms":"2000"},"secrets":{}}'
-    environment:
-      <<: *platform-environment
-      SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID: platform:order
-  wallet:
-    <<: *platform-service
-    command:
-      - wallet
-      - --messager-provider
-      - MQTT
-      - --wallet-manager-configuration
-      - '{"messager_config":{"properties":{"mqtt_server":"emqx","mqtt_port":"1883","mqtt_username":"sigbot","mqtt_client_id":"sigbot-platform-wallet","mqtt_timeout":"10","mqtt_clean_start":"false","mqtt_qos":"1"},"secrets":{"mqtt_password_secret":"mqtt_password"}},"properties":{"refresh_interval_ms":"2000"},"secrets":{}}'
-    environment:
-      <<: *platform-environment
-      SIGBOT__AUTHGUARD__SERVICE_PRINCIPAL_ID: platform:wallet
   web:
     image: ${SIGBOT_WEB_IMAGE:?select images using make docker-up}
     ports: ['127.0.0.1:${WEB_PORT:-8080}:8080']

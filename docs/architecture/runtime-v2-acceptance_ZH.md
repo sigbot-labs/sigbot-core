@@ -2,7 +2,22 @@
 
 核对日期：2026-11-01（Asia/Shanghai；报告目录使用 UTC 时间）。此表按用户的 14 项重构要求及新增 E2E 要求记录当前源码和已执行证据；“已有实现”不自动等于“已完成生产验收”。按最新要求统一领域组件目录、Provider SPI 和生命周期；Messager、Exchange 是嵌入宿主的共享库，Logservice 是九个租户级数据面组件之一。源码结构、最终态 storage 与交易模式见[组件迁移说明](domain-component-migration_ZH.md)。表映射、迁移步骤和运行配置见 [迁移说明](runtime-v2-migration_ZH.md)。
 
-## 证据范围
+## 当前交接基线
+
+下表是 2026-11-01 文档/实现一致性审计时可以直接复核的最新证据。后续 E1–E4 是
+历史重型验收，仍可用于对应功能边界，但不能替代最新源码的重新执行。
+
+| 证据 | 已验证范围 | 不能据此声称的范围 |
+| --- | --- | --- |
+| [20261031230803](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261031230803/summary.md)：Docker 26/26 | 当时版本的完整主链、恢复、回放、日志、Kafka、真实 Chromium 和边界 mock | 该报告早于最新租户中间件 reconciler 和九组件目录收敛 |
+| [20261101001131](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261101001131/summary.md)：Kubernetes prepare/deployment 2/2 | 当时版本的 K3s 准备与部署目标 | 未覆盖最新 Redis/pgvector/TimescaleDB/EMQX 四类租户中间件完整生命周期，也不是九组件全链 K3s 验收 |
+| [20261101053351](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261101053351/summary.md) | 最终态 PostgreSQL/SQLite 数据库场景 | 不证明生产备份恢复或旧库升级；当前项目不提供旧库迁移链 |
+| [20261101081040](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261101081040/summary.md)、[20261101081049](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261101081049/summary.md)、[20261101081747](../../use-cases/marketpulse-autonomy-quantification/e2e/reports/20261101081747/summary.md) | 最新结构、Helm/部署和 schema 静态门禁 | 不等同于启动真实 Docker/K3s Workflow |
+| Controller `worker_lifecycle`：7 passed、0 failed、1 ignored | 最新 WorkerPlan、owner、路由、中间件拓扑和清单契约 | ignored 的真实外部 K3s 生命周期尚未补跑 |
+
+完整下一步、外部阻塞和安全续作顺序见[编码代理交接文档](../development/HARDCOVER.md)。
+
+## 历史重型证据范围
 
 | 编号 | 已执行证据 | 可以证明的范围 |
 | --- | --- | --- |
@@ -19,7 +34,7 @@ E1/E2/E3/E4 报告含场景明细、实际执行命令、测试二进制 SHA-256
 
 领域接口均继承共享 `IProvider`，实现按 `<short>/<short>.rs` 组织；移除旧 factory 文件、转发壳和无真实表归属的 BacktestCase CRUD，所有生产源码文件不超过 800 行。数据库配置与实现统一命名为 `storage`，配置只接受规范 `snake_case` 键并拒绝未知字段。`core/sys` 与本地用户权限表已移除，Authguard 身份适配保留在 context，业务租户/日志/锁各归本域。Live/Paper/Backtest 是独立交易模式，scope.env 表示路由/部署环境；订单提交、重启对账和成交观察在 SDK 调用前统一检查钱包模式。
 
-Makefile 的构建、镜像/Compose、质量、UT 和两种 E2E 入口均已统一；CN profile 对所有镜像要求 Aliyun 地址。PR checkout head SHA 构建/测试 dirty images，合并以 merge SHA 重建并在成功后发布，逐步骤状态写入同一 PR comment。旧并行发布/校验 workflow 已收敛。CI 定义和报告脚本已本地验证；远端 Actions、GHCR/Release 权限与完整 release runtime 镜像尚未实跑，不能标为发布验收通过。本地已实际构建 Web、三个外部 mock、MinIO 载体，实际生成 `dist/sigbot-1.0.0.tgz`。
+Makefile 的构建、镜像/Compose、质量、UT 和两种 E2E 入口均已统一；CN profile 对所有镜像要求 Aliyun 地址。PR checkout head SHA 构建/测试 dirty images，合并以 merge SHA 重建并在成功后发布，逐步骤状态写入同一 PR comment。旧并行发布/校验 workflow 已收敛。CI 定义和报告脚本已本地验证；远端 Actions、GHCR/Release 权限与完整 release runtime 镜像尚未实跑，不能标为发布验收通过。`dist/` 是发布时重建的生成目录，不纳入源码工作树。
 
 `20261029201704` 保留旧 Run 的 13,945 条行情补放造成超时、过期意图被风控拒绝的失败；未删除 Outbox 或刷新原时间。新的当前输入在 `20261029202847` 通过，完整复验为 E1。`20261029203212` 保留 sudo 未传递扩展镜像变量的两次失败，私有 env 文件修复后由 E4/E1 复验。`20261029210511` 保留 K8s Secret 遗留 STORAGE 键的首轮失败；改用带 resourceVersion 的完整替换并核对实际键集合后，E2 在预置旧键的情况下两轮通过。
 

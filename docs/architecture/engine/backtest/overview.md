@@ -2,10 +2,10 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture. Current backtest managers do not yet
-implement the complete run.
+**Status:** Implemented deterministic replay and simulated-execution component;
+realistic depth, partial-liquidity, and latency modelling remain bounded gaps.
 
-`SigbotBacktestRunner` evaluates historical economic behavior by composing the
+`SigbotBacktestServer` evaluates historical economic behavior by composing the
 same feed, evaluation, deterministic strategy, order, exchange, and portfolio
 contracts used by live trading with run-scoped simulation adapters. It is not a
 duplicate Datafeed service, a duplicate exchange microservice, or an E2E test.
@@ -14,18 +14,18 @@ duplicate Datafeed service, a duplicate exchange microservice, or an E2E test.
 
 ```mermaid
 flowchart LR
-    Clock[SigbotVirtualClock] --> Replay[SigbotHistoricalReplaySource]
-    Replay -->|SigbotFeedEvent| Eval[Evaluator mode]
-    Replay -->|SigbotFeedEvent| Strategy[Strategy core]
-    Eval -->|SigbotEvaluationSnapshot| Strategy
-    Strategy -->|SigbotTradeSignal| Order[Order core]
+    Clock[ReplayEngine virtual clock] --> Replay[PostgresReplaySource]
+    Replay -->|DatafeedEvent| Eval[recorded evaluation]
+    Replay -->|DatafeedEvent| Strategy[Strategy core]
+    Eval -->|HyperparametersUpdate| Strategy
+    Strategy -->|TradeIntent| Order[Order core]
     Order --> Sim[BacktestExchange]
     Sim -->|execution facts| Ledger[Run-scoped Portfolio Ledger]
-    Ledger -->|SigbotPortfolioSnapshot| Strategy
+    Ledger -->|versioned portfolio payload| Strategy
     Ledger --> Metrics[Performance metrics]
 ```
 
-One isolated `BacktestSession` owns virtual time, input range, pipeline and
+One isolated run-scoped replay runtime owns virtual time, input range, Workflow and
 artifact versions, deterministic seed, evaluator mode, simulation policy,
 event journal, run database/namespace, checkpoints, result, and cancellation
 state. Parallel runs share no mutable strategy or portfolio state.
@@ -34,8 +34,8 @@ state. Parallel runs share no mutable strategy or portfolio state.
 
 | Capability | Live implementation | Backtest implementation |
 |---|---|---|
-| Market source | External `ISigbotDatafeedSource` through shared Datafeed | `SigbotHistoricalReplaySource` reading canonical archived events |
-| Clock | `SigbotSystemClock` | `SigbotVirtualClock` |
+| Market source | `IDatafeed` through the live Datafeed component | `PostgresReplaySource` reading canonical archived events |
+| Clock | Wall clock at the live service boundary | Virtual clock owned by `ReplayEngine` |
 | Venue | Provider `IExchange` | `BacktestExchange` |
 | Portfolio | Wallet service | Run-scoped implementation of the same accounting contracts |
 | Transport | Local or MQTT Messager | Isolated local event bus by default |
@@ -44,26 +44,28 @@ The replay source reads normalized kline, trade, order-book, funding, and
 approved news events. It does not reconnect to live Binance/Twitter providers;
 testing ingestion adapters and real middleware is E2E scope.
 
-The Backtest matching venue—not an “Exchanger”—owns venue behavior: matching,
-market/limit/stop orders, partial fills, rejections, latency, slippage, fees,
-funding, margin, cancellation, and forced liquidation. Accounting effects are
-applied by the run-scoped portfolio ledger rather than duplicated inside the
-exchange simulator.
+The Backtest matching venue—not an “Exchanger”—owns the currently implemented
+venue behavior: market execution, resting limit crossing on later ticks,
+configured slippage and fees, acknowledgements, and deterministic execution
+facts. Accounting effects are applied by the run-scoped portfolio ledger rather
+than duplicated inside the exchange simulator. Stop orders, partial liquidity,
+latency, funding, margin, cancellation races, and forced liquidation remain
+explicit model gaps.
 
-## Evaluator Modes
+## Evaluator Replay Policy
 
-| Mode | Evaluation behavior | Purpose | Reproducibility |
+| Policy | Evaluation behavior | Current status | Reproducibility |
 |---|---|---|---|
-| `FIXED` | Use one fixed, versioned evaluation/parameter snapshot | Isolate deterministic Python strategy behavior | Deterministic |
-| `REPLAY` | Replay recorded `SigbotEvaluationSnapshot` events at their original publication/effective time | Default high-fidelity pipeline regression | Deterministic |
-| `RECOMPUTE` | Run the AI Evaluator against only data visible under virtual time | Research the AI-plus-strategy system | Explicitly non-deterministic |
+| Fixed fixture | Replay one recorded, versioned `HyperparametersUpdate` fixture | Supported through recorded artifacts | Deterministic |
+| Recorded stream | Replay recorded updates at original publication/effective time | Implemented default | Deterministic |
+| Recompute | Run Evaluator only against virtual-time-visible data | Reserved enhancement; no runtime mode exists yet | Would be non-deterministic |
 
 Because the production strategy depends on evaluation, the default cannot
-silently omit it. `REPLAY` preserves the actual historical AI advice while
-allowing strategy, risk, and execution logic to be reproduced. `RECOMPUTE`
-records model/provider, model version, prompt/tool versions, temperature, seed
-when available, and the complete evaluation artifact; results should be
-reported as a distribution across runs rather than as one deterministic score.
+silently omit it. The implemented recorded-stream path preserves historical AI
+advice while reproducing strategy, risk, and execution logic. A future
+recompute path must record model/provider, model version, prompt/tool versions,
+temperature, seed when available, and the complete evaluation artifact; its
+results must be reported as a distribution rather than one deterministic score.
 
 ## Event Time and Look-ahead Safety
 
@@ -72,8 +74,8 @@ reported as a distribution across runs rather than as one deterministic score.
   `valid_from`; its input watermark cannot exceed the strategy decision event.
 - A portfolio snapshot is visible only after the matching transaction that
   produced it commits.
-- Tools in `RECOMPUTE` mode receive the virtual clock and cannot access current
-  live market data.
+- Any future recompute mode must receive the virtual clock and must not access
+  current live market data.
 - Gaps, corrections, delistings, corporate actions, and funding schedules are
   explicit dataset events, not silently repaired with future data.
 
@@ -81,24 +83,26 @@ reported as a distribution across runs rather than as one deterministic score.
 
 | Role | Contract | Implementation |
 |---|---|---|
-| Service root | `SigbotBacktestRunner` | One isolated process/job per run or worker slot |
-| Engine | `ISigbotBacktestEngine` | `SigbotEventDrivenBacktestEngine` |
-| Clock | `ISigbotClock` | `SigbotVirtualClock` |
-| Historical feed | `ISigbotDatafeedSource` | `SigbotHistoricalReplaySource` |
+| Service root | `SigbotBacktestServer` | Component startup and Provider registration |
+| Engine | `ReplayEngine` | Virtual-time delivery and barrier coordination |
+| Replay ports | `ReplaySource`, `ReplayDecision` | Historical input and decision delivery |
+| Historical feed | `PostgresReplaySource` | Keyset reads of canonical persisted events |
 | Backtest venue | `IExchange` | `BacktestExchange` |
 
 ## Results and Invariants
 
-Results include immutable input/configuration hashes, event/fill journal,
-equity curve, return, drawdown, risk-adjusted metrics, turnover, fees, funding,
-liquidations, win/loss statistics, and failure/cancellation state.
+The implemented durable result surface is the frozen input identity, replay
+cursor/checkpoint, virtual clock, simulated order/execution facts, Outbox, and
+Wallet accounting state. Equity curves, drawdown/risk-adjusted summaries,
+turnover, and win/loss analytics must be derived by a reporting layer; the
+Backtest component does not yet persist a complete performance-report model.
 
-- Rerunning `FIXED` or `REPLAY` with identical artifacts and engine version
+- Rerunning a fixed fixture or recorded stream with identical artifacts and engine version
   yields byte-equivalent decisions and accounting results.
 - No simulation event can mutate live Order or Wallet stores or use live
   trading credentials.
-- Cancellation is cooperative and checkpoints are consistent at event
-  boundaries.
+- Checkpoints are consistent at event boundaries. A complete user-facing
+  cancellation/result state machine remains an enhancement.
 - Execution and accounting use decimal arithmetic and the same validation
   contracts as live mode.
 - Backtest measures strategy economics; E2E tests process boundaries, broker,
@@ -107,19 +111,22 @@ liquidations, win/loss statistics, and failure/cancellation state.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotBacktestServer`, `IBacktest`, and
-KLINE/TRADES managers. Their processing paths are unimplemented and scheduled
-runs can require an uninjected distributed-lock handler. Virtual time,
-canonical replay, deterministic matching behavior, evaluator modes, isolated
-accounting, and reproducible result artifacts are not yet complete.
+`SigbotBacktestServer` now composes persisted history, a virtual clock, replay
+barriers, recorded evaluation output, the normal Strategy callbacks, and the
+dedicated simulated execution adapter. Resting limit orders are matched by
+subsequent persisted ticks with deterministic ordering, configured fees and
+slippage; execution and Outbox commit together. Repeated or late input and a
+process restart do not create a second fill.
 
-Required alignment is the run-scoped composition above. It replaces duplicated
-Datafeed/Exchange/Wallet responsibilities with common ports and simulation
-adapters.
+The simulator deliberately does not claim order-book queue priority, partial
+available liquidity, venue network latency, or every distributed model-shard
+equivalence. Those are enhancements, not hidden behavior of the current full-
+fill model.
 
 ## Source Map
 
-- Backtest service and managers: `src/component/backtest/`
+- Backtest component: `src/component/backtest/`
+- Backtest repositories: `src/core/src/modules/backtest/storage/`
 - Strategy execution: `src/component/strategy/`
 - Exchange contracts: `src/exchange/`
 - Wallet accounting contracts: `src/component/wallet/`

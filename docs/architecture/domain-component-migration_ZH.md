@@ -1,43 +1,92 @@
-# 领域组件结构与兼容迁移
+# 领域组件结构与当前边界
 
-本轮保留现有 workspace crate 和业务边界，统一领域接口、实现目录和共享生命周期。业务逻辑不放在测试框架，Messager、Exchange、Logservice 不独立部署。主机 controller 仍嵌入 API；服务入口组织订阅与持久运行时。
+本文记录当前源码结构，不描述旧目录兼容层。平台面由 API、独立 Controller 和 Web
+组成；数据面由九个租户级 Workflow 组件组成。Messager 与 Exchange 是嵌入宿主进程
+的共享库，不独立部署。认证、用户、租户身份和权限唯一归 Authguard；Sigbot 只保存
+经过验证的业务租户 UUID。
 
-| crate | 领域契约 | 实现目录 | 内部职责 |
+## 当前目录与职责
+
+| 目录 / crate | 领域契约 | 主要实现 | 部署边界 |
 | --- | --- | --- | --- |
-| backtest | `backtest.rs / IBacktest` | `kline/kline.rs`、`trades/trades.rs` | `replay/`：时钟、屏障、历史 PG、运行协调；`trades/`：撮合与 tick |
-| datafeed | `datafeed.rs / IDatafeed` | `binance/`、`twitter/`、`truthsocial/`、`policy/` | `social/`：共享协议；`ingestion/`：持久事实/回放导入；`query/`：快照与计算 |
-| controller | `controller.rs / IController` | `docker/`、`kubernetes/`、`standalone/` | `worker/`：冻结计划和 reconcile |
-| evaluator | `evaluator.rs / IEvaluator` | `mas/mas.rs` | MAS 的 agents/core/tools 保持内部组织；`llm/` 为旁路评估运行时 |
-| exchange | `exchange.rs / IExchange` | `binance/`、`ibkr/`、`polymarket/`、`hyperliquid/`、`kalshi/` | `execution/`：执行契约/加密提交；`market/`：公共快照；交易所专用执行留在各实现目录 |
-| exporter | `exporter.rs / IExporter` | `kafka/`、`google_sheets/` | `delivery/`：幂等 sink 和游标运行时 |
-| logservice | `logservice.rs / ILogservice` | `default/default.rs` | `archive/`：持久缓冲、不可变对象、索引及 Rust tracing 接线 |
-| notification | `notification.rs / INotifier` | `email/`、`telegram/` | `delivery/`：模板、站内投递和有限重试 |
-| order | `order.rs / IOrder` | `default/default.rs` | `processing/`：风控/预占/提交；`execution/`：事实、组、跟踪、对账 |
-| strategy/runner | `strategy.rs / IStrategy` | `python/python.rs` | `python/worker/`：受限嵌入式 Python；`checkpoint/`：事务状态；`server/`：实例串行和消息路由 |
-| messager | `messager.rs / IMessager` | `local/`、`mqtt/` | `storage/`：Inbox/Outbox；MQTT 内聚重试、补放和临时响应配对 |
-| wallet | `wallet.rs / IWallet` | `default/default.rs` | `ledger/`：资金/执行事实和预占；账本与投影唯一写入 |
+| `src/component/backtest` | `IBacktest` | 历史读取、虚拟时钟、屏障、撮合 | 租户级动态组件 |
+| `src/component/datafeed` | `IDatafeed` | 社交/政策/交易所接入、事实持久化、快照与计算 | 租户级动态组件 |
+| `src/component/evaluator` | `IEvaluator` | LLM 旁路评估、案例引用、五态概率 | 租户级动态组件 |
+| `src/component/exporter` | `IExporter` | Kafka、Google Sheets、游标与重试 | 租户级动态组件 |
+| `src/component/logservice` | `ILogservice` | WAL 缓冲、不可变对象归档、索引和游标读取 | 租户级动态组件 |
+| `src/component/notifier` | `INotifier` | Email、Telegram、站内投递、模板和状态 | 租户级动态组件 |
+| `src/component/order` | `IOrder` | 风控、预占、提交、执行组、对账 | 租户级动态组件 |
+| `src/component/strategy/runner` | `IStrategy` | Python 沙箱、事务状态、串行回调和消息路由 | 租户级动态组件 |
+| `src/component/wallet` | `IWallet` | 资金事实、不可变账本、预占和投影 | 租户级动态组件 |
+| `src/controller` | `IController` | Docker/Kubernetes Worker 与租户中间件生命周期 | 独立平台服务 |
+| `src/exchange` | `IExchange` | Binance、IBKR、Polymarket 等市场/执行适配 | 嵌入 Order/Datafeed 等宿主 |
+| `src/messager` | `IMessager` | Local/MQTT transport、Inbox/Outbox 和临时响应配对 | 嵌入九个数据面宿主 |
+| `src/core` | Handler/Repository | 业务用例编排、唯一数据库访问入口 | 被 API/Controller/组件复用 |
+| `src/api/{http,a2a,mcp}` | 协议 Adapter | 鉴权、DTO 转换、路由 | 平台 API 进程 |
 
-每个根契约继承 `common_context::IProvider`。具体实现的 `init/close` 放在 `impl IProvider`；带配置的旧 `init(argument)` 改为 `configure(argument)`。旧 `<domain>_factory.rs`、manager/client/executor 的转发壳和拼错的 `datafeed_trushsocial.rs` 已移除。Rust 调用方迁移到新模块/类型；不保留一套重复的实现。SDK 是类型与回调协议库，继续保留 `Effects` 与兼容 TradingSignal 模型，不额外建立 provider 注册中心。
+九个组件均由 Workflow 节点的 `config.module` 选择。Controller 从不可变 Run 图生成
+WorkerPlan，按订阅者优先顺序启动节点，并通过同一套 Docker/Kubernetes Provider 完成
+部署、更新、恢复和停止。Order 与 Wallet 不再作为平台常驻服务静态部署。
 
-共享 `src/common/context` 的 ApplicationContext 按接口类型和 instance_id 懒加载。各领域 Factory 仅为构造/CLI 门面，使用同一个 context；不再各自维护全局 HashMap。入口启动和关闭 context。并发重复注册只保留首个构造器，首次 get 只有一个初始化 owner，关闭会尝试该域所有实例；显式独立测试用 `ApplicationContext::new()`。配置实例键包含隔离身份，排除 traceparent、requestSpanId、attempt_no，只是进程内缓存键，不持久化为业务关联 ID。
+## Provider 与源码组织
 
-Provider 和参数类型按 `DatafeedArgument`、`ExchangeFactory`、`BinanceExchangeConfig` 等统一格式命名。枚举 Rust variant 使用 UpperCamelCase，原有 JSON/MQTT provider 字符串通过显式 serde 名称保留。原有测试按职责迁入对应 `tests/` 镜像目录，保留 private 单元测试访问和显式 Cargo 集成入口。结构验收检查 12 个契约、禁止遗留 `_factory.rs`、移除 sys/store，以及业务域单文件不超过 1200 行。
+根领域契约继承 `common_context::IProvider`。入口负责向同一
+`ApplicationContext` 注册实例、启动 Context 并在统一信号到达后关闭。Provider 的
+业务函数放在具体类型的 `impl` 中；生产代码不以自由函数承载领域状态。
 
-## storage 与身份边界
+数据库访问只允许位于 `src/core/src/modules/<domain>/storage/`。协议 Adapter、动态
+组件、Controller、Messager 与 Exchange 不直接执行 SQL。PostgreSQL/SQLite Adapter
+共享同一领域契约；PostgreSQL 是跨进程和生产持久性的验收基准，SQLite 仅用于本地
+单进程开发和相应测试。
 
-| 旧入口 | 新入口 | 兼容处理 |
-| --- | --- | --- |
-| `SIGBOT__APPDB__TYPE` | `SIGBOT__STORAGE__PROVIDER` | 旧环境源先归一化；部署文件使用新键 |
-| `core::store`、业务 `store/` | `core::storage`、业务 `storage/` | 全部 Rust 引用迁移；不改变金融表名称或账本记录 |
-| `core::sys` 平台 IAM | Authguard SDK/Gateway | 本地用户/权限实现删除；身份适配在 `context/` |
-| sys 业务租户/日志/锁 | `modules/tenant`、`modules/log`、`storage/lock` | 保留业务能力，禁止全局当前用户上下文 |
+生产源码文件上限为 800 行；Core 领域 Handler/Storage 分别遵守更严格的 500/250
+行职责边界。测试镜像源码目录放在对应 crate 的 `tests/`，不能用内联大测试或独立
+测试项目绕开结构门禁。
 
-`TIMESCALEDB` 旧 provider 迁到同一个 PostgreSQL 连接配置；TimescaleDB/pgvector 为该 PG 的扩展。历史迁移文件和已保存的金融事实不因源码重命名而改写。非空旧库验收仍检查金融表保留、Workflow/Run ID 映射和二次幂等。
+## 配置与身份边界
+
+- 所有业务模块通过顶部导入后的短名 `get_config()` 读取统一配置。
+- 配置优先级是 defaults `<` YAML `<` `SIGBOT__...` 双下划线环境覆盖；未知字段拒绝。
+- Secret 值由中央配置或部署 Secret 注入，Worker 元数据只保存 Secret key 名，不保存
+  token、密码、私钥或自定义环境变量。
+- 请求身份由 Authguard 官方 Adapter 验证后显式传入 Handler；禁止进程全局当前用户。
+- `env + tenant_id + workflow_id + node_id + run_id` 是数据面隔离范围；
+  `traceparent` 和 `requestSpanId` 不参与业务身份或持久幂等。
+
+`ctl_worker.middleware` 是强类型租户中间件声明，只允许为 Redis、pgvector、
+TimescaleDB、EMQX 配置批准的 `image` 和 `resources` 字段。Web 表单模式与 YAML
+模式使用同一 API DTO 和校验器；Controller 在九组件启动前幂等调和中间件并绑定
+端点。运行凭据必须已存在于远端 Secret 或受控 Docker env 文件，Controller 不把
+明文 Secret 保存到数据库。
+
+## Storage 与 ID
+
+当前项目只有最终态基线迁移：
+
+```text
+migration/20261031000000/
+├── postgres/{init.ddl.sql,init.dml.sql}
+└── sqlite/{init.ddl.sql,init.dml.sql}
+```
+
+实体主键和相互依赖外键使用 UUIDv7。`node_id`、`seq`、`revision`、交易所原生 ID 等
+是有序坐标或外部事实标识，不应机械改成 UUID。项目不提供旧 `APPDB`、本地 IAM 表、
+旧消息 topic 或旧表名的兼容层。
+
+控制面 PostgreSQL 保存 Workflow、Worker、连接等配置；部署镜像可包含 TimescaleDB
+和 pgvector 扩展。租户数据面的 pgvector/TimescaleDB 则由 scoped `ctl_worker` 独立
+声明和调和，两者不能混写为“一定是同一个数据库”。金融事实表由对应数据面组件的
+Core Repository 唯一写入。
 
 ## 部署环境与交易模式
 
-`scope.env` 表示部署隔离，例如 dev/sit/uat/prod；校验 MQTT-safe 标识，不负责选择交易行为。模式为单一类型 `ExecutionMode::{Live,Paper,Backtest}`：Live 使用真实外部 SDK；Paper 使用模拟盘 API；Backtest 使用专用历史撮合 API、冻结输入和虚拟时钟。不存在第四种环境或交易模式，也不接受迁移别名。
+`scope.env` 是 dev/sit/uat/prod 等部署与消息隔离环境。交易行为只由
+`ExecutionMode::{Live, Paper, Backtest}` 决定，两者互不推断：
 
-Workflow 保存时验证显式模式与 Order 适配器一致，Run 固定该模式，WorkerPlan 校验并注入模式；虚拟 worker 时钟只允许 Backtest。Order 在写入意图和请求预占前比较钱包与适配器模式；恢复后的对账及成交观察在调用交易所前使用同一风控检查，不匹配则拒绝。回放同时要求独立 scope/run，冻结可得时间，读取持久屏障时钟，关闭实时主动查询；不再根据环境名前缀推断回测。已经保存为 paper/backtest/replay-* 的旧环境标识不自动改成 prod，避免改变租户隔离与历史身份。
+- Live 调用真实交易所执行 Adapter；未知结果必须按原订单身份查询，禁止盲目重下。
+- Paper 使用明确的模拟盘或内部撮合 Adapter，不修改真实交易所 URL 来伪装模式。
+- Backtest 使用冻结历史、虚拟时钟、固定顺序和专用撮合服务。
 
-E2E 实时主链改用 Paper 和新的独立测试钱包 20001，旧钱包 1 与账本保留；历史回放继续创建各自的 Backtest 钱包。同所双账户补偿使用 Paper。目录/类型检查、单测、真实 Docker/Kubernetes 与 UI 的已执行结果和外部门禁见[验收矩阵](runtime-v2-acceptance_ZH.md)；源码存在不等于生产验收完成。
+Workflow 保存、Run 快照、WorkerPlan、Order、Wallet 与回放入口都校验同一模式。
+详细数据表和恢复契约见[运行时数据模型](runtime-v2-migration_ZH.md)，当前证据和明确
+缺口见[验收矩阵](runtime-v2-acceptance_ZH.md)及[编码代理交接文档](../development/HARDCOVER.md)。

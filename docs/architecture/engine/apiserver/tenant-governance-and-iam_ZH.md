@@ -26,7 +26,7 @@ Sigbot 只保存量化业务资源。`tenant_id` 是 Authguard 签发并由请�
 
 1. Envoy Gateway 交给 Authguard 完成认证和授权。
 2. API Adapter 校验 Authguard 签名身份，不接受客户端自报 Tenant。
-3. Handler 从显式 `IdentityContext` 取得 `tenant_id`，并对目标资源再次做作用域校验。
+3. Handler 从显式 `RequestIdentity` 取得 `tenant_id`，并对目标资源再次做作用域校验。
 4. Repository 的查询和写入条件始终包含 Tenant；禁止使用全局用户上下文或隐式默认租户。
 5. Controller 只接受已经持久化并授权的 Workflow/Worker 配置，不能通过 Pod 环境变量扩权。
 

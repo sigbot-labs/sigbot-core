@@ -2,9 +2,9 @@
 
 [English](overview.md) · [架构总览](../../overview_ZH.md)
 
-**状态：** 规范性目标架构；当前已有部分 PostgreSQL Projection。
+**状态：** 已实现权威预占、不可变会计与组合投影组件；广泛外部账户对账仍待完成。
 
-`SigbotWalletManager` 是会计与 Portfolio Source of Truth，拥有资金/保证金
+`SigbotWalletServer` 是会计与 Portfolio Source of Truth，拥有资金/保证金
 Reservation、不可变 Ledger、Balance、Position、Realized/Unrealized P&L、Equity
 Snapshot，以及 Strategy 消费的版本化 Portfolio Snapshot。它永远不能从 Strategy
 Signal 或 Order Acknowledgement 推断资金变化。
@@ -15,9 +15,9 @@ Wallet 消费由 Order Manager 拥有的权威、不可变 Execution Fact，包�
 Funding、Settlement、Transfer 与 Liquidation。每个 Fact 携带稳定 Event ID、Account、
 Asset/Instrument、Quantity、Decimal Amount/Price、Venue Timestamp 与 Causation ID。
 
-下单前，Order Manager 可以调用幂等 Reservation API。Reservation 减少可用资金或
-保证金，但不伪装成 Fill。Fill、Reject、Cancel 与 Expiry Fact 按显式状态机消费或
-释放 Reservation。
+下单前，Order 发布幂等 Reservation Request 并等待作用域一致的 Result。Reservation
+减少可用资金或保证金，但不伪装成 Fill。Fill、Reject、Cancel 与 Expiry Fact 按显式
+状态机消费或释放 Reservation。
 
 ## 原子会计事务
 
@@ -43,19 +43,20 @@ Entry 永不修改；修正必须使用 Compensating Entry。
 | Balance | 每 Account/Asset 的 Available、Reserved 与 Total Materialized View |
 | Position | 每 Instrument 的 Quantity、Cost Basis、Margin 与 Realized/Unrealized P&L View |
 | Equity Snapshot | 用于分析和风险的时间序列 View |
-| `SigbotPortfolioSnapshot` | 带 Account、Balance、Position、Exposure、Event Watermark 与 Effective Time 的 Strategy-facing 版本化视图 |
+| 版本化组合载荷 | 带 Account、Balance、Position、Exposure、Event Watermark 与 Effective Time 的 Strategy-facing JSON 视图 |
 
-Wallet Database/Schema、Credential、Migration 与 Write API 由本服务私有拥有。其他
-服务只能查询 Wallet API 或消费 Snapshot，禁止读取 Wallet Table。
+`wlt_*` 表领域只有 Wallet Repository 一个写入方。其他组件只能使用类型化消息/
+Snapshot，禁止直接查询 Wallet Table。物理 Schema 与迁移文件可和其他领域共用，但
+不能共享写所有权。
 
 ## 扩展点
 
 | 角色 | 契约 | 示例 |
 |---|---|---|
-| Service Root | `SigbotWalletManager` | `SigbotTransactionalWalletManager` |
-| Wallet Behavior | `IWallet` | Reservation 与 Event Application |
-| Accounting | `ISigbotPortfolioLedger` | Double-entry Ledger 实现 |
-| Persistence | `ISigbotPortfolioStore` | `SigbotPostgresPortfolioStore` |
+| Service Root | `SigbotWalletServer` | 组件启动与 Provider 注册 |
+| Wallet Behavior | `IWallet` | `WalletAccountProcessor` |
+| Reservation | `WalletReservationProcessor` | 幂等 Hold/Release 处理 |
+| Persistence | Core Handler/Repository | `WalletPostgresRepository`、`WalletSQLiteRepository` |
 | Reconciliation Source | Exchange Account Capability | Venue Balance/Position/Fill Query |
 
 ## 对账与一致性
@@ -64,9 +65,8 @@ Wallet Database/Schema、Credential、Migration 与 Write API 由本服务私有
 API。差异必须生成显式 Reconciliation Case 与 Corrective Fact，不能静默覆盖。
 Distributed Ownership 或稳定 Account Sharding 防止多个 Reconciler 重复应用同一范围。
 
-Order 与 Wallet 分别维持本地 ACID，通过 Outbox/Inbox、Replay 与 Reconciliation
-收敛。运维上可以使用同一个 PostgreSQL Cluster，但不能共享可写表或 Service
-Credential。
+Order 与 Wallet 分别维持事务写所有权，通过 Outbox/Inbox、Replay 与 Reconciliation
+收敛。当前两域表位于同一物理 PostgreSQL Schema，但组件不得跨领域写入。
 
 ## 安全不变量
 
@@ -81,17 +81,17 @@ Credential。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotWalletServer`、`IWallet`、`IWalletUpdater` 与
-`PostgresWalletUpdater`，使用全局应用 PostgreSQL 配置。Ledger Insert 先单独 Commit，
-Balance/Position 再异步分事务更新；Duplicate Ledger Insert 后仍可能应用 Projection
-Delta，因此尚未达到目标原子/幂等边界。
+`SigbotWalletServer` 是 Wallet Reservation、不可变 Ledger/Journal/Posting、Balance、
+Position、Equity Snapshot 与版本化 Portfolio 输出的唯一写入方。Funding/Execution Fact
+经 Inbox 进入；平衡 Posting、预占释放、Projection 和 Outbox 在一个 PostgreSQL 事务内
+提交。重复及乱序终态保持事实一致，Projection 可从不可变记录重建。
 
-必须对齐到 `SigbotWalletManager` Root、专用 Wallet Store、Inbox/Reservation Model、
-单一原子 Accounting Transaction、不可变 Portfolio Snapshot 与 Exchange
-Reconciliation。
+真实账户 Transfer、Corporate Action、完整衍生品 Margin/Liquidation、持续外部对账和
+完整多资产 NAV 尚未验收。
 
 ## 源码地图
 
-- Wallet 数据面组件与 Persistence Adapter：`src/component/wallet/`
+- Wallet 数据面组件：`src/component/wallet/`
+- Wallet Repository：`src/core/src/modules/wallet/storage/`
 - Wallet Domain 类型：`src/types/src/wallet/`
 - Wallet Migration：`migration/`

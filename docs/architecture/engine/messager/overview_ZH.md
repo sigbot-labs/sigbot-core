@@ -99,7 +99,7 @@ MQTT 使用 QoS 1、非 clean start、七天 session expiry 和手动 ACK。客�
 
 `MessagerPostgresRepository::replay(producer, scope, node_id, run_id, first..=last)` 只重新排队指定域、生产者、节点、run 和有界序号区间中的 `sent` Outbox。调用方必须先验证运维权限；不会跨租户扫描或创造关联 ID。下一次真实发布保留业务键，递增 `attempt_no` 并创建新的 producer span。已完成或持久隔离的 Inbox 重投会校验事实一致性后直接 ACK；同身份而事实变化仍拒绝。
 
-`src/messager/tests/postgres_replay.rs` 提供真实 PostgreSQL 与认证 EMQX 的集成验证，通过 `SIGBOT_TEST_DATABASE_URL`、`SIGBOT_TEST_MESSAGE_SCOPE` 和 `SIGBOT_TEST_MQTT_CONFIG` 注入测试配置。MQTT JSON 只保存密码环境变量名；测试从实际接收消息验证补放次数和 span，不修改捕获消息模拟重试。
+`src/messager/tests/messager_test.rs` 提供真实 PostgreSQL 与认证 EMQX 的集成验证，通过 `SIGBOT_TEST_DATABASE_URL`、`SIGBOT_TEST_MESSAGE_SCOPE` 和 `SIGBOT_TEST_MQTT_CONFIG` 注入测试夹具。MQTT JSON 只保存中央 Secret key；测试从实际接收消息验证补放次数和 span，不修改捕获消息模拟重试。
 
 MQTT client_id 必须包含现有 run 身份的稳定编码：同 run 重启继续原会话，不同 run 独立。
 Workflow topic 本身仍可承载多个节点和 run。Strategy 先检查 scope/Workflow，再按目标、

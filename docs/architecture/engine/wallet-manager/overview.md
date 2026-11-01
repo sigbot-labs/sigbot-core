@@ -2,10 +2,10 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with a partially implemented
-PostgreSQL projection.
+**Status:** Implemented authoritative reservation, immutable accounting, and
+portfolio-projection component; broad external-account reconciliation remains open.
 
-`SigbotWalletManager` is the accounting and portfolio source of truth. It owns
+`SigbotWalletServer` is the accounting and portfolio source of truth. It owns
 funds/margin reservations, an immutable ledger, balances, positions, realized
 and unrealized P&L, equity snapshots, and the versioned portfolio snapshots
 consumed by strategies. It never infers money movement from a strategy signal
@@ -18,7 +18,8 @@ Manager, including fills, fees, funding, settlement, transfer, and liquidation.
 Each fact carries a stable event ID, account, asset/instrument, quantity,
 decimal amount/price, venue timestamp, and causation identifiers.
 
-Before placement, Order Manager may call an idempotent reservation API. A
+Before placement, Order publishes an idempotent reservation request and waits
+for the scoped result. A
 reservation reduces available funds or margin without pretending a fill has
 occurred. Fill, reject, cancel, and expiry facts consume or release the
 reservation according to an explicit state machine.
@@ -49,20 +50,21 @@ entries.
 | Balance | Materialized available, reserved, and total amount per asset/account |
 | Position | Materialized quantity, cost basis, margin, realized/unrealized P&L per instrument |
 | Equity snapshot | Time-series view for analysis and risk |
-| `SigbotPortfolioSnapshot` | Versioned strategy-facing view with account, balances, positions, exposure, event watermark, and effective time |
+| Versioned portfolio payload | Strategy-facing JSON view with account, balances, positions, exposure, event watermark, and effective time |
 
-The Wallet database or schema, credentials, migrations, and write APIs are
-private. Other services query Wallet APIs or consume snapshots; they never read
-Wallet tables.
+The `wlt_*` table domain has one Wallet Repository writer. Other components use
+typed messages/snapshots and never query Wallet tables directly. The physical
+schema and migration file may be shared with other domains without sharing
+write ownership.
 
 ## Extension Points
 
 | Role | Contract | Examples |
 |---|---|---|
-| Service root | `SigbotWalletManager` | `SigbotTransactionalWalletManager` |
-| Wallet behavior | `IWallet` | Reservation and event application |
-| Accounting | `ISigbotPortfolioLedger` | Double-entry ledger implementation |
-| Persistence | `ISigbotPortfolioStore` | `SigbotPostgresPortfolioStore` |
+| Service root | `SigbotWalletServer` | Component startup and Provider registration |
+| Wallet behavior | `IWallet` | `WalletAccountProcessor` |
+| Reservation | `WalletReservationProcessor` | Idempotent hold/release processing |
+| Persistence | Core Handler/Repository | `WalletPostgresRepository`, `WalletSQLiteRepository` |
 | Reconciliation source | Exchange account capability | Venue balance/position/fill queries |
 
 ## Reconciliation and Consistency
@@ -73,9 +75,9 @@ reconciliation cases and corrective facts; they are not silently overwritten.
 Distributed ownership or stable account sharding prevents concurrent reconcilers
 from applying the same range.
 
-Order and Wallet maintain local ACID independently and converge through
-outbox/inbox, replay, and reconciliation. They may use one PostgreSQL cluster
-operationally but cannot share writable tables or service credentials.
+Order and Wallet maintain separate transactional ownership and converge through
+outbox/inbox, replay, and reconciliation. Their current tables share one
+physical PostgreSQL schema, but no component may issue cross-domain writes.
 
 ## Safety Invariants
 
@@ -92,18 +94,21 @@ operationally but cannot share writable tables or service credentials.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotWalletServer`, `IWallet`,
-`IWalletUpdater`, and `PostgresWalletUpdater`. It uses the global application
-PostgreSQL configuration. Ledger insertion commits separately from asynchronous
-balance and position updates; a duplicate ledger insert can still allow a
-projection delta, so the target atomic/idempotent boundary is not yet met.
+`SigbotWalletServer` is the only writer for wallet reservations, immutable
+ledger/journal/posting facts, balances, positions, equity snapshots, and
+versioned portfolio output. Funding and execution facts enter through an
+Inbox; the balanced postings, reservation release, projections, and Outbox
+commit in one PostgreSQL transaction. Duplicate and out-of-order terminal
+events retain factual consistency, and projections are rebuildable from the
+immutable record.
 
-Required alignment is the `SigbotWalletManager` root, a dedicated Wallet store,
-inbox/reservation models, one atomic accounting transaction, immutable
-portfolio snapshots, and exchange reconciliation.
+Real-account transfers, corporate actions, full derivatives margin/liquidation
+facts, continuous external reconciliation, and complete multi-asset NAV are
+not yet accepted.
 
 ## Source Map
 
-- Wallet component and persistence adapters: `src/component/wallet/`
+- Wallet component: `src/component/wallet/`
+- Wallet repositories: `src/core/src/modules/wallet/storage/`
 - Wallet domain types: `src/types/src/wallet/`
 - Wallet migrations: `migration/`

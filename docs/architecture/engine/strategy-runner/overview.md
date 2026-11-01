@@ -2,20 +2,22 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with partial Python execution.
+**Status:** Implemented deterministic Python Effects runtime with transactional
+state and sandboxing; distributed incremental/model sharding remains open.
 
 `SigbotStrategyRunner` is the deterministic decision boundary of one strategy
 pipeline. It joins normalized market data, the latest valid AI evaluation, and
 the current portfolio snapshot, runs versioned Python strategy code, and
-publishes the final `SigbotTradeSignal`. It does not call an exchange.
+returns typed `Effects { intents, requests, timers }`; validated `TradeIntent`
+items are published on the StrategySignal topic. It does not call an exchange.
 
 ## Deterministic Execution Context
 
 For each decision event, the runner assembles one immutable
-`SigbotStrategyExecutionContext`:
+SDK `StrategyContext`:
 
 ```text
-tenant_id / pipeline_id / strategy_id
+env / tenant_id / workflow_id / node_id / run_id
 decision_time
 market_window + terminal_feed_event_id
 eval_snapshot + evaluation_id
@@ -37,12 +39,11 @@ or explicitly seeded and recorded.
 
 ## Decision Result
 
-`SigbotTradeSignal` contains signal ID, action (`BUY`, `SELL`, `CLOSE`, or
-`NONE`), instrument, target quantity or exposure, optional order constraints,
-and references to the feed event, evaluation, portfolio, strategy, and risk
-versions that caused it.
+`Effects` contains bounded `TradeIntent`, service request, and timer lists. A
+`TradeIntent` carries instrument, side, quantity/exposure, order constraints,
+execution mode, and the immutable input/version references that caused it.
 
-The runner emits a typed `NONE` decision and opens no new position when:
+The runner emits no opening intent when:
 
 - evaluation regime is `UNKNOWN` or confidence is below policy;
 - the evaluation or portfolio snapshot is missing, stale, future-dated, or
@@ -50,8 +51,8 @@ The runner emits a typed `NONE` decision and opens no new position when:
 - recommended parameters fail schema/range validation;
 - strategy execution times out, fails validation, or returns an invalid signal.
 
-Only actionable signals are published to Order Manager. `NONE` decisions are
-retained as audit/metrics records without entering the execution queue.
+Only validated intents are published to Order. No-intent decisions may be
+retained as state/audit metrics without entering the execution queue.
 
 ## Runtime and State
 
@@ -69,10 +70,11 @@ retained as audit/metrics records without entering the execution queue.
 
 | Role | Contract | Implementations |
 |---|---|---|
-| Service root | `SigbotStrategyRunner` | Strategy-scoped runtime |
-| Execution engine | `IStrategy` | `PythonStrategy`; future sandboxed runtimes require explicit contracts |
-| Input join | `ISigbotStrategyContextAssembler` | Event-time and version-aware assembler |
-| Signal validation | `ISigbotTradeSignalValidator` | Schema and hard boundary validation before publication |
+| Service root | `SigbotStrategyRunner` | Component startup |
+| Execution engine | `IStrategy` | `PythonStrategy` |
+| Node runtime | `StrategyNode` / `StrategyService` | Serial routing and typed input handling |
+| State transaction | `CheckpointStrategyTransaction` | Draft, checkpoint and Outbox commit |
+| Effect validation | `Effects::validate` plus Order hard-risk checks | Bounded output before publication |
 
 The Python Strategy SDK defines the stable user-code surface. AI code
 generation belongs to the external research process; the runtime only executes
@@ -93,17 +95,18 @@ an approved, immutable strategy artifact.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotStrategyRunner`,
-`IStrategy`, and `PythonStrategy`. Its execution
-input currently lacks the complete evaluation and portfolio contracts, does
-not subscribe to the evaluation stream, and includes a path that calls a
-Binance exchange client directly after Python execution. Batch execution is
-incomplete.
+`SigbotStrategyRunner` serializes one decision instance and invokes
+`on_hyperparameters(ctx, update)` or `on_data(ctx, event)`. The Python SDK
+returns `Effects {intents, requests, timers}`; mutable state is a transactional
+draft committed atomically with checkpoints and outgoing requests. Market,
+evaluation, portfolio, execution, timer, snapshot, compute, notification, and
+export results are typed inputs. Strategy publishes intents and cannot call an
+exchange.
 
-Required alignment is the three-input deterministic join, `NONE` fail-safe,
-version/provenance fields, sandbox guarantees, and publication exclusively to
-Order Manager. Rust and other strategy languages remain reserved until a real
-executor and compatibility tests exist.
+The Rust host applies process/file/network/time/resource limits. Current
+bounded compute can push supported aggregation to PostgreSQL/TimescaleDB, but
+Redis hot caching, generic distributed incremental workers, automatic Python
+parallelism, and arbitrary model-shard equivalence are not implemented.
 
 ## Source Map
 

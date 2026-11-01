@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform services are the **HTTP/A2A/MCP APIs**, **controller**, **order service**, and **wallet service**. The controller places isolated **datafeed**, **evaluator**, **strategy**, **backtest**, **logservice**, **notifier**, and **exporter** components for each tenant and Workflow on Docker or Kubernetes workers.
+Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform plane is the **HTTP/A2A/MCP APIs**, **controller**, and **Web application**. The controller places isolated **backtest**, **datafeed**, **evaluator**, **exporter**, **logservice**, **notifier**, **order**, **strategy**, and **wallet** components for each tenant and Workflow on Docker or Kubernetes workers. Exchange and Messager are embedded shared libraries rather than independently deployed services.
 
 ## Features
 
@@ -19,6 +19,7 @@ Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform servic
 ## Development
 
 - [Documentation index](./docs/index.md)
+- [Coding-agent handoff and current evidence](./docs/development/HARDCOVER.md)
 - [Development prerequisites](./docs/runbooks/development-prerequisites.md)
 - [Build and test](./docs/runbooks/build-and-test.md)
 

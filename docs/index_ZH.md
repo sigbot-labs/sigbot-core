@@ -7,7 +7,7 @@
 
 ## 架构
 
-[系统总览](architecture/overview_ZH.md)是跨组件边界、固定量化交易 Pipeline、Service/
+[系统总览](architecture/overview_ZH.md)是跨组件边界、受约束的类型化量化交易 Workflow、Service/
 Runtime Scope、内嵌 SDK、命名、数据所有权及全部 Engine 设计链接的唯一目录与规范
 归属。详细设计仍按物理组件放在 `architecture/engine/`。
 
@@ -27,6 +27,9 @@ Runtime Scope、内嵌 SDK、命名、数据所有权及全部 Engine 设计链�
 | Rust | [编码规范](development/rust/coding_specification.md) | [编码规范](development/rust/coding_specification_ZH.md) |
 | Solidity | [编码规范](development/solidity/coding_specification.md) | [编码规范](development/solidity/coding_specification_ZH.md) |
 | Python Strategy SDK | [SDK 规范](development/python/strategy-sdk_specification.md) | [SDK 规范](development/python/strategy-sdk_specification_ZH.md) |
+
+编码代理当前实现、证据和已知缺口的交接入口是
+[HARDCOVER](development/HARDCOVER.md)。它是运维交接快照，不替代权威架构文档。
 
 高频变更的 Plan、Draft、Experiment 和实施记录统一放在
 `development/in-progress/`，冻结的工程记录统一放在

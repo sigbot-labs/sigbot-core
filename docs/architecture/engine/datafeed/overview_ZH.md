@@ -2,15 +2,15 @@
 
 [English](overview.md) · [架构总览](../../overview_ZH.md)
 
-**状态：** 规范性目标架构；当前仅有部分 Provider 骨架。
+**状态：** 已实现租户/Workflow 数据面组件，具备持久事件时间契约、多种摄取协议和有界查询。
 
-`SigbotDatafeed` 是共享的市场与新闻摄取 daemon，拥有外部 Source Session、数据
-规范化、质量检查与规范 Feed Event 发布。多个 Tenant 和 Strategy 复用相同公共
-上游连接，不为每个策略重复创建 Datafeed Pod。
+`SigbotDatafeedIngestor` 是 Controller 管理的租户/Workflow 行情与新闻摄取组件，拥有外部
+Source Session、规范化、质量检查与规范 Feed Event 发布。当前部署按 tenant/workflow
+隔离；未来连接池优化也必须保留这些边界。
 
-## 逻辑 Binding 与物理复用
+## 保留设计：逻辑 Binding 与物理复用
 
-每个 `StrategyPipeline` 拥有一个逻辑 `DatafeedBinding`。daemon 把所有活跃 Binding
+未来 Source 共享优化可以让每个 Workflow 拥有逻辑 Source Binding，再把兼容 Binding
 转换为按规范化 `feed_key` 引用计数的 Source Worker：
 
 ```text
@@ -26,26 +26,24 @@ feed_key = hash(
 )
 ```
 
-`pipeline_id` 刻意不在 Key 中。所有字段一致时，公共市场/新闻 Feed 可以复用；私有
+此保留 Key 刻意不含 `workflow_id`。所有字段一致时，公共市场/新闻 Feed 可以复用；私有
 账户 Stream 必须包含 Credential 与 Entitlement Scope，禁止跨安全边界共享。最后
 一个 Binding 释放后，Worker 才 Drain 并关闭。
 
-Controller 创建和释放 Binding，不创建重复 daemon。Datafeed 独占 Source Connection
-Pool、上游 Subscription Diff、Rate Limit、Retry/Backoff、Health 与 Worker 回收。
+Controller 从冻结 Workflow Snapshot 创建 Datafeed Node。单实例内由 Datafeed 独占
+Source Connection Pool、Rate Limit、Retry/Backoff、Health 和有界历史/查询状态。
+跨 Workflow Source 共享属于保留优化，不是当前运行时能力。
 
 ## 事件契约
 
-`SigbotFeedEvent` 是不可变规范 Envelope，包含：
+`DatafeedEvent` 是 Durable Envelope 承载的不可变规范 Payload，包含 `source`、稳定
+`source_event_id`、`symbol`、`event_type`、事件/可得时间、序列、Source Revision、可选
+规范内容和 JSON `raw`。Envelope Version、tenant/Workflow/run/node Scope、Produced Time
+与 Trace Context 保留在 `DurableMessage`。
 
-- 稳定 Event/Feed ID、Provider、Market、Instrument、Channel 与 Schema Version；
-- Source Event Time、Ingest Time、Sequence/Watermark 与 Provenance；
-- Trade、Order-book Update、Kline、Ticker、Funding、Social/News Item 或 Sentiment
-  Evidence 等类型化 Payload；
-- Gap、Duplicate、Late、Correction 与 Source Status 等 Quality Flag。
-
-Provider 原始字段只保存在可选且带版本的 Extension 中。Strategy 与 Evaluator 消费
-规范 Payload，不依赖 Provider JSON 形状。UTC 是规范时间基准；Decimal 值保留 Source
-Precision。
+Strategy 与 Evaluator 优先消费规范字段；特定事件类型所需的 Provider Detail 当前仍在
+`raw` 中，因此它是有界兼容边界，尚不是覆盖所有行情/新闻形状的完整类型化 Enum。UTC
+是规范时间基准；Decimal 解析必须保留 Source Precision。
 
 一个规范事件只向普通 Topic 发布一次。Evaluator 与 Strategy Runner 创建不同
 Subscription Group，确保两个角色各收一份；同一角色的 Replica 可以共用本角色
@@ -56,10 +54,11 @@ Group。`$share` 永远不属于 Publish Topic。投递语义由
 
 | 角色 | 契约 | 示例 |
 |---|---|---|
-| Service Root | `SigbotDatafeed` | 共享 daemon 与 Worker Registry |
-| 外部 Source | `ISigbotDatafeedSource` | `SigbotBinanceMarketDataSource`、`SigbotTwitterNewsSource`、`SigbotTruthSocialNewsSource` |
-| 历史 Adapter | `ISigbotDatafeedSource` | 由 Backtest 组合的 `SigbotHistoricalReplaySource`，不属于 Live daemon |
-| Normalization | `ISigbotFeedNormalizer` | Provider 与 Schema-version 专用 Normalizer |
+| Service Root | `SigbotDatafeedIngestor` | 组件启动与 Provider 注册 |
+| Source Contract | `IDatafeed` | `BinanceDatafeed`、`TwitterDatafeed`、`TruthSocialDatafeed`、政策 Source |
+| Persistence Boundary | `PersistedDatafeedIngestor` | Canonical Fact 与 Outbox |
+| Normalization | `NewsNormalizer` | Provider-to-canonical 新闻映射 |
+| Query Runtime | `MarketQueryService`、`ComputeExecutor` | LATEST/AS_OF 与有界计算 |
 
 External Source 负责 Provider Transport 与 Authentication；Normalizer 负责
 Provider-to-canonical 映射。两者都不能运行 Strategy 或 Order 逻辑。
@@ -78,16 +77,17 @@ Provider-to-canonical 映射。两者都不能运行 Strategy 或 Order 逻辑�
 
 ## 实现对齐
 
-当前源码暴露 `SigbotDatafeedIngestor` 与 `IDatafeed`，并有 Binance、
-Twitter、TruthSocial Provider 骨架。多个 Subscribe/Process 路径为空或未实现；事件
-尚未转换成上述规范契约，发布时可能保留未展开 Topic Placeholder。Source Sharing
-Key、逻辑 Binding、Backpressure 与可靠 Fan-out 尚未完成。
+`SigbotDatafeedIngestor` 与 `IDatafeed` 已通过唯一 Topic 生成器发布规范化、带版本事件。
+已实现 Twitter/X、TruthSocial 的 REST/MCP/A2A，Fed/Treasury RSS、Binance 公共行情、
+持久 Revision/Watermark、历史查询、Compute Result 与 LATEST/AS_OF Snapshot；Binance
+和 Hyperliquid 还有显式主动快照映射。
 
-目标公开契约为 `SigbotDatafeed` 与 `ISigbotDatafeedSource`。Coinbase 或其他新闻
-Source 等扩展，只有存在具体 Adapter 与 Contract Test 后才算支持。
+剩余缺口是覆盖宽度：完整清算热力图、借贷/资金费率/持仓比、更多 Venue 和生产规模
+Source Pooling 不能由现有 Adapter 推导出来。
 
 ## 源码地图
 
-- Datafeed daemon 与 Provider：`src/component/datafeed/`
-- Feed 与 Message 类型：`src/types/src/`
+- Datafeed 组件与 Provider：`src/component/datafeed/`
+- Datafeed Repository：`src/core/src/modules/datafeed/storage/`
+- Feed 与 Message 类型：`src/types/src/datafeed/`
 - Messager SDK：`src/messager/`

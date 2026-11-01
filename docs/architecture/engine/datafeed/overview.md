@@ -2,18 +2,20 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with partial provider scaffolding.
+**Status:** Implemented tenant/Workflow data-plane component with persisted
+event-time contracts, multiple ingestion transports, and bounded query paths.
 
-`SigbotDatafeed` is the shared market and news ingestion daemon. It owns
+`SigbotDatafeedIngestor` is a Controller-managed tenant/Workflow market and news
+ingestion component. It owns
 external-source sessions, normalization, data-quality checks, and publication
-of canonical feed events. Multiple tenants and strategies reuse the same
-public upstream connection instead of creating one Datafeed pod per strategy.
+of canonical feed events. The current deployment isolates instances by
+tenant/Workflow; future connection pooling must preserve those boundaries.
 
-## Logical Binding and Physical Sharing
+## Reserved Logical Binding and Physical Sharing
 
-Each `StrategyPipeline` owns a logical `DatafeedBinding`. The daemon converts
-all active bindings into reference-counted source workers keyed by a normalized
-`feed_key`:
+A future source-sharing optimization may give each Workflow a logical source
+binding and convert compatible bindings into reference-counted source workers
+keyed by a normalized `feed_key`:
 
 ```text
 feed_key = hash(
@@ -28,30 +30,29 @@ feed_key = hash(
 )
 ```
 
-`pipeline_id` is intentionally absent. Public market/news feeds can be shared
+`workflow_id` is intentionally absent from this reserved key. Public market/news feeds can be shared
 when all key fields match. Private account streams include credential and
 entitlement scope and can never be shared across security boundaries. The last
 binding release drains and closes its worker.
 
-Controller creates and releases bindings; it does not create duplicate daemon
-instances. Datafeed owns source connection pooling, upstream subscription
-diffing, rate limits, retry/backoff, health, and worker reclamation.
+Controller creates Datafeed nodes from the frozen Workflow snapshot. Within
+one instance, Datafeed owns source connection pooling, rate limits,
+retry/backoff, health, and bounded history/query state. Cross-Workflow source
+sharing is reserved optimization, not current runtime behavior.
 
 ## Event Contract
 
-`SigbotFeedEvent` is an immutable normalized envelope. It includes:
+`DatafeedEvent` is an immutable normalized payload carried by the durable
+envelope. It contains `source`, stable `source_event_id`, `symbol`, `event_type`,
+event and availability times, sequence, source revision, optional normalized
+content, and a JSON `raw` payload. Envelope version, tenant/Workflow/run/node
+scope, production time, and trace context remain in `DurableMessage`.
 
-- stable event and feed IDs, provider, market, instrument, channel, and schema
-  version;
-- source event time, ingest time, sequence/watermark, and provenance;
-- a typed payload such as trade, order-book update, kline, ticker, funding,
-  social/news item, or sentiment evidence;
-- quality flags for gaps, duplicates, lateness, correction, and source status.
-
-Raw provider fields are preserved only in an optional versioned extension.
-Strategies and evaluators consume the canonical payload and do not depend on a
-provider's JSON shape. UTC is the canonical time basis; decimal values preserve
-the source precision.
+Strategies and evaluators consume the normalized fields first. Provider detail
+needed by a particular event type remains in `raw`; it is therefore a bounded
+compatibility boundary, not yet a fully typed enum for every market/news shape.
+UTC is the canonical time basis and decimal parsing must preserve source
+precision.
 
 One normalized event is published once to a normal topic. Evaluator and
 Strategy Runner create distinct subscription groups so each role receives the
@@ -62,10 +63,11 @@ the published topic. Delivery semantics belong to [Messager](../messager/overvie
 
 | Role | Contract | Examples |
 |---|---|---|
-| Service root | `SigbotDatafeed` | Shared daemon and worker registry |
-| External source | `ISigbotDatafeedSource` | `SigbotBinanceMarketDataSource`, `SigbotTwitterNewsSource`, `SigbotTruthSocialNewsSource` |
-| Historical adapter | `ISigbotDatafeedSource` | `SigbotHistoricalReplaySource` composed by Backtest, not by the live daemon |
-| Normalization | `ISigbotFeedNormalizer` | Provider- and schema-version-specific normalizers |
+| Service root | `SigbotDatafeedIngestor` | Component startup and Provider registration |
+| Source contract | `IDatafeed` | `BinanceDatafeed`, `TwitterDatafeed`, `TruthSocialDatafeed`, policy sources |
+| Persistence boundary | `PersistedDatafeedIngestor` | Canonical facts and Outbox |
+| Normalization | `NewsNormalizer` | Provider-to-canonical news mapping |
+| Query runtime | `MarketQueryService`, `ComputeExecutor` | LATEST/AS_OF and bounded compute |
 
 An external source handles provider transport and authentication. A normalizer
 owns provider-to-canonical mapping. Neither is allowed to run strategy or order
@@ -88,20 +90,20 @@ logic.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotDatafeedIngestor` and
-`IDatafeed`, with Binance, Twitter, and TruthSocial provider
-scaffolding. Several subscription/process paths are empty or unimplemented,
-events are not normalized into the contract above, and publication can retain
-unexpanded topic placeholders. Shared source keys, logical bindings,
-backpressure, and reliable fan-out are not yet present.
+`SigbotDatafeedIngestor` and `IDatafeed` publish normalized, versioned events
+through the canonical topic generator. Implemented boundaries include
+Twitter/X and TruthSocial REST/MCP/A2A ingestion, Federal Reserve and Treasury
+RSS, Binance public market events, persisted revisions/watermarks, historical
+queries, compute results, and LATEST/AS_OF snapshots. Binance and Hyperliquid
+also have explicit active-snapshot mappings.
 
-The target public contracts are `SigbotDatafeed` and
-`ISigbotDatafeedSource`. Additional sources such as Coinbase or other news
-providers are supported only after a concrete adapter and contract tests
-exist.
+The remaining gap is breadth: complete liquidation heatmaps,
+lending/funding/position-ratio feeds, more venues, and production-scale source
+pooling are not implied by the existing adapters.
 
 ## Source Map
 
-- Datafeed daemon and providers: `src/component/datafeed/`
-- Feed and message types: `src/types/src/`
+- Datafeed component and providers: `src/component/datafeed/`
+- Datafeed repositories: `src/core/src/modules/datafeed/storage/`
+- Feed and message types: `src/types/src/datafeed/`
 - Messager SDK: `src/messager/`

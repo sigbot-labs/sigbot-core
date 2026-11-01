@@ -2,10 +2,11 @@
 
 [中文](overview_ZH.md) · [Architecture overview](../../overview.md)
 
-**Status:** Normative target architecture with an incomplete execution path.
+**Status:** Implemented reservation-first execution and reconciliation path;
+real-money and genuine cross-venue acceptance remain external gaps.
 
-`SigbotOrderManager` is the only service allowed to invoke private trading
-capabilities on an exchange. It consumes actionable strategy signals, performs
+`SigbotOrderServer` is the only service allowed to invoke private trading
+capabilities on an exchange. It consumes actionable strategy intents, performs
 authoritative risk and account checks, owns the order/fill state machine,
 reconciles uncertain venue outcomes, and publishes immutable execution facts.
 
@@ -17,7 +18,7 @@ sequenceDiagram
     participant O as Order Manager
     participant W as Wallet Manager
     participant X as Exchange
-    S->>O: SigbotTradeSignal
+    S->>O: TradeIntent on StrategySignal topic
     O->>O: idempotency + hard risk validation
     O->>W: reserve funds/margin (idempotent)
     W-->>O: reservation accepted/rejected
@@ -26,7 +27,7 @@ sequenceDiagram
     O->>X: stream/REST reconciliation
     X-->>O: authoritative order/fill facts
     O->>O: persist fact + outbox atomically
-    O-->>W: SigbotExecutionEvent
+    O-->>W: ExecutionFact / OrderStatusFact
 ```
 
 A placement acknowledgement is not a fill. Unknown timeouts are reconciled by
@@ -35,20 +36,19 @@ Permanent validation/rejection errors are not blindly retried.
 
 ## Owned State and Events
 
-The Order database or schema is private to this service and contains:
+The `ord_*` table domain has one Order Repository writer and contains:
 
-- accepted strategy intents and idempotency keys;
+- accepted `TradeIntent` records and idempotency keys;
 - orders and valid state transitions;
 - execution attempts and external request/response references;
 - immutable fills, fees, funding, settlement, cancellation, rejection, and
   liquidation facts received from the venue;
 - reconciliation cursors and transactional outbox entries.
 
-`SigbotExecutionEvent` preserves tenant, pipeline, strategy, signal, account,
-venue, client/exchange order, and fill identifiers plus causation and schema
-versions. Business variants distinguish order acceptance/rejection/update from
-money-changing facts such as `TradeFilled`, `FeeCharged`, `FundingApplied`, and
-`LiquidationExecuted`.
+Durable execution messages preserve the envelope scope, source node, run and
+sequence together with account, wallet, venue, client/exchange order, trade,
+instrument, price, quantity, fee and event time. Order receipts/status and
+money-changing `ExecutionFact` payloads are distinct contracts.
 
 Wallet consumes only authoritative monetary facts. Exporter may consume the
 complete approved execution stream. Notifier receives typed operational events,
@@ -58,23 +58,23 @@ not raw exchange payloads.
 
 | Role | Contract | Examples |
 |---|---|---|
-| Service root | `SigbotOrderManager` | `SigbotEventDrivenOrderManager` |
-| Order policy | `IOrder` | Signal-to-order orchestration |
-| Hard risk | `ISigbotRiskPolicy` | Account, position, exposure, price, and rate policies |
+| Service root | `SigbotOrderServer` | Component startup and Provider registration |
+| Order policy | `IOrder` | `WorkflowOrderProcessor` |
+| Hard risk | `RiskPolicy` | Account, position, exposure, price, and rate policies |
 | Venue access | `IExchange` | Capability-aware venue adapters |
-| Persistence | `ISigbotOrderRepository` | `SigbotPostgresOrderRepository` |
+| Persistence | Core Handler/Repository | `OrderPostgresRepository`, `OrderSQLiteRepository` |
 
-Risk validation is an independently testable port, but the Order Manager owns
+`RiskPolicy` is an independently testable component, but Order owns
 the final allow/deny decision. Strategy suggestions cannot bypass it.
 
 ## Consistency Boundary
 
-- Accepting a signal, advancing local order state, and writing an outbox event
+- Accepting an intent, advancing local order state, and writing an outbox event
   occur in one Order transaction when they are part of one transition.
 - Wallet funds/margin reservation uses an idempotent service contract; it does
   not grant Order access to Wallet tables.
-- Order and Wallet may share a PostgreSQL cluster, but use separate databases
-  or schemas, roles, migrations, and write ownership.
+- The current final-state migration stores `ord_*` and `wlt_*` in one physical
+  schema, but their Core repositories and write ownership remain separate.
 - Cross-service consistency is recoverable and auditable through outbox/inbox,
   retry, replay, and exchange reconciliation.
 - Requiring one local ACID transaction across orders and portfolio accounting
@@ -83,7 +83,8 @@ the final allow/deny decision. Strategy suggestions cannot bypass it.
 
 ## Safety Invariants
 
-- Deduplicate by signal ID before any external side effect.
+- Deduplicate by durable scope, producer node, `run_id`, and sequence before any
+  external side effect.
 - Use a stable venue-supported client order ID for every placement attempt.
 - Serialize conflicting transitions for one order/account while allowing
   unrelated work to proceed concurrently.
@@ -93,24 +94,25 @@ the final allow/deny decision. Strategy suggestions cannot bypass it.
 - Do not hold a database lock or transaction open across an exchange network
   call.
 - Credentials remain in the exchange adapter security boundary and are never
-  carried in signals or execution events.
+  carried in intents or execution events.
 
 ## Implementation Alignment
 
-Current source exposes `SigbotOrderServer`, `IOrder`, and
-`DefaultOrder`. It subscribes to a trade-signal topic, but the
-exchange registry is not populated, risk checks and retries are skeletal, and
-there is no durable order/fill state machine, dedicated Order database,
-idempotency record, reconciliation loop, or transactional outbox. The current
-event is synthesized from a placement result and does not represent a complete
-authoritative fill.
+`SigbotOrderServer` validates scoped intents and persisted market evidence,
+balances/positions, instrument precision, execution mode, and hard risk before
+requesting a Wallet reservation. It durably prepares live submissions, treats
+placement ACK separately from fills, preserves unknown outcomes for venue
+reconciliation, and commits order/execution observations with Outbox state.
+Execution groups wait for authoritative leg and Wallet outcomes before issuing
+reduce-only compensation through the same path.
 
-Required alignment is the `SigbotOrderManager` root, durable state and outbox,
-stable external idempotency, Wallet reservation, venue reconciliation, and
-typed execution facts.
+The accepted evidence covers Paper/Backtest and SDK/RPC boundary fixtures, not
+real-money settlement, exchange-wide cancellation races, or genuine cross-
+venue compensation.
 
 ## Source Map
 
 - Order component: `src/component/order/`
+- Order repositories: `src/core/src/modules/order/storage/`
 - Exchange clients: `src/exchange/`
-- Order and trade event types: `src/types/src/`
+- Order and trade event types: `src/types/src/order/`

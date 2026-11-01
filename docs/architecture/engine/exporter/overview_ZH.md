@@ -2,25 +2,23 @@
 
 [English](overview.md) · [架构总览](../../overview_ZH.md)
 
-**状态：** 规范性目标架构；当前 Google Sheets 与 Kafka Writer 仍是 Placeholder。
+**状态：** 已实现租户/Workflow 级 Kafka 与 Google Sheets 导出组件；MQTT/HTTP 目标仍为保留设计。
 
-`SigbotExporter` 是共享导出 daemon。它消费经过批准、带 Schema Version 的业务事件，
+`SigbotExporterServer` 是 Controller 管理的租户/Workflow 组件。它消费经过批准、带 Schema Version 的业务事件，
 投递到用户配置的下游系统，用于分析、数仓和自动化。初始规范输入是 Order Manager
 Execution Stream。
 
 ## 边界与术语
 
-`ExportTarget` 是用户配置；`ISigbotExportSink` 是执行投递的 Adapter。一个 daemon
-承载多个相互隔离的 Target Instance：
+`ExportNodeConfig` 是用户配置，`ExportSinkConfig` 选择投递 Adapter。一个 daemon
+承载相互隔离的 Target Instance：
 
 ```text
-SigbotExporter
-  -> ISigbotExporter
-  -> ISigbotExportSink
-       -> SigbotKafkaExportSink
-       -> SigbotMqttExportSink
-       -> SigbotHttpExportSink
-       -> SigbotGoogleSheetsExportSink
+SigbotExporterServer
+  -> IExporter
+  -> ExportSinkConfig
+       -> KafkaExporter
+       -> GoogleSheetsExporter
 ```
 
 产品名称必须是 **Google Sheets**，不是 “Google Street”。外部 MQTT Sink 与内部
@@ -28,31 +26,30 @@ Messager Transport 即使都使用 MQTT，也属于不同边界。
 
 ## 输入与投递
 
-Export Envelope 包含 Event ID、Tenant/Pipeline Scope、Business Schema/Version、
-Event/Publication Time、Causation 与获准 Payload，不暴露 Exchange Credential、私有
+Export Envelope 包含 env/tenant/Workflow/node/run Scope、Business Schema/Version、
+Event/Available/Publication Time、W3C Trace Context 与获准 Payload，不暴露 Exchange Credential、私有
 Strategy Code 或 Target Data Policy 排除的字段。
 
 对于每个配置 Target，Exporter：
 
 1. 校验 Tenant Ownership、Event Category、Schema Compatibility 与 Field Projection；
-2. 派生稳定 `{target_id, event_id}` Delivery Key；
-3. 按 Sink 语义与用户 Policy Buffer/Batch；
-4. 通过选定 Sink 写入，不能阻塞 Message Callback；
+2. 从 Envelope Scope、Run、源节点和序列派生稳定 Delivery Key；
+3. 校验 Producer 提供且已有界的 `ExportBatch`；
+4. 通过选定 Sink 写入；
 5. ACK Durable Progress 前保存 Checkpoint/Receipt State；
 6. Retry Transient Failure，并 Dead-letter Permanent/Exhausted Failure。
 
-Kafka 与 MQTT 是 Streaming Sink；HTTP 支持 Idempotency Key 与签名请求；Google Sheets
-是受 Rate Limit 的 Batch Sink，使用稳定 Row Identity，不能作为事务型 System of
-Record。
+Kafka 是 Streaming Sink；Google Sheets 是受 Rate Limit 的 Batch Sink，使用稳定 Row
+Identity，不能作为事务型 System of Record。MQTT/HTTP Sink 是保留扩展，不是当前实现。
 
 ## 扩展点
 
 | 角色 | 契约 | 实现 |
 |---|---|---|
-| Service Root | `SigbotExporter` | 共享 Subscription 与 Target Supervisor |
-| Routing/Orchestration | `ISigbotExporter` | `SigbotPolicyExporter` |
-| Destination | `ISigbotExportSink` | Kafka、MQTT、HTTP、Google Sheets Sink |
-| Projection | `ISigbotExportTransformer` | 版本化 Event-to-target Schema Mapping |
+| Service Root | `SigbotExporterServer` | 组件启动与 Provider 注册 |
+| Routing/Orchestration | `IExporter` | `ExportService` |
+| Destination | `ExportSinkConfig` | `KafkaExporter`、`GoogleSheetsExporter` |
+| Persistence | Core Handler/Repository | `ExporterPostgresRepository`、`ExporterSQLiteRepository` |
 
 新增 Sink 不创建新微服务，也不能独立订阅任意内部 Topic。Exporter 只维护一份
 Subscription、Routing、Policy、Checkpoint 与 Lifecycle。
@@ -61,26 +58,28 @@ Subscription、Routing、Policy、Checkpoint 与 Lifecycle。
 
 - At-least-once Input 在 Target 支持幂等时不能产生重复 Effect；无法保证时必须明确
   并可审计 Duplicate Behavior。
-- Backpressure 与有界 Queue 隔离慢 Target，不能影响其他 Target 或交易主链。
-- Schema 不兼容时停止该 Target 并暴露 Condition，禁止静默丢弃或改形数据。
+- Kafka 的有界 Producer Queue 提供 Backpressure。当前组件通过已配置 Sink 顺序处理领取
+  的请求；尚未实现 Per-target Worker 隔离。
+- Batch Shape/Size 不兼容时拒绝请求，禁止静默丢弃或改形数据。
 - Target Credential 使用 Tenant-scoped Secret Reference，并从 Event、Log、Status
   中脱敏。
-- HTTP Destination 强制 HTTPS、Allowlist/Private-network Policy、Timeout、Redirect
-  与 Response-size Limit，防止 SSRF 和资源耗尽。
+- 未来 HTTP Destination 必须强制 HTTPS、Allowlist/Private-network Policy、Timeout、
+  Redirect 与 Response-size Limit。
 - Range Replay 使用与 Live Delivery 相同的 Delivery Key 与 Projection Version。
 
 ## 实现对齐
 
-当前源码暴露 `SigbotExporterServer`、`IExporter`、Google Sheets 与
-Kafka Manager，并订阅 Placed-trade Topic。Writer 当前只记录预期写入，没有真实投递；
-MQTT/HTTP Sink、Typed Target Routing、Idempotency、Checkpoint、Retry/Dead-letter
-State 与隔离均未实现。部分源码文件名与 Alias 仍使用 “googlestreet”。
+`SigbotExporterServer` 已消费类型化 Export Request，并路由至 Kafka 或 Google Sheets。
+Kafka 使用幂等 Producer、`acks=all`、稳定业务 Key、有界 Producer Queue 和持久
+Checkpoint；Sheets 使用固定 Range 的 ValueRange PUT 和 Secret 引用。Scope、Checkpoint、
+身份冲突及重启行为持久化。Retry 来自携带同一业务 Key 的 At-least-once 消息重投；当前
+没有独立 Durable Exporter Retry Scheduler。
 
-必须对齐到 `SigbotExporter` Root、单一 Subscription Supervisor、
-`ISigbotExportSink` Adapter、正确 Google Sheets 命名与 Durable Per-target Delivery
-语义。
+Kafka Broker ACK 与 PostgreSQL Commit 无法形成同一事务，崩溃窗口仍可能重复业务 Key。
+真实 Google 凭据、Kafka 多 Broker 故障切换，以及保留的 MQTT/HTTP Sink 尚未验收。
 
 ## 源码地图
 
-- Exporter Service 与 Manager：`src/component/exporter/`
-- Export 配置与 Event 类型：`src/types/src/`
+- Exporter 组件与 Sink：`src/component/exporter/`
+- Exporter Repository：`src/core/src/modules/exporter/storage/`
+- Export 配置与 Event 类型：`src/types/src/exporter/`

@@ -7,7 +7,7 @@
 | 领域 | 表 | 唯一写入方 |
 | --- | --- | --- |
 | 连接 | `cfg_connection` | Core Controller Repository |
-| Workflow / Run | `wf_workflow`、`wf_run`、`wf_checkpoint`、`wf_sequence`、`wf_timer` | Core Workflow Repository；Controller 只推进租户数据面 Worker 生命周期 |
+| Workflow / Run | `wf_workflow`、`wf_run`、`wf_checkpoint`、`wf_sequence`、`wf_timer` | Core Workflow Repository 保存配置；Controller 通过 Core Repository 写 Run/Worker 生命周期状态 |
 | 消息 | `msg_inbox`、`msg_outbox` | Core Messager Repository；领域事务调用它提交自己的分区 |
 | 行情 | `mkt_event`、`mkt_delivery` | Datafeed Repository |
 | 评估记忆 | `eval_case`、`eval_snapshot` | Evaluator Repository |
@@ -48,7 +48,7 @@ python3 migration/migrate.py
 
 脚本通过 advisory transaction lock 保证单写入方，并在 `mig_version` 保存版本与联合 SHA-256。已应用文件发生漂移会中止。应用进程账户不得拥有 schema、trigger 或 superuser 权限。
 
-SQLite 保持相同业务表集合，用于本地单进程开发；跨进程锁、扩展函数和分布式持久性仍以 PostgreSQL 验收。TimescaleDB 与 pgvector 是同一 PostgreSQL 的扩展，不是第二套业务数据库。
+SQLite 保持相同业务表集合，用于本地单进程开发；跨进程锁、扩展函数和分布式持久性仍以 PostgreSQL 验收。控制面 PostgreSQL 镜像可同时启用 TimescaleDB 与 pgvector 扩展。租户数据面的 TimescaleDB/pgvector 由 scoped `ctl_worker` 独立声明和调和，不与控制面数据库共享写入职责。
 
 ## 消息与恢复
 
@@ -72,4 +72,4 @@ Backtest 的 `bt_order` 固定保存原始消息、撮合 owner、InstrumentSpec
 
 Logservice 的 append ACK 表示本地持久缓冲已完成 WAL 提交；归档按“条件创建 S3/MinIO 对象 → SHA-256 校验 → 提交 PG 索引 → 释放本地 payload”的顺序执行。读取使用追加 cursor，晚到的小业务序列不会被跳过。
 
-Kafka 使用幂等 Producer、`acks=all` 和稳定业务 key；数据库提交窗口仍要求下游去重。Google Sheets 使用固定 range 的 ValueRange PUT，通过 `reqwest` 发送，并支持显式 `proxy_url`。凭据只允许通过宿主环境变量引用。
+Kafka 使用幂等 Producer、`acks=all` 和稳定业务 key；数据库提交窗口仍要求下游去重。Google Sheets 使用固定 range 的 ValueRange PUT，通过 `reqwest` 发送，并支持显式 `proxy_url`。凭据只允许使用中央配置解析后的 Secret key 引用，业务组件不得直接读取环境变量。

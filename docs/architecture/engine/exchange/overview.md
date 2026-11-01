@@ -12,15 +12,15 @@ execution. Provider details never leak into the fixed pipeline contracts.
 
 ## Capability Model
 
-`IExchange` identifies a venue/account adapter and exposes only the
-capability ports it implements:
+`IExchange` identifies a venue/account adapter. The currently exported
+capability boundaries are:
 
 | Port | Responsibility |
 |---|---|
-| `ISigbotMarketDataClient` | REST snapshots, instruments, klines, trades, funding, and public reference data |
-| `ISigbotTradingClient` | Place, cancel, replace, and query orders with stable client IDs |
-| `ISigbotAccountClient` | Balances, positions, fills, transfers, fees, and account configuration |
-| `ISigbotExchangeStream` | Public and private WebSocket/session streams with cursor and reconnect semantics |
+| `IOrderBookExchange` | Prices, klines, and order-book market reads exposed by a venue adapter |
+| `IStockExchange` | Stock order submission and query operations |
+| `IExecutionAdapter` | Durable prepare, submit, reconcile, and execution-fact reads |
+| `IPublicMarketAdapter` | Read-only normalized public market snapshots |
 
 Market types—spot, margin, perpetual/futures, options, equities, and prediction
 markets—declare separate capabilities and product metadata. Unsupported
@@ -34,16 +34,18 @@ IExchange
   -> SigbotBinanceExchangeClient
        -> Spot capabilities
        -> USD-M futures capabilities
-  -> SigbotBitgetExchangeClient
-  -> SigbotCoinbaseExchangeClient
+  -> SigbotHyperliquidExchangeClient
   -> SigbotIbkrExchangeClient
-  -> SigbotSchwabExchangeClient
+  -> SigbotPolymarketExchangeClient
+  -> SigbotKalshiExchangeClient
+  -> PaperExchange
   -> BacktestExchange
 ```
 
-Provider names in this diagram express the target adapter boundary, not a claim
-that every adapter is currently implemented. A provider factory validates
-configuration and returns a capability descriptor before callers start.
+These are the current adapter directories. Capability completeness differs:
+live order submission is currently accepted only through the explicitly wired
+Binance, IBKR, and Polymarket execution factory paths; other adapters must return
+typed unsupported-capability errors instead of panicking or silently rerouting.
 
 ## Normalization
 
@@ -86,11 +88,12 @@ quantity, fee, and balance values use explicit decimal semantics.
 
 ## Implementation Alignment
 
-Live orders use `ExecutionAdapterFactory` and `LiveExecutionFactory`, selecting
-the official Binance Spot SDK, the mature `ibapi` TWS/Gateway SDK, or the official
-Polymarket V2/V3 SDK. Backtest execution selects the dedicated historical adapter;
-they never rewrite a production exchange URL. Existing market-source interfaces
-remain under their original directories and are not these live order paths.
+Live orders use `ExchangeFactory` plus `ExecutionAdapterConfig` to select the
+official Binance Spot SDK, the mature `ibapi` TWS/Gateway SDK, or the official
+Polymarket V2/V3 SDK. Backtest execution selects the dedicated historical
+adapter; it never rewrites a production exchange URL. Existing market-source
+interfaces remain under their original directories and are not these live
+order paths.
 
 Binance disables SDK submission retries and derives its client order ID from the
 existing business key. IBKR and Polymarket require `prepare`, durable persistence
@@ -102,12 +105,12 @@ EIP-712 order hash, so restart cannot silently regenerate salts or signatures.
 OpenSSL AES-256-GCM seals the prepared payload. Authenticated data binds scope,
 account, workflow, node, run/sequence, intent, provider and venue order ID. Configure
 `prepared_keys.active_key` and a `prepared_keys.keys` mapping from key versions to
-host environment variable names containing 32-byte hex keys. Keep old key versions
+central Secret-map keys containing 32-byte hex keys. Keep old key versions
 while any nonterminal order still references them. Neither these keys nor trading
 credentials enter the strategy process.
 
 IBKR requires an explicit gateway, exclusive API client ID, broker-account
-environment reference and resolved SDK Contracts with positive contract IDs.
+Secret key reference and resolved SDK Contracts with positive contract IDs.
 Connections verify account ownership; SDK reconnection is disabled for submissions.
 Decimal values that cannot round-trip through its f64 boundary are rejected.
 Polymarket uses GTC for limit orders and FOK for market intents, with fixed shares
@@ -120,8 +123,8 @@ deduplication record and MQTT Outbox committed together. Binance uses official
 reports and supports stock/ETF contracts. A missing commission or an execution
 correction requires reconciliation rather than a fabricated zero fee.
 
-Polymarket requires `settlement: {rpc_url_env: POLYGON_RPC_URL, min_confirmations: 64}`.
-The environment variable contains an HTTPS Polygon RPC URL. Missing configuration
+Polymarket requires `settlement: {rpc_url_secret: polygon_rpc_url, min_confirmations: 64}`.
+The central Secret-map entry contains an HTTPS Polygon RPC URL. Missing configuration
 prevents adapter construction. Before any order POST the adapter checks chain 137,
 the official exchange contract, collateral decimals and finalized-block support.
 The prepared submission also seals the initial block number. Recovery scans

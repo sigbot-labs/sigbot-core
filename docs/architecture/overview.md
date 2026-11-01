@@ -2,49 +2,50 @@
 
 [中文](overview_ZH.md) · [Documentation index](../index.md)
 
-**Status:** Normative target architecture. The implementation-alignment table
-separates currently available behavior from required design contracts.
+**Status:** Current architecture and implementation boundary. The alignment
+table records the remaining evidence gaps; it no longer describes superseded
+pre-runtime-v2 scaffolding.
 
 SigBot is an AI-assisted quantitative trading system, not a general-purpose
-workflow or DAG platform. Its central design is a constrained
-`StrategyPipeline`: a non-deterministic AI side path classifies the current
+workflow or DAG platform. Its central design is a constrained, typed Workflow:
+a non-deterministic AI side path classifies the current
 market structure and recommends bounded hyperparameters, while deterministic
 Python strategy code combines that recommendation with market data and the
 current portfolio state to make the final trading decision.
 
 The AI never places orders. When the market cannot be classified, confidence
 is too low, an evaluation has expired, or a required input is inconsistent,
-the deterministic boundary produces `NONE` and opens no new position.
+the deterministic boundary emits no opening intent.
 
 ## System Model
 
 ```mermaid
 flowchart LR
-    Clients[Clients / Researcher] --> API[SigbotApiServer]
+    Clients[Clients / Researcher] --> API[SigbotAPIServer]
     API --> CoreDB[(Core control-plane DB)]
-    Controller[SigbotController] <-->|list / watch / status| API
+    Controller[SigbotController] --> CoreDB
 
     Sources[Markets / News] --> Datafeed[Tenant SigbotDatafeed]
     Controller -. logical binding .-> Datafeed
     Controller -. strategy-scoped runtime .-> Evaluator[SigbotEvaluator]
     Controller -. strategy-scoped runtime .-> Strategy[SigbotStrategyRunner]
 
-    Datafeed -->|SigbotFeedEvent| Evaluator
-    Datafeed -->|SigbotFeedEvent| Strategy
-    Evaluator -->|SigbotEvaluationSnapshot| Strategy
-    Wallet[SigbotWalletManager] -->|SigbotPortfolioSnapshot| Strategy
-    Strategy -->|SigbotTradeSignal| Order[SigbotOrderManager]
+    Datafeed -->|DatafeedEvent| Evaluator
+    Datafeed -->|DatafeedEvent| Strategy
+    Evaluator -->|HyperparametersUpdate| Strategy
+    Wallet[SigbotWalletServer] -->|versioned portfolio payload| Strategy
+    Strategy -->|Effects.intents| Order[SigbotOrderServer]
     Order --> Exchange[IExchange]
     Exchange -->|execution facts| Order
-    Order -->|SigbotExecutionEvent| Wallet
-    Order -->|SigbotExecutionEvent| Exporter[SigbotExporter]
+    Order -->|ExecutionFact / OrderStatusFact| Wallet
+    Order -->|versioned export request| Exporter[SigbotExporterServer]
     Order -. notification event .-> Notifier[SigbotNotifier]
     Wallet -. notification event .-> Notifier
 
-    Order --> OrderDB[(Order DB)]
-    Wallet --> WalletDB[(Wallet DB)]
+    Order --> OrderDB[(ord_* table domain)]
+    Wallet --> WalletDB[(wlt_* table domain)]
 
-    Backtest[SigbotBacktestRunner] -. same contracts .-> Strategy
+    Backtest[SigbotBacktestServer] -. same contracts .-> Strategy
     Backtest -. backtest adapter .-> Exchange
 ```
 
@@ -64,13 +65,13 @@ the same topology without weakening tenant/Workflow topic and state boundaries.
 
 The live decision path joins three versioned inputs:
 
-1. `SigbotFeedEvent` and its bounded market window, normalized by Datafeed.
-2. The latest non-expired `SigbotEvaluationSnapshot` whose evaluated watermark
+1. `DatafeedEvent` and its bounded market window, normalized by Datafeed.
+2. The latest non-expired `HyperparametersUpdate` whose evaluated watermark
    does not look beyond the decision event.
-3. A current `SigbotPortfolioSnapshot` owned by Wallet Manager.
+3. A current versioned portfolio payload owned by Wallet.
 
-`SigbotEvaluationSnapshot` contains at least the market regime
-(`RANGING`, `TRENDING_BULLISH`, `TRENDING_BEARISH`, or `UNKNOWN`), confidence,
+`HyperparametersUpdate` contains at least the market regime
+(`trend`, `range`, `stabilizing`, `suppression`, or `unknown`) probabilities,
 schema-validated hyperparameter overrides or weights, input watermark, model
 and prompt provenance, effective time, and expiry. The evaluator may be
 non-deterministic; the snapshot is immutable and auditable.
@@ -78,14 +79,14 @@ non-deterministic; the snapshot is immutable and auditable.
 `SigbotStrategyRunner` validates the snapshot against the strategy's declared
 parameter schema and assembles one immutable execution context. For the same
 market window, evaluation snapshot, portfolio version, strategy version, and
-risk policy, Python strategy execution must produce the same
-`SigbotTradeSignal`. `UNKNOWN`, stale or invalid inputs default to `NONE`.
-Only actionable signals cross the Order Manager boundary.
+risk policy, Python strategy execution must produce the same `Effects`.
+`UNKNOWN`, stale or invalid inputs produce no opening intent. Only validated
+trade intents cross the Order boundary through MQTT.
 
-## Fixed Strategy Pipeline
+## Constrained Workflow
 
 ```text
-DatafeedBinding
+Workflow feed route
   -> Evaluator side path -----------+
   -> Strategy Runner <--------------+ EvaluationSnapshot
        ^
@@ -96,11 +97,11 @@ DatafeedBinding
               -> Notifier (typed operational events only)
 ```
 
-`StrategyPipeline` is a fixed product resource, not an arbitrary graph. Its
-specification contains feed bindings, evaluator configuration, deterministic
-strategy configuration, execution account and venue, risk policy, notification
-channels, export targets, and desired state. Optional capabilities can be
-disabled, but callers cannot create new node kinds or arbitrary edges.
+Workflow graphs are configurable but not arbitrary code graphs. Nodes are
+limited to the nine registered component modules, and edges must resolve to an
+allowed v2 topic or a validated module-routing default. The graph can disable
+optional capabilities and contain multiple typed nodes, but it cannot introduce
+an unknown node kind, bypass Order/Wallet, or create a direct AI-to-Exchange edge.
 
 ## Core Services
 
@@ -125,8 +126,8 @@ namespace semantics have one canonical owner:
 
 ## Embedded Components and Protocol Adapters
 
-These components are composed into services; they do not own a step in the
-fixed trading pipeline.
+These components are composed into services; they are not independently
+deployed Workflow nodes.
 
 | Component | Responsibility | Design |
 |---|---|---|
@@ -137,39 +138,45 @@ fixed trading pipeline.
 
 ## Naming and Extension Rules
 
-- Public service roots and startup types use `Sigbot<Component>`.
-- Replaceable ports use `ISigbot<Capability>`.
-- Concrete adapters use `Sigbot<Provider><Capability>`.
-- `Provider` denotes a factory-selected implementation family. Delivery media
-  are `NotificationChannel`; export destinations are `ExportSink`.
+- Public service roots and startup types use a domain-specific `Sigbot...`
+  name; the exact exported symbol is listed below.
+- Existing replaceable ports use concise `I<Capability>` names. New ports
+  follow the owning module's established convention instead of inventing a
+  parallel naming scheme.
+- Concrete adapters carry their provider and capability in a stable name.
+- `Provider` denotes a factory-selected implementation family. Current delivery
+  media use `NotificationProviderConfig`; export destinations use
+  `ExportSinkConfig`.
 - Rust acronyms use PascalCase words: `Api`, `Http`, `Mqtt`, `Qq`, `Ibkr`.
 - Interfaces belong at actual variation boundaries; avoid a one-to-one trait
   that only mirrors a startup shell.
 
 | Module | Service root | Primary extension ports |
 |---|---|---|
-| APIServer | `SigbotApiServer` | `ISigbotApiTransport`, `ISigbotCoreRepository` |
-| Controller | `SigbotController` | `ISigbotPipelineController`, `ISigbotRuntimeProvider` |
-| Datafeed | `SigbotDatafeed` | `ISigbotDatafeedSource` |
-| Backtest | `SigbotBacktestRunner` | `ISigbotBacktestEngine`, `ISigbotClock` |
-| Evaluator | `SigbotEvaluator` | `ISigbotMarketEvaluator` |
+| APIServer | `SigbotAPIServer` | Core handlers and repositories exposed through HTTP/A2A/MCP adapters |
+| Controller | `SigbotController` | `WorkerProvider` |
+| Datafeed | `SigbotDatafeedIngestor` | `IDatafeed` |
+| Backtest | `SigbotBacktestServer` | `ReplaySource`, `ReplayDecision`, `IExchange` |
+| Evaluator | `SigbotEvaluatorRunner` | `IEvaluator` |
 | Strategy Runner | `SigbotStrategyRunner` | `IStrategy` |
-| Order Manager | `SigbotOrderManager` | `IOrder`, `ISigbotRiskPolicy` |
-| Wallet Manager | `SigbotWalletManager` | `IWallet`, `ISigbotPortfolioLedger` |
-| Notifier | `SigbotNotifier` | `ISigbotNotifier`, `ISigbotNotificationChannel` |
-| Exporter | `SigbotExporter` | `ISigbotExporter`, `ISigbotExportSink` |
+| Order | `SigbotOrderServer` | `IOrder`, execution adapters |
+| Wallet | `SigbotWalletServer` | `IWallet` |
+| Notifier | `SigbotNotifier` | `INotifier`, `NotificationProviderConfig` |
+| Exporter | `SigbotExporterServer` | `IExporter`, `ExportSinkConfig` |
 | Exchange SDK | Composed, no daemon | `IExchange`, capability-specific subports |
 | Messager SDK | Composed, no daemon | `IMessager` |
 
 ## Data Ownership and Consistency
 
-- APIServer is the only client of the core control-plane database. Controller,
-  Evaluator, Strategy Runner, and other engines use APIServer APIs, watches,
-  configuration snapshots, or events.
-- Order Manager exclusively writes its Order database or schema. Wallet Manager
-  exclusively writes its Wallet database or schema. They may share a physical
-  PostgreSQL cluster for operations, but never credentials, tables, or write
-  ownership.
+- API is the only writer for user-driven control-plane configuration. The
+  independent Controller reads immutable Workflow/Worker configuration and is
+  the only writer for run claims, selected workers, attempts, and observed
+  lifecycle state. Both use the same Core handlers/repositories; data-plane
+  components do not read control-plane configuration tables directly.
+- Order and Wallet have separate prefixed table domains and exclusive Repository
+  write ownership. The current final-state migration places both domains in one
+  physical PostgreSQL schema; sharing a schema does not permit cross-domain SQL
+  or a second writer.
 - Order persists order/execution facts and a transactional outbox atomically.
   Wallet applies each monetary execution fact through an inbox and updates its
   ledger, balance, position, and outbox in one local transaction.
@@ -179,8 +186,9 @@ fixed trading pipeline.
 - If order and portfolio state truly require one ACID transaction, they must be
   one physical bounded-context service. Two daemons sharing tables is not a
   strong-consistency design.
-- Specialized market-history and observability stores are not the core
-  control-plane database and remain private to their owning component.
+- Specialized market-history, tenant middleware, and object storage remain
+  private to their owning component even when an operator co-locates physical
+  database infrastructure.
 
 ## Messaging Invariants
 
@@ -190,7 +198,7 @@ fixed trading pipeline.
   feed. Replicas of one component share a group; different component roles do
   not, otherwise they would divide events instead of each receiving them.
 - Business-event ownership follows the producer: Datafeed owns feed events,
-  Evaluator owns evaluation snapshots, Strategy Runner owns signals, Order owns
+  Evaluator owns evaluation snapshots, Strategy Runner owns trade intents, Order owns
   execution facts, and Wallet owns portfolio snapshots. Messager owns only the
   envelope and delivery semantics.
 - Every envelope carries event ID, tenant ID, Workflow ID, producer, schema
@@ -201,8 +209,9 @@ fixed trading pipeline.
   is short-lived QoS pairing state and is never persisted.
 - Consumers assume duplicate and delayed delivery, establish an idempotency
   boundary, and define ordering/partition keys explicitly.
-- Local and MQTT implementations must provide equivalent observable fan-out,
-  cancellation, backpressure, and failure semantics.
+- MQTT/EMQX plus PostgreSQL Inbox/Outbox is the durable distributed runtime.
+  Local transport is a single-process compatibility adapter and must not be
+  presented as equivalent recovery or persistent fan-out.
 
 ## Global Safety Invariants
 
@@ -222,19 +231,19 @@ fixed trading pipeline.
 
 ## Implementation Alignment
 
-| Area | Current evidence | Required alignment |
+| Area | Implemented boundary | Remaining evidence or product gap |
 |---|---|---|
-| APIServer and core DB | APIServer has core repositories; Evaluator, Strategy, Controller, and other paths also construct `SigbotState` | Make APIServer the sole control-plane DB gateway and expose list/watch/status contracts |
-| Controller | `src/controller/` reconciles tenant-scoped resources by scanning the database | Reconcile strategy pipelines through APIServer using `SigbotController` semantics |
-| Datafeed | Provider skeletons and publication code exist | Add normalized envelopes, source sharing, logical bindings, and correct topic expansion |
-| Evaluator | Multi-agent executor exists; event-driven market subscription is incomplete | Publish typed, versioned evaluation snapshots with regime, confidence, watermark, and expiry |
-| Strategy Runner | Python execution exists; current path lacks evaluation/portfolio joins and can call an exchange directly | Enforce deterministic three-input execution and publish signals only to Order Manager |
-| Order Manager | Signal subscription skeleton exists | Add durable order/fill state, exchange registration, hard risk checks, idempotency, reconciliation, and outbox |
-| Wallet Manager | PostgreSQL updater exists | Use a dedicated store and one transaction for inbox, ledger, balance, and position effects |
-| Backtest | Run-scoped component | Compose historical replay, virtual clock, deterministic matching, and isolated run state |
-| Notifier and Exporter | Email/Telegram and Google Sheets/Kafka skeletons exist | Add typed routing, real adapters, idempotency, retries, receipts, and the reserved channels/sinks |
-| Messager | Local and MQTT clients exist | Add explicit consumer groups and equivalent multi-subscription/fan-out semantics |
+| API and IAM | HTTP CRUD plus MCP/A2A outlets use explicit Authguard request identity and Core PostgreSQL/SQLite repositories | Real Hosted Login, production domains/TLS, and an authenticated browser save/start/trace flow still need external credentials |
+| Controller | Independently reconciles nine component kinds and typed Redis/pgvector/TimescaleDB/EMQX resources on Docker or Kubernetes | The latest four-middleware reconciler has manifest/compile tests but has not completed a fresh end-to-end real-cluster lifecycle run |
+| Datafeed | REST/MCP/A2A social ingestion, policy RSS, persisted history, LATEST/AS_OF snapshots, and Binance/Hyperliquid public market reads exist | Full liquidation heatmaps, lending/funding/position-ratio coverage and additional venues remain incomplete |
+| Evaluator | Consumes feed events, calls the bounded LLM path, separates facts/inference, stores cases, and publishes versioned five-state snapshots | Real-model quality/calibration and production pgvector memory quality have not been accepted |
+| Strategy Runner | Transactional state drafts, serial callbacks, typed Effects, market/compute/service results, sandboxing, checkpoints, and intent-only trading output are implemented | Redis hot caching and general distributed incremental/model sharding are not implemented |
+| Order and Wallet | Reservation-first ordering, hard risk, prepared submissions, unknown-result reconciliation, immutable executions, balanced ledger/projections, and transactional Inbox/Outbox are implemented | Real-money venue settlement, long-running reconciliation, corporate actions/margin, and genuine cross-venue compensation remain unaccepted |
+| Backtest | Frozen history, virtual time, replay barriers, deterministic matching/fees, resting limit orders, and isolated replay are implemented | Depth queues, realistic partial liquidity/latency, and all model-shard equivalence are outside the current simulator |
+| Notifier and Exporter | In-app/Email/Telegram delivery state and Kafka/Google Sheets sinks have typed requests, checkpoints, retries, and idempotency boundaries | Real SMTP/Telegram/Sheets credentials and Kafka multi-broker failover have not been accepted |
+| Logservice | SQLite WAL durable ACK, immutable conditional S3 chunks, hash verification, PostgreSQL cursors, and Python/Rust capture are implemented | Host-volume loss, production bucket retention/replication, and capture from every Rust host remain open |
+| Messager | MQTT QoS 1 persistent sessions, manual ACK, scoped topics, Inbox/Outbox, replay, backpressure, and temporary reply pairing are implemented | Broker-disk disaster and sustained-load tests remain open; Local transport is intentionally not durability-equivalent |
 
 The component documents own their detailed contracts and capability status.
-Implementation claims require matching source and tests; target requirements
-remain normative even when the current implementation is incomplete.
+The coding-agent handoff records the exact verification baseline and next work:
+[`docs/development/HARDCOVER.md`](../development/HARDCOVER.md).
