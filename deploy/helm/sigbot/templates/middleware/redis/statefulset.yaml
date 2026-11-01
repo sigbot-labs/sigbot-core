@@ -1,0 +1,85 @@
+{{- if .Values.middleware.redis.enabled }}
+{{- $name := printf "%s-redis" (include "sigbot.fullname" .) }}
+{{- $namespace := .Release.Namespace }}
+{{- $nodes := int .Values.middleware.redis.nodes }}
+{{- if lt $nodes 6 }}{{ fail "middleware.redis.nodes must provide at least three masters and three replicas" }}{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: redis
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ $nodes }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      sigbot.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        sigbot.io/component: redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001}
+      containers:
+        - name: redis-cluster
+          image: {{ include "sigbot.image" (dict "root" . "image" .Values.middleware.redis.image) | quote }}
+          imagePullPolicy: {{ .Values.middleware.redis.image.pullPolicy }}
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              ordinal="${POD_NAME##*-}"
+              if [[ "$ordinal" == "0" ]]; then
+                export REDIS_CLUSTER_CREATOR=yes
+                export REDIS_CLUSTER_REPLICAS={{ .Values.middleware.redis.replicas | quote }}
+              fi
+              exec /opt/bitnami/scripts/redis-cluster/entrypoint.sh /opt/bitnami/scripts/redis-cluster/run.sh
+          env:
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: REDIS_NODES
+              value: >-
+                {{ range $index := until $nodes }}{{ if $index }} {{ end }}{{ $name }}-{{ $index }}.{{ $name }}.{{ $namespace }}.svc.cluster.local{{ end }}
+            - name: REDIS_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.middleware.redis.auth.existingSecret }}, key: {{ .Values.middleware.redis.auth.passwordKey }}}}
+            - name: REDISCLI_AUTH
+              valueFrom: {secretKeyRef: {name: {{ .Values.middleware.redis.auth.existingSecret }}, key: {{ .Values.middleware.redis.auth.passwordKey }}}}
+          ports:
+            - {name: redis, containerPort: 6379}
+            - {name: cluster-bus, containerPort: 16379}
+          volumeMounts: [{name: data, mountPath: /bitnami/redis/data}]
+          resources: {{ toYaml .Values.middleware.redis.resources | nindent 12 }}
+          readinessProbe:
+            exec: {command: [/bin/bash, -ec, 'redis-cli -h 127.0.0.1 ping | grep -q PONG']}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec: {command: [/bin/bash, -ec, 'redis-cli -h 127.0.0.1 ping | grep -q PONG']}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      {{- if not .Values.middleware.redis.persistence.enabled }}
+      volumes: [{name: data, emptyDir: {}}]
+      {{- end }}
+  {{- if .Values.middleware.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sigbot.labels" . | nindent 10 }}
+          sigbot.io/component: redis
+      spec:
+        accessModes: [{{ .Values.middleware.redis.persistence.accessMode }}]
+        {{- if or .Values.middleware.redis.persistence.storageClass .Values.global.storageClass }}
+        storageClassName: {{ default .Values.global.storageClass .Values.middleware.redis.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests: {storage: {{ .Values.middleware.redis.persistence.size }}}
+  {{- end }}
+{{- end }}

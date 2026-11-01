@@ -22,7 +22,11 @@
 use std::collections::HashMap;
 
 use opentelemetry::propagation::TextMapPropagator;
+use opentelemetry::trace::TraceContextExt;
+use opentelemetry::trace::Tracer;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use std::sync::OnceLock;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 // An wapper for `Futures` that provides tracing instrument adapters.
@@ -52,6 +56,47 @@ impl<T: std::future::Future> FutureExt for T {
 pub struct TracingContext(opentelemetry::Context);
 
 pub type W3cTrace = HashMap<String, String>;
+
+/// An owned async-safe OTel span; no thread-local identity is installed.
+pub struct MessageTrace {
+    context: opentelemetry::Context,
+}
+
+impl MessageTrace {
+    pub fn child(name: &'static str, traceparent: &str) -> Self {
+        let fields = HashMap::from([("traceparent".to_owned(), traceparent.to_owned())]);
+        let parent = TraceContextPropagator::new().extract(&fields);
+        let span = opentelemetry::global::tracer("sigbot.messaging").start_with_context(name, &parent);
+        let mut context = parent.with_span(span);
+        if !context.span().span_context().is_valid()
+            || context.span().span_context().span_id() == parent.span().span_context().span_id()
+        {
+            // No exporter is required to maintain valid, real OTel span lifecycles.
+            // A global NoopTracer can preserve the valid remote parent's context;
+            // validity alone therefore does not prove that a child was created.
+            static LOCAL: OnceLock<opentelemetry_sdk::trace::TracerProvider> = OnceLock::new();
+            let tracer = LOCAL
+                .get_or_init(|| opentelemetry_sdk::trace::TracerProvider::builder().build())
+                .tracer("sigbot.messaging");
+            context = parent.with_span(tracer.start_with_context(name, &parent));
+        }
+        Self { context }
+    }
+
+    pub fn traceparent(&self) -> String {
+        let mut fields = HashMap::new();
+        TraceContextPropagator::new().inject_context(&self.context, &mut fields);
+        fields
+            .remove("traceparent")
+            .expect("a valid OTel span always has traceparent")
+    }
+}
+
+impl Drop for MessageTrace {
+    fn drop(&mut self) {
+        self.context.span().end();
+    }
+}
 
 impl Default for TracingContext {
     fn default() -> Self {

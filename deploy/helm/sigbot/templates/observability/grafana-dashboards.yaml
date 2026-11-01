@@ -1,0 +1,50 @@
+{{- if .Values.sigbot.monitoring.grafana.enabled }}
+{{- $dashboards := list
+  (dict "component" "backtest" "title" "Backtest" "panels" (list
+    (dict "title" "Simulated order outcomes" "expr" "sum(rate(sigbot_trading_orders_total[5m])) by (status)" "legend" "{{status}} /s" "unit" "ops")
+    (dict "title" "Replay and matching backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"backtest.*|replay.*|matching.*\"}) by (queue_name)" "legend" "{{queue_name}}")))
+  (dict "component" "datafeed" "title" "Datafeed" "panels" (list
+    (dict "title" "Ingested market events" "expr" "sum(rate(sigbot_datafeed_messages_total[5m])) by (source,type)" "legend" "{{source}} / {{type}}" "unit" "eps")
+    (dict "title" "Ingestion p95 latency" "expr" "histogram_quantile(0.95, sum(rate(sigbot_datafeed_processing_duration_seconds_bucket[5m])) by (le,source,type))" "legend" "{{source}} / {{type}}" "unit" "s")))
+  (dict "component" "evaluator" "title" "Evaluator" "panels" (list
+    (dict "title" "Evaluator connections" "expr" "sum(sigbot_system_active_connections{component=\"evaluator\"})" "legend" "connections")
+    (dict "title" "Evaluation backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"evaluator.*|evaluation.*\"}) by (queue_name)" "legend" "{{queue_name}}")))
+  (dict "component" "exporter" "title" "Exporter" "panels" (list
+    (dict "title" "Export backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"export.*\"}) by (queue_name)" "legend" "{{queue_name}}")
+    (dict "title" "Exporter restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*exporter.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
+  (dict "component" "logservice" "title" "Log service" "panels" (list
+    (dict "title" "Durable log backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"log.*|archive.*\"}) by (queue_name)" "legend" "{{queue_name}}")
+    (dict "title" "Log service restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*logservice.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
+  (dict "component" "notifier" "title" "Notifier" "panels" (list
+    (dict "title" "Notification backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"notif.*\"}) by (queue_name)" "legend" "{{queue_name}}")
+    (dict "title" "Notifier restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*notifier.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
+  (dict "component" "strategy" "title" "Strategy" "panels" (list
+    (dict "title" "Strategy executions" "expr" "sum(rate(sigbot_strategy_executions_total[5m])) by (strategy_id,status)" "legend" "{{strategy_id}} / {{status}}" "unit" "ops")
+    (dict "title" "Execution p95 latency" "expr" "histogram_quantile(0.95, sum(rate(sigbot_strategy_execution_duration_seconds_bucket[5m])) by (le,strategy_id,mode))" "legend" "{{strategy_id}} / {{mode}}" "unit" "s")
+    (dict "title" "Active strategies" "expr" "sum(sigbot_strategy_active_count) by (strategy_id,status)" "legend" "{{strategy_id}} / {{status}}")))
+  (dict "component" "controller" "title" "Controller" "panels" (list
+    (dict "title" "Controller connections" "expr" "sum(sigbot_system_active_connections{component=\"controller\"})" "legend" "connections")
+    (dict "title" "Workflow worker availability" "expr" "sum(kube_deployment_status_replicas_available{namespace=~\"$namespace\",deployment=~\"sigbot-.*\"}) by (deployment)" "legend" "{{deployment}}")))
+  (dict "component" "order" "title" "Order" "panels" (list
+    (dict "title" "Order outcomes" "expr" "sum(rate(sigbot_trading_orders_total[5m])) by (side,status)" "legend" "{{side}} / {{status}}" "unit" "ops")
+    (dict "title" "Trading volume" "expr" "sum(rate(sigbot_trading_volume[5m])) by (symbol,side)" "legend" "{{symbol}} / {{side}}" "unit" "short")))
+  (dict "component" "wallet" "title" "Wallet" "panels" (list
+    (dict "title" "Ledger projection backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"wallet.*|ledger.*|portfolio.*\"}) by (queue_name)" "legend" "{{queue_name}}")
+    (dict "title" "Wallet connections" "expr" "sum(sigbot_system_active_connections{component=\"wallet\"})" "legend" "connections")))
+-}}
+{{- range $dashboard := $dashboards }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sigbot.fullname" $ }}-dashboard-{{ $dashboard.component }}
+  labels:
+    {{- include "sigbot.labels" $ | nindent 4 }}
+    {{ $.Values.sigbot.monitoring.grafana.sidecarLabel }}: {{ $.Values.sigbot.monitoring.grafana.sidecarLabelValue | quote }}
+  annotations:
+    grafana_folder: {{ $.Values.sigbot.monitoring.grafana.folder | quote }}
+data:
+  {{ $dashboard.component }}.json: |
+    {{- include "sigbot.grafanaDashboard" (merge (dict "root" $) $dashboard) | nindent 4 }}
+---
+{{- end }}
+{{- end }}

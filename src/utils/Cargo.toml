@@ -17,8 +17,6 @@ axum.workspace = true
 tokio.workspace = true
 hyper.workspace = true
 tower-cookies.workspace = true
-mac_address.workspace = true
-lazy_static.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt"] }
 oauth2.workspace = true
@@ -30,7 +28,6 @@ openssl.workspace = true
 rsa.workspace = true
 sha2.workspace = true
 ring.workspace = true
-sysinfo.workspace = true
 hex.workspace = true
 base64.workspace = true
 regex.workspace = true

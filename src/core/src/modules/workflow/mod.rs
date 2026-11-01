@@ -19,11 +19,6 @@
 // This includes modifications and derived works.
 
 pub mod handler;
-pub mod store;
-pub mod workflow_manager;
+pub(crate) mod storage;
 
-pub use sigbot_types::modules::workflow::workflow::JobStatus as WorkflowJobStatus;
-pub use workflow_manager::{
-    SigbotWorkflowHandlerWrapper, SigbotWorkflowManager, SigbotWorkflowNodeJob, SigbotWorkflowStartHandler,
-    SigbotWorkflowStopHandler,
-};
+pub use sigbot_types::workflow::workflow::JobStatus as WorkflowJobStatus;

@@ -18,4 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+#[path = "redis_test.rs"]
 pub mod redis;
+
+#[path = "memory_test.rs"]
+pub mod memory;

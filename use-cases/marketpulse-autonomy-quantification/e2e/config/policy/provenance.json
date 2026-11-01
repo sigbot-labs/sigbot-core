@@ -1,0 +1,24 @@
+{
+  "observed_at": "2026-10-28T11:45:38.828076+00:00",
+  "method": "actual public HTTPS GET; product Accept and Sigbot-PolicyFeed/2 User-Agent",
+  "scope": "reachability evidence only; Rust parser and persistence acceptance have separate scenario results",
+  "feeds": [
+    {
+      "source": "fed",
+      "official_directory": "https://www.federalreserve.gov/feeds/feeds.htm",
+      "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
+      "http_status": 200,
+      "bytes": 9687,
+      "sha256": "69b638039ee490f01aea90ac4623d67f9041273322daa48a262c50fed94ca2b1"
+    },
+    {
+      "source": "treasury",
+      "official_directory": "https://www.treasurydirect.gov/rss/",
+      "url": "https://www.treasurydirect.gov/TA_WS/securities/announced/rss",
+      "http_status": 200,
+      "bytes": 21085,
+      "sha256": "08fc56a059743a13ec909b1a93a4348c10b67d3c35575bf8ea94c2e9b68e5e28"
+    }
+  ],
+  "observed_failure": "TreasuryDirect returned HTTP 406 to the initial default curl request; retry with product Accept/User-Agent returned 200."
+}

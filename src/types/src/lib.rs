@@ -18,25 +18,43 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-pub mod api;
+pub mod backtest;
+pub mod controller;
+pub mod datafeed;
+pub mod evaluator;
+pub mod exchange;
+pub mod exporter;
 pub mod llm;
-pub mod modules;
-pub mod sys;
+pub mod logservice;
+pub mod messager;
+pub mod notifier;
+pub mod order;
+pub mod strategy;
+pub mod wallet;
+pub mod workflow;
 
 use anyhow::Error;
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
+use chrono::Utc;
 use hyper::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use sqlx::prelude::FromRow;
 use validator::Validate;
 
-use sigbot_utils::snowflake::SnowflakeIdGenerator;
+use sigbot_utils::base64s;
+pub use uuid::Uuid;
+
+/// Globally unique, time-ordered identifier persisted by Sigbot-owned tables.
+pub type EntityId = Uuid;
+/// Stable idempotency identifier retained across retries and restarts.
+pub type RunId = Uuid;
 // use sqlx::{ Decode, FromRow };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, FromRow, utoipa::ToSchema)]
 pub struct EntityBase {
     #[schema(rename = "id")]
-    pub id: Option<i64>,
+    pub id: Option<Uuid>,
     #[schema(rename = "status")]
     pub status: Option<i8>,
     #[sqlx(rename = "created_by")]
@@ -69,7 +87,7 @@ impl EntityBase {
         }
     }
 
-    pub fn new_with_id(id: Option<i64>) -> Self {
+    pub fn new_with_id(id: Option<Uuid>) -> Self {
         let now = Utc::now();
         Self {
             id,
@@ -82,21 +100,21 @@ impl EntityBase {
         }
     }
 
-    pub fn new_with_by(id: Option<i64>, created_by: Option<String>, updated_by: Option<String>) -> Self {
+    pub fn new_with_by(id: Option<Uuid>, created_by: Option<String>, updated_by: Option<String>) -> Self {
         let now = Utc::now();
         Self {
             id,
             status: Some(0),
-            created_by: created_by,
+            created_by,
             created_at: Some(now),
-            updated_by: updated_by,
+            updated_by,
             updated_at: Some(now),
             del_flag: Some(0),
         }
     }
 
-    pub async fn pre_insert(&mut self, created_by: Option<String>) -> i64 {
-        self.id = Some(SnowflakeIdGenerator::default_next_jssafe());
+    pub async fn pre_insert(&mut self, created_by: Option<String>) -> Uuid {
+        self.id = Some(Uuid::now_v7());
         self.created_by = created_by;
         self.created_at = Some(Utc::now());
         self.del_flag = Some(0);
@@ -211,5 +229,16 @@ impl RespBase {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string(&self).unwrap()
+    }
+}
+
+pub struct ArgumentConfig;
+
+impl ArgumentConfig {
+    pub fn decode(configuration: &str) -> anyhow::Result<String> {
+        match base64s::Base64Helper::decode(configuration) {
+            Ok(bytes) => String::from_utf8(bytes).map_err(|_| Error::msg("configuration is not valid UTF-8")),
+            Err(_) => Ok(configuration.to_owned()),
+        }
     }
 }

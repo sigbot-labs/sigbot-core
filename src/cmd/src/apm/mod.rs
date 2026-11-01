@@ -22,9 +22,13 @@ pub mod dyn_log;
 pub mod metric_jemalloc;
 pub mod profiling;
 
-use axum::{routing, Router};
-use profiling::{mem_prof_router, pprof_router};
-use prometheus::{Encoder, TextEncoder};
+use axum::routing;
+
+use axum::Router;
+use profiling::mem_prof_router;
+use profiling::pprof_router;
+use prometheus::Encoder;
+use prometheus::TextEncoder;
 
 /// Export to debugging operations router.
 pub fn debug_router() -> axum::Router {

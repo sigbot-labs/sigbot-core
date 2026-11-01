@@ -19,10 +19,16 @@
 // This includes modifications and derived works.
 
 pub mod backtest;
+pub mod controller;
 pub mod datafeed;
-pub mod exchange;
-pub mod notification;
+pub mod evaluator;
+pub mod exporter;
+pub mod notifier;
 pub mod order;
 pub mod strategy;
 pub mod wallet;
 pub mod workflow;
+
+pub mod logservice;
+
+pub mod messager;

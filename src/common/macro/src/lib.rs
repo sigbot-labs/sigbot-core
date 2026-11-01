@@ -22,12 +22,15 @@ mod range_fn;
 mod stack_trace_debug;
 mod utils;
 
-use aggr_func::{ impl_aggr_func_type_store, impl_as_aggr_func_creator };
+use aggr_func::impl_aggr_func_type_store;
+
+use aggr_func::impl_as_aggr_func_creator;
 use audit_log::process_audit_log;
 use print_caller::process_print_caller;
 use proc_macro::TokenStream;
 use range_fn::process_range_fn;
-use syn::{ parse_macro_input, DeriveInput };
+use syn::parse_macro_input;
+use syn::DeriveInput;
 
 use crate::admin_fn::process_admin_fn;
 
@@ -78,14 +81,17 @@ pub fn range_fn(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Attribute macro to convert a normal function to SQL administration function. The annotated function
 /// should accept:
-///    - `&ProcedureServiceHandlerRef` or `&TableMutationHandlerRef` as the first argument,
-///    - `&QueryContextRef` as the second argument, and
-///    - `&[ValueRef<'_>]` as the third argument which is SQL function input values in each row.
+///
+/// - `&ProcedureServiceHandlerRef` or `&TableMutationHandlerRef` as the first argument,
+/// - `&QueryContextRef` as the second argument, and
+/// - `&[ValueRef<'_>]` as the third argument which is SQL function input values in each row.
+///
 /// Return type must be `common_query::error::Result<Value>`.
 ///
 /// # Example see `common/function/src/system/procedure_state.rs`.
 ///
 /// # Arguments
+///
 /// - `name`: The name of the generated `Function` implementation.
 /// - `ret`: The return type of the generated SQL function, it will be transformed into `ConcreteDataType::{ret}_datatype()` result.
 /// - `display_name`: The display name of the generated SQL function.

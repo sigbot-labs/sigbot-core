@@ -19,26 +19,84 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use sigbot_utils::time_format::Iso8601TimeFormatter;
-use std::{
-    fmt::{self, Display},
-    io::{IsTerminal, LineWriter},
-    str::FromStr,
-    sync::Arc,
-};
+use std::fmt;
+use std::fmt::Display;
+use std::io::IsTerminal;
+use std::io::LineWriter;
+use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{
-    filter::Targets,
-    fmt::{
-        format::{FormatEvent, FormatFields},
-        time::FormatTime,
-        FmtContext, FormatFields as FormatFieldsTrait,
-    },
-    EnvFilter, Layer,
-};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::fmt::format::FormatEvent;
+use tracing_subscriber::fmt::format::FormatFields;
+use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::fmt::FmtContext;
+use tracing_subscriber::fmt::FormatFields as FormatFieldsTrait;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 
 pub type LogRouteHandle = tracing_subscriber::reload::Handle<LogRouteType, tracing_subscriber::Registry>;
+
+static LOG_ROUTE: OnceLock<LogRouteHandle> = OnceLock::new();
+static LOG_ROUTE_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Subscriber infrastructure only: concrete sinks belong to their shared component.
+pub struct LogRoutes;
+pub struct LogRouteGuard {
+    handle: Option<LogRouteHandle>,
+}
+
+impl LogRoutes {
+    pub(super) fn initialize(handle: LogRouteHandle) {
+        LOG_ROUTE
+            .set(handle)
+            .unwrap_or_else(|_| panic!("log route already initialized"));
+    }
+
+    pub fn install(
+        layer: Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>,
+        targets: Targets,
+    ) -> anyhow::Result<LogRouteGuard> {
+        let handle = LOG_ROUTE
+            .get()
+            .ok_or_else(|| anyhow::anyhow!("logging subscriber is not initialized"))?
+            .clone();
+        anyhow::ensure!(
+            LOG_ROUTE_INSTALLED
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok(),
+            "a fixed-identity log route is already installed in this process"
+        );
+        // Keep the FilterId registered when the subscriber was constructed.
+        // Replacing the whole Filtered layer bypasses on_layer registration.
+        if let Err(error) = handle.modify(|route| {
+            *route.inner_mut() = Some(layer);
+            *route.filter_mut() = targets;
+        }) {
+            LOG_ROUTE_INSTALLED.store(false, Ordering::Release);
+            return Err(error.into());
+        }
+        Ok(LogRouteGuard { handle: Some(handle) })
+    }
+}
+
+impl Drop for LogRouteGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.modify(|route| {
+                *route.inner_mut() = None;
+                *route.filter_mut() = Targets::new().with_target("", LevelFilter::OFF);
+            });
+            LOG_ROUTE_INSTALLED.store(false, Ordering::Release);
+        }
+    }
+}
 
 pub type LogRouteType = tracing_subscriber::filter::Filtered<
     Option<Box<dyn tracing_subscriber::Layer<tracing_subscriber::Registry> + Send + Sync>>,
@@ -81,8 +139,8 @@ impl FromStr for LogMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
-            "HUMAN" => Ok(LogMode::HUMAN),
-            "JSON" => Ok(LogMode::JSON),
+            "human" => Ok(LogMode::HUMAN),
+            "json" => Ok(LogMode::JSON),
             _ => Err(LogModeError(s.to_owned())),
         }
     }
@@ -173,8 +231,8 @@ mod ansi {
 /// Simplify the module path by removing the crate name (the part before the first `::`)
 ///
 /// # Examples
-/// - `sigbot_cmd::cmd::internal::management_server` -> `cmd::internal::management_server`
-/// - `sigbot_order::server::order_server` -> `server::order_server`
+/// - `sigbot_cmd::startup::internal::management` -> `startup::internal::management`
+/// - `sigbot_order::server` -> `server`
 /// - `datafeed::client::market::datafeed_binance` -> `client::market::datafeed_binance`
 fn simplify_target(target: &str) -> String {
     // Remove the crate name (the part before the first `::`)
@@ -305,7 +363,7 @@ pub(super) fn default_log_stderr_layer(config: &Arc<AppConfig>) -> LogStderrType
 
     layer.with_filter(
         tracing_subscriber::filter::Targets::new()
-            .with_target("", LevelFilter::from_str(&config.logging.level.to_string()).unwrap()),
+            .with_target("", LevelFilter::from_str(&config.logging.level.clone()).unwrap()),
     )
 }
 

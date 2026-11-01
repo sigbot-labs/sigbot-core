@@ -21,10 +21,19 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn2::{
-    parse::Parse, parse::ParseStream, parse_macro_input, Expr, FnArg, ItemFn, Lit, Meta, MetaNameValue,
-    Pat, PatType, Result, Token,
-};
+use syn2::parse::Parse;
+use syn2::parse::ParseStream;
+use syn2::parse_macro_input;
+use syn2::Expr;
+use syn2::FnArg;
+use syn2::ItemFn;
+use syn2::Lit;
+use syn2::Meta;
+use syn2::MetaNameValue;
+use syn2::Pat;
+use syn2::PatType;
+use syn2::Result;
+use syn2::Token;
 
 /// Configuration for the audit_log attribute
 struct AuditLogAttrs {
@@ -39,52 +48,59 @@ impl Parse for AuditLogAttrs {
         let mut service: Option<String> = None;
         let mut level = String::from("info");
         let mut skip_args = Vec::new();
-        let mut metadata = None;
+        let mut metadata: Option<String> = None;
 
+        // Check if it's a simple string literal (e.g., #[audit_log("message")])
+        if input.peek(syn2::LitStr) {
+            let lit: syn2::LitStr = input.parse()?;
+            // Use the string literal as metadata
+            metadata = Some(lit.value());
+            return Ok(AuditLogAttrs {
+                service,
+                level,
+                skip_args,
+                metadata,
+            });
+        }
+
+        // Otherwise parse as key=value pairs (e.g., #[audit_log(service = "xxx", level = "info")])
         let meta_list: syn2::punctuated::Punctuated<Meta, Token![,]> =
             input.parse_terminated(Meta::parse, Token![,])?;
 
         for meta in meta_list.iter() {
-            match &meta {
-                Meta::NameValue(MetaNameValue { path, value, .. }) => {
-                    let ident = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
-                    match ident.as_str() {
-                        "service" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    service = Some(lit.value());
-                                }
+            if let Meta::NameValue(MetaNameValue { path, value, .. }) = &meta {
+                let ident = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                match ident.as_str() {
+                    "service" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                service = Some(lit.value());
                             }
                         }
-                        "level" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    level = lit.value();
-                                }
-                            }
-                        }
-                        "skip_args" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    skip_args = lit
-                                        .value()
-                                        .split(',')
-                                        .filter_map(|s| s.trim().parse().ok())
-                                        .collect();
-                                }
-                            }
-                        }
-                        "metadata" => {
-                            if let Expr::Lit(expr_lit) = value {
-                                if let Lit::Str(lit) = &expr_lit.lit {
-                                    metadata = Some(lit.value());
-                                }
-                            }
-                        }
-                        _ => {}
                     }
+                    "level" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                level = lit.value();
+                            }
+                        }
+                    }
+                    "skip_args" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                skip_args = lit.value().split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                            }
+                        }
+                    }
+                    "metadata" => {
+                        if let Expr::Lit(expr_lit) = value {
+                            if let Lit::Str(lit) = &expr_lit.lit {
+                                metadata = Some(lit.value());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -123,8 +139,8 @@ pub fn process_audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
     let inputs = &sig.inputs;
     let asyncness = &sig.asyncness;
 
-    // Build argument names and types for logging
-    let mut arg_log_parts = Vec::new();
+    // Build argument names for logging - collect arg names as strings
+    let mut arg_names = Vec::new();
 
     for (idx, input) in inputs.iter().enumerate() {
         if skip_args.contains(&idx) {
@@ -135,13 +151,11 @@ pub fn process_audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
             FnArg::Typed(PatType { pat, .. }) => {
                 if let Pat::Ident(ref ident) = **pat {
                     let arg_name = &ident.ident;
-                    arg_log_parts.push(quote! {
-                        format!("{}={:?}", stringify!(#arg_name), #arg_name)
-                    });
+                    arg_names.push(quote! { format!("{}={:?}", stringify!(#arg_name), #arg_name) });
                 }
             }
             FnArg::Receiver(_) => {
-                arg_log_parts.push(quote! { "self=..." });
+                arg_names.push(quote! { "self=...".to_string() });
             }
         }
     }
@@ -165,7 +179,7 @@ pub fn process_audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _audit_guard = common_audit_log::AuditGuard::new(
                     #service_param,
                     #level_path,
-                    format!("{}({})", stringify!(#fn_name), vec![#(&#arg_log_parts),*].join(", ")),
+                    format!("{}({})", stringify!(#fn_name), vec![#(#arg_names),*].join(", ")),
                     #metadata,
                 );
 
@@ -186,7 +200,7 @@ pub fn process_audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _audit_guard = common_audit_log::AuditGuard::new(
                     #service_param,
                     #level_path,
-                    format!("{}({})", stringify!(#fn_name), vec![#(&#arg_log_parts),*].join(", ")),
+                    format!("{}({})", stringify!(#fn_name), vec![#(#arg_names),*].join(", ")),
                     #metadata,
                 );
 

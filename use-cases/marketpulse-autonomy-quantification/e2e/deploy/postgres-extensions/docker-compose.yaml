@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: ${MARKETPULSE_POSTGRES_IMAGE:?select the image catalog}
+    platform: linux/amd64
+    container_name: sigbot-marketpulse-extensions-postgres
+    labels:
+      io.sigbot.case: marketpulse-autonomy-quantification
+      io.sigbot.fixture: postgres-extensions
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: sigbot_extensions
+      POSTGRES_PASSWORD: ${MARKETPULSE_EXTENSIONS_PASSWORD:?required}
+      PGDATA: /home/postgres/pgdata/data/pgdata
+      TIMESCALEDB_TELEMETRY: 'off'
+      TS_TUNE_MEMORY: 1GB
+      TS_TUNE_NUM_CPUS: '1'
+      TS_TUNE_MAX_CONNS: '120'
+    ports:
+      - 127.0.0.1:15440:5432
+    network_mode: bridge
+    volumes:
+      - extensions-data:/home/postgres/pgdata/data
+      - ../../../../../deploy/helm/sigbot/bootstrap/postgres-extensions.sql:/docker-entrypoint-initdb.d/20-sigbot-extensions.sql:ro
+    mem_limit: 1g
+    cpus: '1'
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, sigbot_extensions]
+      interval: 2s
+      retries: 45
+volumes:
+  extensions-data:
+    name: sigbot-marketpulse-extensions-pg16-v1
+    labels:
+      io.sigbot.case: marketpulse-autonomy-quantification
+      io.sigbot.fixture: postgres-extensions

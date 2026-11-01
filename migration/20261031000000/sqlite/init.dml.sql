@@ -1,0 +1,1 @@
+-- SQLite development databases use the same empty business-data baseline as PostgreSQL.

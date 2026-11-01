@@ -1,0 +1,35 @@
+{{- if and .Values.sigbot.api.enabled .Values.sigbot.api.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sigbot.fullname" . }}-server
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: api
+  {{- with .Values.sigbot.api.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.sigbot.api.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.sigbot.api.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.sigbot.api.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "sigbot.fullname" $ }}-server
+                port: {number: {{ $.Values.sigbot.api.service.port }}}
+          {{- end }}
+    {{- end }}
+{{- end }}

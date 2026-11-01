@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-10-28T09:10:49.933538+00:00",
+  "official_openapi_available": false,
+  "sources": [
+    "https://help.truthsocial.com/legal/open-source/",
+    "https://tmtgcorp.com/",
+    "https://www.pressviewer.com/profiles/investor/NewsPrint.asp?ID=168199&b=2660&g=1953&m=rl&v=7",
+    "https://docs.joinmastodon.org/entities/Status/",
+    "https://docs.joinmastodon.org/methods/accounts/#statuses",
+    "https://docs.joinmastodon.org/api/guidelines/#pagination",
+    "https://docs.joinmastodon.org/methods/timelines/"
+  ],
+  "limitation": "No publicly accessible official Truth API OpenAPI specification was found. The licensed Truth API announced July 16 2026 is not represented here. The local schema models a limited Mastodon-compatible timeline; it is not an official Truth Social schema. REST compatibility and local WS/MCP/A2A gateway behavior are tested separately."
+}

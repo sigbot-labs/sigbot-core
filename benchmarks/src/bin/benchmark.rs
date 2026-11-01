@@ -20,7 +20,9 @@
 
 #![allow(clippy::print_stdout)]
 
-use clap::{Arg, Command};
+use clap::Arg;
+
+use clap::Command;
 
 fn main() {
     let app = Command::new("SigBot for Benchmarks")

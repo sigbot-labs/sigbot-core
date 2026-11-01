@@ -20,9 +20,12 @@
 
 extern crate openssl;
 
-use base64::{engine::general_purpose, Engine as _};
+use base64::engine::general_purpose;
+
+use base64::Engine as _;
 use openssl::pkey::Private;
-use openssl::rsa::{Padding, Rsa};
+use openssl::rsa::Padding;
+use openssl::rsa::Rsa;
 use openssl::sha::sha256;
 use std::error::Error;
 

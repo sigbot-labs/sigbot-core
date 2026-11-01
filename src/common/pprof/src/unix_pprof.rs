@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error::{PprofSnafu, Result};
+use crate::error::PprofSnafu;
+
+use crate::error::Result;
 use pprof::protos::Message;
 use snafu::ResultExt;
 use std::time::Duration;

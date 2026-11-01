@@ -18,7 +18,9 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use chrono::{Local, Timelike};
+use chrono::Local;
+
+use chrono::Timelike;
 use std::fmt;
 
 /// Formatting to ISO-8601 standard with timezone offset: YYYY-MM-DDTHH:MM:SS.nnn+HH:MM

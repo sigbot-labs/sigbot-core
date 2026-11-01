@@ -18,10 +18,15 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{FromRequest, Request};
-use axum::response::{IntoResponse, Response};
-use axum::{extract::Query, Json};
+use axum::extract::rejection::JsonRejection;
+
+use axum::extract::rejection::QueryRejection;
+use axum::extract::FromRequest;
+use axum::extract::Query;
+use axum::extract::Request;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use axum::Json;
 use hyper::StatusCode;
 use serde::de::DeserializeOwned;
 use validator::Validate;

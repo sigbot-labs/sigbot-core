@@ -19,4 +19,4 @@
 // This includes modifications and derived works.
 
 pub mod apm;
-pub mod cmd;
+pub mod startup;

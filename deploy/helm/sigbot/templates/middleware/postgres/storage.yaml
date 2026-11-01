@@ -1,0 +1,16 @@
+{{- if and .Values.middleware.postgres.enabled .Values.middleware.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sigbot.fullname" . }}-postgres
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: postgres
+spec:
+  accessModes: [{{ .Values.middleware.postgres.persistence.accessMode }}]
+  {{- if or .Values.middleware.postgres.persistence.storageClass .Values.global.storageClass }}
+  storageClassName: {{ default .Values.global.storageClass .Values.middleware.postgres.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests: {storage: {{ .Values.middleware.postgres.persistence.size }}}
+{{- end }}

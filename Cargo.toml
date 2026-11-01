@@ -2,6 +2,7 @@
 members = [
     "benchmarks",
     "src/common/audit-log",
+    "src/common/context",
     "src/common/macro",
     "src/common/makestruct",
     "src/common/mem-prof",
@@ -13,22 +14,23 @@ members = [
     "src/cmd",
     "src/messager",
     "src/exchange",
-    "src/deployer",
-    "src/datafeed",
-    "src/strategy/runner",
-    "src/strategy/sdk",
-    "src/order",
-    "src/wallet",
-    "src/backtest",
-    "src/notification",
-    "src/logservice",
-    "src/exporter",
-    "src/evaluator",
-    "tests",
+    "src/controller",
+    "src/api/a2a",
+    "src/api/http",
+    "src/api/mcp",
+    "src/component/backtest",
+    "src/component/datafeed",
+    "src/component/evaluator",
+    "src/component/logservice",
+    "src/component/strategy/runner",
+    "src/component/strategy/sdk",
+    "src/component/order",
+    "src/component/wallet",
+    "src/component/notifier",
+    "src/component/exporter",
 ]
 default-members = [
     "src/cmd",
-    "tests",
 ]
 resolver = "2"
 
@@ -51,7 +53,9 @@ rust.unknown_lints = "deny"
 
 [workspace.dependencies]
 # workspaces members.
+authguard-adapter-rust = { git = "https://github.com/wl4g/authguard.git", rev = "56f00ee51a33136dae7e83beba558cdbf05c4a85" }
 common-audit-log = { path = "src/common/audit-log" }
+common-context = { path = "src/common/context" }
 common-error = { path = "src/common/error" }
 common-macro = { path = "src/common/macro" }
 common-makestruct = { path = "src/common/makestruct" }
@@ -64,24 +68,25 @@ sigbot-core = { path = "src/core" }
 sigbot-cmd = { path = "src/cmd" }
 sigbot-messager = { path = "src/messager" }
 sigbot-exchange = { path = "src/exchange" }
-sigbot-deployer = { path = "src/deployer" }
-sigbot-datafeed = { path = "src/datafeed" }
-sigbot-strategy-runner = { path = "src/strategy/runner" }
-sigbot-strategy-sdk = { path = "src/strategy/sdk" }
-sigbot-order = { path = "src/order" }
-sigbot-wallet = { path = "src/wallet" }
-sigbot-backtest = { path = "src/backtest" }
-sigbot-notification = { path = "src/notification" }
-sigbot-logservice = { path = "src/logservice" }
-sigbot-exporter = { path = "src/exporter" }
-sigbot-evaluator = { path = "src/evaluator" }
-sigbot-mcp = { path = "src/agents/mcp" }
-sigbot-a2a = { path = "src/agents/a2a" }
+sigbot-controller = { path = "src/controller" }
+sigbot-datafeed = { path = "src/component/datafeed" }
+sigbot-strategy-runner = { path = "src/component/strategy/runner" }
+sigbot-strategy-sdk = { path = "src/component/strategy/sdk" }
+sigbot-order = { path = "src/component/order" }
+sigbot-wallet = { path = "src/component/wallet" }
+sigbot-backtest = { path = "src/component/backtest" }
+sigbot-notifier = { path = "src/component/notifier" }
+sigbot-logservice = { path = "src/component/logservice" }
+sigbot-exporter = { path = "src/component/exporter" }
+sigbot-evaluator = { path = "src/component/evaluator" }
+sigbot-a2a = { path = "src/api/a2a" }
+sigbot-http = { path = "src/api/http" }
+sigbot-mcp = { path = "src/api/mcp" }
 
 # Lang libs
 regex = "1.11.1"
 chrono = { version = "0.4.40", features = ["serde"] }
-uuid = "1.9.1"
+uuid = { version = "1.9.1", features = ["serde", "v7"] }
 thiserror = "2.0.12"
 anyhow = "1.0.97"
 arc-swap = "1.7.1"
@@ -96,6 +101,7 @@ local-ip-address = "0.6.1"
 lazy_static = "1.4.0"
 mac_address = "1.1.7"
 url = "2.5.4"
+percent-encoding = "2.3.1"
 eyre = "0.6.12"
 humantime = "2.1"
 humantime-serde = "1.1"
@@ -139,7 +145,7 @@ prost = "0.13"
 
 # Async core libs
 tokio = { version = "1.43.0", features = ["full", "signal"] }
-tokio-cron-scheduler = { version = "0.13.0" }
+tokio-cron-scheduler = "0.13.0"
 async-trait = "0.1.88"
 futures = "0.3"
 parking_lot = "0.12"
@@ -148,25 +154,22 @@ parking_lot = "0.12"
 axum = { version = "0.8.3", features = ["multipart"] }
 axum-macros = "0.5"
 hyper = "1.6.0"
+hyper-util = { version = "0.1.21", features = ["client", "client-legacy", "http1", "tokio"] }
+hyper-rustls = { version = "0.27.5", features = ["http1", "native-tokio"] }
 tower = "0.5.2"
 tower-http = "0.5.2"
 tower-cookies = "0.10.0"
 globset = "0.4.14"
-rust-embed = "8.5.0"
-mime_guess = "2.0.4"
 reqwest = "0.12.12"
 
 # Database libs
-mongodb = "3.2.5"
-sqlx = { version = "0.8.3", features = ["sqlite", "postgres"] }
+sqlx = { version = "0.8.6", features = ["sqlite", "postgres", "rust_decimal", "uuid"] }
 pgvector = { version = "0.4", features = ["postgres"] }
-rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision"] }
+rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision", "db-postgres", "db-tokio-postgres"] }
 
 # Swagger/OpenAPI libs
 utoipa = "5.3.1"
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"] }
-# utoipa-swagger-ui-vendored = { version = "0.1.2" }
-openapi = "0.1.5"
 
 # Auth libs
 oauth2 = "4.3"
@@ -196,6 +199,7 @@ pyo3 = { version = "0.22", features = ["auto-initialize"] }
 
 # Kubernetes libs
 kube = { version = "0.90", features = ["runtime", "derive"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 k8s-openapi = { version = "0.21", features = ["v1_28"] }
 
 # Docker libs

@@ -1,0 +1,18 @@
+[package]
+name = "sigbot-strategy-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sigbot-types.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+pyo3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

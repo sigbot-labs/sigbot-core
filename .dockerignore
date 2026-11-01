@@ -1,0 +1,14 @@
+.git
+.github
+.agent
+.agents
+target
+docs
+**/__pycache__
+**/*.pyc
+.DS_Store
+**/node_modules
+web/dist
+web/test-results
+web/playwright-report
+use-cases/*/e2e/reports

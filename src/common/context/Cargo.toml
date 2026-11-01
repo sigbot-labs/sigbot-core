@@ -1,0 +1,16 @@
+[package]
+name = "common-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+regex.workspace = true
+sysinfo.workspace = true
+tokio.workspace = true
+tracing.workspace = true

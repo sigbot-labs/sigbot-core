@@ -19,7 +19,8 @@
 // This includes modifications and derived works.
 
 use local_ip_address::local_ip;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
 
 pub fn get_local_non_loopback_ip_str() -> String {
     get_local_non_loopback_ip().map(|ip| ip.to_string()).unwrap_or_default()

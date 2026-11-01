@@ -19,10 +19,15 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use common_telemetry::{debug, error, info};
+use common_telemetry::debug;
+use common_telemetry::error;
+use common_telemetry::info;
 use lazy_static::lazy_static;
-use prometheus::{CounterVec, GaugeVec, HistogramVec};
-use std::sync::{Arc, Mutex};
+use prometheus::CounterVec;
+use prometheus::GaugeVec;
+use prometheus::HistogramVec;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 /// MetricRegistrar: Metrics registration extension point trait
 /// Other modules can implement this trait to register custom metrics
@@ -30,7 +35,7 @@ use std::sync::{Arc, Mutex};
 /// # Example
 ///
 /// ```rust,no_run
-/// use sigbot_core::mgmt::apm::metrics::MetricRegistrar;
+/// use sigbot_core::mgmt::apm::metrics::{MetricRegistrar, register_custom_registrar};
 /// use prometheus::CounterVec;
 /// use lazy_static::lazy_static;
 /// // Define custom metrics

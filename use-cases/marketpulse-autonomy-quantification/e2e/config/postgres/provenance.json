@@ -1,0 +1,48 @@
+{
+  "index_digest": "sha256:98f88217cb7be56655f842d9920f90d0b4893b67b3463f93084548b433ed5c93",
+  "media_type": "application/vnd.oci.image.index.v1+json",
+  "manifest": {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "manifests": [
+      {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "size": 670,
+        "digest": "sha256:4b792f1b48d6ddc124524235ba6ffb3ea002e96e97075116ab1da8195e034ac7",
+        "platform": {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      },
+      {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "size": 670,
+        "digest": "sha256:d0c5836a6ecc8633a667db5432a55553f38a1a12b93c6026c39db0b2739797ac",
+        "platform": {
+          "architecture": "amd64",
+          "os": "linux"
+        }
+      }
+    ]
+  },
+  "image": "docker.io/timescale/timescaledb-ha",
+  "tag_observed": "pg16",
+  "verified_platform": "linux/amd64",
+  "verified_child_digest": "sha256:d0c5836a6ecc8633a667db5432a55553f38a1a12b93c6026c39db0b2739797ac",
+  "official_source": "https://github.com/timescale/timescaledb-docker-ha/blob/master/Dockerfile",
+  "scope": "Only the amd64 child is executed locally; Helm pins its multi-architecture index.",
+  "actual_extensions": [
+    {
+      "name": "timescaledb",
+      "version": "2.31.0"
+    },
+    {
+      "name": "vector",
+      "version": "0.8.7"
+    }
+  ],
+  "actual_image_id": "aa542406bb419c64f4e27cf7e3bf74adfb02cc0e938a94e3e66319d00a932634",
+  "actual_report": "reports/20261028160052/summary.md",
+  "actual_bootstrap_sha256": "4163ba38764d24f8d1cca6f49479d46c050dca6c34945bda08802f4c88f1ddd4",
+  "actual_rust_test_binary_sha256": "766cb4fc31fccb51511c38a1b49f7f3cbf2b26b4174ff6dcd52c402e94b10a18"
+}

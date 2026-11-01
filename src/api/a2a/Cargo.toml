@@ -1,0 +1,23 @@
+[package]
+name = "sigbot-a2a"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+common-context.workspace = true
+sigbot-core.workspace = true
+sigbot-types.workspace = true
+axum.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+a2a-lf = "0.4.2"
+a2a-server-lf = { version = "0.5.3", default-features = false }
