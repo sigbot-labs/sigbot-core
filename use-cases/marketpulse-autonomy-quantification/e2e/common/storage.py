@@ -1,4 +1,4 @@
-"""External S3 infrastructure bootstrap; product logservice remains the only log writer."""
+"""External S3 infrastructure bootstrap; product logger remains the only log writer."""
 import os
 
 import boto3

@@ -50,7 +50,7 @@ impl GroupFixture {
             tenant_id: Uuid::now_v7(),
         };
         let workflow_id = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,$4)")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,$4)")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)
@@ -71,7 +71,7 @@ impl GroupFixture {
             let account = Uuid::now_v7();
             let exchange = format!("SIM_CONTRACT_{index}");
             sqlx::query(
-                "INSERT INTO wlt_wallet(id,tenant_id,env,account_id,exchange,mode) VALUES($1,$2,$3,$4,$5,'backtest')",
+                "INSERT INTO ledger_info(id,tenant_id,env,account_id,exchange,mode) VALUES($1,$2,$3,$4,$5,'backtest')",
             )
             .bind(wallet)
             .bind(scope.tenant_id)
@@ -179,7 +179,7 @@ impl GroupFixture {
         orders
             .accept_with(input, |_| Ok(("USDT".into(), Decimal::from(100))))
             .await?;
-        sqlx::query("UPDATE ord_order SET state=$1,exchange_order_id=$2 WHERE wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6")
+        sqlx::query("UPDATE order_info SET state=$1,exchange_order_id=$2 WHERE wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6")
             .bind(state)
             .bind(format!("venue-{}-{}", input.node_id, input.seq))
             .bind(input.payload.wallet_id)

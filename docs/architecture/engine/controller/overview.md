@@ -13,7 +13,7 @@ business bindings, Workflows, workers, and connections. Controller owns the
 startup, update, shutdown, and health recovery lifecycle of nine tenant data
 plane components.
 
-The data plane is Backtest, Datafeed, Evaluator, Strategy, Logservice,
+The data plane is Backtest, Datafeed, Evaluator, Strategy, Logger,
 Exporter, Notifier, Order, and Wallet. Each Workflow node is an isolated
 component instance that asynchronously pub/subs through tenant/Workflow MQTT
 topics. Exchange and Messager are embedded shared libraries, not deployments.
@@ -23,7 +23,7 @@ topics. Exchange and Messager are embedded shared libraries, not deployments.
 ```mermaid
 flowchart LR
     ControlDB[(Control-plane PostgreSQL)] --> Claim[Controller Handler / Run Claim]
-    Claim --> Target[ctl_worker]
+    Claim --> Target[cluster_info]
     Target --> Prepare[Tenant Middleware Prepare]
     Prepare --> Plan[Nine-component WorkerPlan]
     Plan --> Docker[Remote Docker]
@@ -37,7 +37,7 @@ Each pass:
 
 1. Locks one active Workflow and its existing `run_id` by
    `env/tenant_id/workflow_id`.
-2. Fixes or reuses `wf_run.worker_id`, preferring a Workflow-specific worker
+2. Fixes or reuses `wf_run.cluster_id`, preferring a Workflow-specific worker
    and then a shared worker of the same tenant.
 3. Idempotently prepares configured Redis, pgvector, TimescaleDB, and EMQX on
    that worker.
@@ -53,7 +53,7 @@ Each pass:
 
 ## Tenant Middleware
 
-`ctl_worker.middleware` allows only `image` and
+`cluster_info.middleware` allows only `image` and
 `resources {cpu_millis,memory_mb,storage_gb}` for four middleware kinds. It
 does not accept arbitrary PodSpecs, privileges, hostPath, host networking, or
 command overrides. One typed configuration supplies defaults; Web form and
@@ -68,14 +68,14 @@ deletes worker/tenant middleware.
 Endpoints are injected only after worker selection. EMQX updates the node's
 Messager argument; other endpoints use the central `SIGBOT__...` configuration
 layer. Credential values exist only in a remote Kubernetes runtime Secret or
-an owner-only Docker host env-file. `ctl_worker` stores Secret key references.
+an owner-only Docker host env-file. `cluster_info` stores Secret key references.
 
 ## Provider SPI
 
 | Layer | Contract / implementation | Responsibility |
 |---|---|---|
 | Service root | `IController` / `CentralController` | Scheduler and process lifecycle |
-| Router | `WorkerRouter` | Select adapter from `ctl_worker.provider` |
+| Router | `WorkerRouter` | Select adapter from `cluster_info.provider` |
 | Runtime provider | `WorkerProvider` | Idempotent `prepare/apply/remove` |
 | Adapter | `DockerController` | Remote containers, volumes, and health |
 | Adapter | `KubernetesController` | Remote workloads, services, policies, and health |
@@ -84,7 +84,7 @@ an owner-only Docker host env-file. `ctl_worker` stores Secret key references.
 
 - Authguard solely owns users, identities, memberships, roles, and permissions.
   Controller has no global user context.
-- PostgreSQL row locking and a fixed `worker_id` prevent duplicate owners;
+- PostgreSQL row locking and a fixed `cluster_id` prevent duplicate owners;
   retries never silently move a run.
 - Controller mutates only resources whose managed-by, worker-target, and
   domain ownership labels all match.
@@ -99,5 +99,5 @@ an owner-only Docker host env-file. `ctl_worker` stores Secret key references.
 - Provider and scheduler: `src/controller/src/{controller.rs,worker/}`
 - Docker/Kubernetes adapters: `src/controller/src/{docker,kubernetes}/`
 - Worker handler/repository: `src/core/src/modules/controller/`
-- Worker API: `src/api/http/src/worker.rs`
+- Cluster CRUD API: `src/api/http/src/cluster/cluster.rs`
 - Platform Helm: `deploy/helm/sigbot/templates/{api,controller,middleware,web}/`

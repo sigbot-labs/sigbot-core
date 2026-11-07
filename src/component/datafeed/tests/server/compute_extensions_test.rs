@@ -98,7 +98,7 @@ async fn actual_timescale_compute_matches_postgres_for_multiday_windows_and_revi
     };
     let workflow_id = Uuid::now_v7();
     let run_id = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'extension contract')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'extension contract')")
         .bind(workflow_id)
         .bind(&scope.env)
         .bind(scope.tenant_id)

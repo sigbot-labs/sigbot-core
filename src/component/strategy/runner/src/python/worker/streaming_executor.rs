@@ -28,13 +28,13 @@ use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
 use pyo3::types::PyDict;
 use pyo3::types::PyModule;
+use sigbot_core::config::config::StrategyProperties;
 use sigbot_strategy_sdk::sdk::core::models::trade_signal::TradingSignal;
 use sigbot_types::exchange::models::trade_position::PlaceTradeSignal;
 use sigbot_types::strategy::models::strategy_execution::StrategyContext;
 use sigbot_types::strategy::models::strategy_execution::StrategyExecutionInput;
 use sigbot_types::strategy::models::strategy_execution::StrategyExecutionResult;
 use sigbot_types::strategy::strategy::StrategyInfo;
-use sigbot_types::strategy::StrategyArgument;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -48,7 +48,7 @@ pub struct StreamingStrategyExecutor {
     /// Strategy runtime environment variables
     pub environment: Arc<Mutex<HashMap<String, String>>>,
     /// Strategy runtime argument (including system environment variables)
-    pub argument: Arc<StrategyArgument>,
+    pub argument: Arc<StrategyProperties>,
     /// Strategy configuration
     pub configuration: Arc<StrategyInfo>,
     /// Whether init() has been called
@@ -59,7 +59,7 @@ pub struct StreamingStrategyExecutor {
 }
 
 impl StreamingStrategyExecutor {
-    pub fn new(argument: Arc<StrategyArgument>, configuration: Arc<StrategyInfo>) -> Self {
+    pub fn new(argument: Arc<StrategyProperties>, configuration: Arc<StrategyInfo>) -> Self {
         Self {
             environment: Arc::new(Mutex::new(HashMap::new())),
             argument,

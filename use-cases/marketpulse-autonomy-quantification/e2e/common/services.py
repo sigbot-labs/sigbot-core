@@ -1,7 +1,6 @@
 """Launch existing product CLI binaries; no business behavior lives in this harness."""
 from __future__ import annotations
 
-import base64
 import json
 import os
 import signal
@@ -9,6 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
+import yaml
 import psycopg
 
 from common.runtime import RuntimeConfiguration
@@ -30,11 +30,11 @@ class ProductServices:
             raise ValueError("the supplied seed is restricted to the isolated e2e environment")
         with psycopg.connect(self.context.secret("database_url_env"), connect_timeout=10) as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT env,tenant_id::text,account_id::text,mode FROM wlt_wallet WHERE id=%s", (self.configuration.wallet_id,))
+                cursor.execute("SELECT env,tenant_id::text,account_id::text,mode FROM ledger_info WHERE id=%s", (self.configuration.wallet_id,))
                 existing = cursor.fetchone()
                 if existing is not None and existing != ("e2e", scope["tenant_id"], self.configuration.account_id, self.configuration.mode):
                     raise RuntimeError("seed wallet ID belongs to another environment; use a dedicated case database")
-                cursor.execute("SELECT env,tenant_id::text FROM wf_workflow WHERE id=%s", (self.configuration.workflow_id,))
+                cursor.execute("SELECT env,tenant_id::text FROM workflow_info WHERE id=%s", (self.configuration.workflow_id,))
                 existing = cursor.fetchone()
                 if existing is not None and existing != ("e2e", scope["tenant_id"]):
                     raise RuntimeError("seed workflow ID belongs to another environment; use a dedicated case database")
@@ -89,14 +89,24 @@ class ProductServices:
         environment["SIGBOT__SECRETS__VALUES__MQTT_PASSWORD"] = mqtt_password
         processes = [record for record in records if self.is_running(record)]
         try:
-            for index, (name, command, option, config) in enumerate(self.configuration.services()):
+            for index, (name, command, config) in enumerate(self.configuration.services()):
                 if any(record["name"] == name for record in processes):
                     continue
                 self.before_start(name)
-                encoded = base64.b64encode(json.dumps(config).encode()).decode()
-                argv = [str(self.binary), command, "--messager-provider", "mqtt", f"--{option}", encoded]
+                configuration = yaml.safe_load((self.repository / "etc/sigbot.yaml").read_text())
+                messager = config.pop("messager_config")
+                messager["provider"] = "MQTT"
                 if command == "datafeed":
-                    argv += ["--datafeed-providers", name]
+                    component = config.pop("datafeed_config")
+                    component["providers"] = config.pop("providers", [])
+                else:
+                    component = config
+                components = configuration.setdefault("services", {}).setdefault("component", {})
+                components.update({"messager": messager, command: component})
+                config_path = self.manifest.parent / f"{name}.yaml"
+                config_path.write_text(yaml.safe_dump(configuration))
+                config_path.chmod(0o600)
+                argv = [str(self.binary), command, "--config", str(config_path)]
                 log_path = self.manifest.parent / f"{name}.log"
                 with log_path.open("ab") as log:
                     process = subprocess.Popen(argv, cwd=self.repository, env={**environment, "SIGBOT__MGMT__PORT": str(self.configuration.management_port + index)},

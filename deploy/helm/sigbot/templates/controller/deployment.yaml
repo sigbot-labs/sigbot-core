@@ -30,7 +30,7 @@ spec:
         - name: controller
           image: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.controller.image) | quote }}
           imagePullPolicy: {{ .Values.sigbot.image.pullPolicy }}
-          command: ["sigbot", "controller"]
+          command: ["sigbot", "controller", "--config", "/etc/sigbot/sigbot.yaml"]
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           env:
             {{- include "sigbot.configEnvironment" . | nindent 12 }}

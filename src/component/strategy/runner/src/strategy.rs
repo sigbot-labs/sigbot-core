@@ -14,16 +14,16 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use sigbot_core::config::config::get_config;
 use sigbot_core::config::config::PostgresStorageProperties;
+use sigbot_core::config::config::{get_config, StrategyProperties};
 use sigbot_core::mgmt::apm::logging::LogRouteGuard;
 use sigbot_core::mgmt::apm::logging::LogRoutes;
 use sigbot_core::modules::messager::handler::messager::MessagerHandler;
-use sigbot_logservice::s3::capture::ArchiveCapture;
-use sigbot_logservice::s3::capture::LogCaptureOptions;
-use sigbot_logservice::s3::capture::LogStreamIdentity;
-use sigbot_logservice::s3::s3::LogArchiveConfig;
-use sigbot_logservice::s3::s3::S3Logservice;
+use sigbot_logger::s3::capture::ArchiveCapture;
+use sigbot_logger::s3::capture::LogCaptureOptions;
+use sigbot_logger::s3::capture::LogStreamIdentity;
+use sigbot_logger::s3::s3::LogArchiveConfig;
+use sigbot_logger::s3::s3::S3Logger;
 use sigbot_messager::messager::IMessager;
 use sigbot_messager::messager::OutboxRelay;
 use sigbot_strategy_sdk::sdk::runtime::SerialStrategy;
@@ -40,7 +40,6 @@ use sigbot_types::strategy::execution::QueryOperation;
 use sigbot_types::strategy::execution::StrategyEvent;
 use sigbot_types::strategy::execution::StrategyEventData;
 use sigbot_types::strategy::strategy::StrategyProvider;
-use sigbot_types::strategy::StrategyArgument;
 use sigbot_types::Uuid;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -96,7 +95,7 @@ impl StrategyNode {
         storage: &PostgresStorageProperties,
         config: StrategyNodeConfig,
         producer_trace: ProducerTrace,
-        archive: Option<Arc<S3Logservice>>,
+        archive: Option<Arc<S3Logger>>,
     ) -> Result<Self> {
         let virtual_clock = config.virtual_clock;
         config.identity.scope.validate()?;
@@ -107,7 +106,7 @@ impl StrategyNode {
         storage: &PostgresStorageProperties,
         mut config: StrategyNodeConfig,
         producer_trace: ProducerTrace,
-        archive: Option<Arc<S3Logservice>>,
+        archive: Option<Arc<S3Logger>>,
     ) -> Result<Self> {
         config.virtual_clock = true;
         Self::with_log_archive(storage, config, producer_trace, archive).await
@@ -117,7 +116,7 @@ impl StrategyNode {
         storage: &PostgresStorageProperties,
         config: StrategyNodeConfig,
         producer_trace: ProducerTrace,
-        archive: Option<Arc<S3Logservice>>,
+        archive: Option<Arc<S3Logger>>,
         virtual_clock: bool,
     ) -> Result<Self> {
         ensure!(
@@ -462,7 +461,7 @@ pub struct StrategyService {
 }
 
 impl StrategyService {
-    pub async fn start(argument: &StrategyArgument, messager: Arc<dyn IMessager>) -> Result<Arc<Self>> {
+    pub async fn start(argument: &StrategyProperties, messager: Arc<dyn IMessager>) -> Result<Arc<Self>> {
         common_telemetry::readiness::RuntimeReadiness::business("strategy", false);
         let properties = argument
             .properties
@@ -475,7 +474,7 @@ impl StrategyService {
         )?;
         let archive = match &config.log_archive {
             Some(config) => {
-                Some(sigbot_logservice::server::SigbotLogServer::archive(config, &get_config().storage.postgres).await?)
+                Some(sigbot_logger::server::SigbotLogServer::archive(config, &get_config().storage.postgres).await?)
             }
             None => None,
         };

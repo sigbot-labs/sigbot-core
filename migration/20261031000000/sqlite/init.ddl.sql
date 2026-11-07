@@ -1,28 +1,113 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE cfg_connection (
+-- Ten domain roots. Workflow DAGs are atomic JSON; provider channels need no child tables.
+CREATE TABLE tenant_info (
+    id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    name TEXT NOT NULL,
+    description TEXT,
+    configuration TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE datasource_info (
     id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
     env TEXT NOT NULL,
-    tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id),
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     transport TEXT NOT NULL,
-    configuration TEXT NOT NULL CHECK(json_extract(configuration,'$.kind') IS NOT NULL),
-    secret_ref TEXT NOT NULL,
+    configuration TEXT NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
     version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(env, tenant_id, name),
     UNIQUE(env, tenant_id, id)
 );
 
-CREATE TABLE wf_workflow (
+CREATE TABLE exchange_info (
+    id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration TEXT NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE strategy_info (
+    id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    code TEXT NOT NULL DEFAULT '',
+    default_parameters TEXT NOT NULL DEFAULT '{}',
+    configuration TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE notifier_info (
+    id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration TEXT NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE exporter_info (
+    id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration TEXT NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE workflow_info (
     id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
     env TEXT NOT NULL,
     tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'STOPPED'
         CHECK(status IN ('PENDING','STARTING','RUNNING','STOPPING','STOPPED','SUCCESS','FAILED')),
-    flow_json TEXT NOT NULL DEFAULT '{"nodes":[],"connections":[]}',
+    dag_config TEXT NOT NULL DEFAULT '{"nodes":[],"connections":[]}',
     properties TEXT,
     secrets TEXT,
     description TEXT,
@@ -34,10 +119,10 @@ CREATE TABLE wf_workflow (
     UNIQUE(env, tenant_id, id)
 );
 
-CREATE TABLE ctl_worker (
+CREATE TABLE cluster_info (
     id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
     env TEXT NOT NULL,
-    tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
+    tenant_id TEXT NOT NULL REFERENCES tenant_info(id) CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
     workflow_id TEXT CHECK(workflow_id IS NULL OR (length(workflow_id)=36 AND substr(workflow_id,15,1)='7')),
     name TEXT NOT NULL,
     provider TEXT NOT NULL CHECK(provider IN ('docker','kubernetes')),
@@ -54,36 +139,12 @@ CREATE TABLE ctl_worker (
     created_by TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by TEXT NOT NULL,
+    UNIQUE(env, tenant_id, id),
     FOREIGN KEY(env, tenant_id, workflow_id)
-        REFERENCES wf_workflow(env, tenant_id, id)
+        REFERENCES workflow_info(env, tenant_id, id)
 );
-CREATE UNIQUE INDEX ctl_worker_scope_name_idx
-    ON ctl_worker(env, tenant_id, IFNULL(workflow_id, ''), name);
-CREATE INDEX ctl_worker_available_idx
-    ON ctl_worker(env, tenant_id, status, priority, workflow_id)
-    WHERE status='online';
 
-CREATE TABLE wf_run (
-    run_id TEXT PRIMARY KEY CHECK(length(run_id)=36 AND substr(run_id,15,1)='7'),
-    workflow_id TEXT NOT NULL CHECK(length(workflow_id)=36 AND substr(workflow_id,15,1)='7'),
-    env TEXT NOT NULL,
-    tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
-    worker_id TEXT REFERENCES ctl_worker(id),
-    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
-    state TEXT NOT NULL CHECK(state IN ('queued','running','success','failed','stopped')),
-    params TEXT NOT NULL DEFAULT '{}',
-    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ended_at TEXT,
-    replay_of TEXT REFERENCES wf_run(run_id),
-    FOREIGN KEY(env, tenant_id, workflow_id)
-        REFERENCES wf_workflow(env, tenant_id, id),
-    UNIQUE(env, tenant_id, workflow_id, run_id)
-);
-CREATE INDEX wf_run_scope_idx
-    ON wf_run(env, tenant_id, workflow_id, started_at);
-
-
-CREATE TABLE wlt_wallet (
+CREATE TABLE ledger_info (
     id TEXT PRIMARY KEY CHECK(length(id)=36 AND substr(id,15,1)='7'),
     env TEXT NOT NULL,
     tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
@@ -98,8 +159,70 @@ CREATE TABLE wlt_wallet (
     UNIQUE(env, tenant_id, id),
     UNIQUE(env, tenant_id, account_id)
 );
+
+CREATE TABLE order_info (
+    id TEXT NOT NULL DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-7' || substr(lower(hex(randomblob(2))),2) || '-8' || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))) UNIQUE CHECK(length(id)=36 AND substr(id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    wallet_id TEXT NOT NULL,
+    producer_node_id INTEGER NOT NULL,
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL CHECK(seq >= 0),
+    exchange TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    intent TEXT NOT NULL CHECK(json_valid(intent)),
+    reserve_asset TEXT NOT NULL,
+    reserve_amount NUMERIC NOT NULL CHECK(reserve_amount > 0),
+    state TEXT NOT NULL CHECK(state IN ('pending','reserved','submitting','acknowledged','unknown','rejected','partially_filled','filled','cancelled')),
+    exchange_order_id TEXT,
+    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
+    wallet_request_seq INTEGER CHECK(wallet_request_seq >= 0),
+    wallet_release_seq INTEGER CHECK(wallet_release_seq >= 0),
+    prepared_submission TEXT CHECK(prepared_submission IS NULL OR (
+        json_valid(prepared_submission)
+        AND json_extract(prepared_submission,'$.venue_order_id') IS NOT NULL
+        AND json_extract(prepared_submission,'$.payload') IS NOT NULL
+        AND length(CAST(prepared_submission AS BLOB)) <= 1048576
+    )),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(env,tenant_id,wallet_id,producer_node_id,run_id,seq),
+    FOREIGN KEY(env,tenant_id,wallet_id) REFERENCES ledger_info(env,tenant_id,id),
+    FOREIGN KEY(env,tenant_id,run_id) REFERENCES wf_run(env,tenant_id,run_id),
+    UNIQUE(wallet_id,exchange,exchange_order_id)
+);
+
+-- Internal execution, recovery and immutable audit storage.
+
+CREATE UNIQUE INDEX cluster_info_scope_name_idx
+    ON cluster_info(env, tenant_id, IFNULL(workflow_id, ''), name);
+CREATE INDEX cluster_info_available_idx
+    ON cluster_info(env, tenant_id, status, priority, workflow_id)
+    WHERE status='online';
+
+CREATE TABLE wf_run (
+    run_id TEXT PRIMARY KEY CHECK(length(run_id)=36 AND substr(run_id,15,1)='7'),
+    workflow_id TEXT NOT NULL CHECK(length(workflow_id)=36 AND substr(workflow_id,15,1)='7'),
+    env TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(tenant_id)=36 AND substr(tenant_id,15,1)='7'),
+    cluster_id TEXT,
+    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
+    state TEXT NOT NULL CHECK(state IN ('queued','running','success','failed','stopped')),
+    params TEXT NOT NULL DEFAULT '{}',
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at TEXT,
+    replay_of TEXT REFERENCES wf_run(run_id),
+    FOREIGN KEY(env,tenant_id,cluster_id) REFERENCES cluster_info(env,tenant_id,id),
+    UNIQUE(env,tenant_id,run_id),
+    FOREIGN KEY(env, tenant_id, workflow_id)
+        REFERENCES workflow_info(env, tenant_id, id),
+    UNIQUE(env, tenant_id, workflow_id, run_id)
+);
+CREATE INDEX wf_run_scope_idx
+    ON wf_run(env, tenant_id, workflow_id, started_at);
+
 CREATE TABLE wlt_ledger (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     order_id TEXT NOT NULL,
     trade_id TEXT NOT NULL,
     symbol TEXT NOT NULL,
@@ -116,7 +239,7 @@ CREATE TABLE wlt_ledger (
     CHECK(length(trade_id)=36 AND substr(trade_id,15,1)='7')
 );
 CREATE TABLE wlt_balance (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     asset TEXT NOT NULL,
     available TEXT NOT NULL DEFAULT '0',
     locked TEXT NOT NULL DEFAULT '0',
@@ -124,7 +247,7 @@ CREATE TABLE wlt_balance (
     PRIMARY KEY(wallet_id, asset)
 );
 CREATE TABLE wlt_position (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     symbol TEXT NOT NULL,
     side TEXT NOT NULL CHECK(side IN ('LONG','SHORT')),
     size TEXT NOT NULL DEFAULT '0',
@@ -133,18 +256,11 @@ CREATE TABLE wlt_position (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(wallet_id, symbol, side)
 );
-CREATE TABLE wlt_equity_snapshot (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
-    equity TEXT NOT NULL,
-    ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(wallet_id, ts)
-);
-CREATE INDEX wlt_wallet_tenant_idx ON wlt_wallet(tenant_id, env);
-CREATE INDEX wlt_wallet_exchange_idx ON wlt_wallet(exchange, mode);
+CREATE INDEX wlt_wallet_tenant_idx ON ledger_info(tenant_id, env);
+CREATE INDEX wlt_wallet_exchange_idx ON ledger_info(exchange, mode);
 CREATE INDEX wlt_ledger_order_idx ON wlt_ledger(wallet_id, order_id);
 CREATE INDEX wlt_ledger_symbol_time_idx ON wlt_ledger(wallet_id, symbol, ts);
 CREATE INDEX wlt_position_symbol_idx ON wlt_position(symbol);
-CREATE INDEX wlt_equity_snapshot_time_idx ON wlt_equity_snapshot(wallet_id, ts);
 
 CREATE TABLE wf_checkpoint (
     env TEXT NOT NULL,
@@ -189,7 +305,7 @@ CREATE TABLE wf_timer (
 CREATE INDEX wf_timer_due_idx ON wf_timer(env,tenant_id,run_id,scheduled_at,node_id,seq) WHERE state='pending';
 
 CREATE TABLE wlt_reservation (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     producer_node_id INTEGER NOT NULL,
     run_id TEXT NOT NULL,
     seq INTEGER NOT NULL CHECK(seq >= 0),
@@ -204,7 +320,7 @@ CREATE TABLE wlt_reservation (
 );
 
 CREATE TABLE wlt_journal (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     producer_node_id INTEGER NOT NULL,
     run_id TEXT NOT NULL,
     seq INTEGER NOT NULL CHECK(seq >= 0),
@@ -402,45 +518,16 @@ CREATE INDEX bt_order_resting_idx
     ON bt_order(env,tenant_id,matching_node_id,run_id,accepted_at,producer_node_id,seq,account_id)
     WHERE state='accepted';
 
-CREATE TABLE ord_order (
-    env TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    wallet_id TEXT NOT NULL,
-    producer_node_id INTEGER NOT NULL,
-    run_id TEXT NOT NULL REFERENCES wf_run(run_id),
-    seq INTEGER NOT NULL CHECK(seq >= 0),
-    exchange TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    intent TEXT NOT NULL CHECK(json_valid(intent)),
-    reserve_asset TEXT NOT NULL,
-    reserve_amount NUMERIC NOT NULL CHECK(reserve_amount > 0),
-    state TEXT NOT NULL CHECK(state IN ('pending','reserved','submitting','acknowledged','unknown','rejected','partially_filled','filled','cancelled')),
-    exchange_order_id TEXT,
-    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
-    wallet_request_seq INTEGER CHECK(wallet_request_seq >= 0),
-    wallet_release_seq INTEGER CHECK(wallet_release_seq >= 0),
-    prepared_submission TEXT CHECK(prepared_submission IS NULL OR (
-        json_valid(prepared_submission)
-        AND json_extract(prepared_submission,'$.venue_order_id') IS NOT NULL
-        AND json_extract(prepared_submission,'$.payload') IS NOT NULL
-        AND length(CAST(prepared_submission AS BLOB)) <= 1048576
-    )),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(env,tenant_id,wallet_id,producer_node_id,run_id,seq),
-    FOREIGN KEY(env,tenant_id,wallet_id) REFERENCES wlt_wallet(env,tenant_id,id),
-    UNIQUE(wallet_id,exchange,exchange_order_id)
-);
 CREATE UNIQUE INDEX ord_order_prepared_venue_idx
-    ON ord_order(wallet_id,exchange,json_extract(prepared_submission,'$.venue_order_id'))
+    ON order_info(wallet_id,exchange,json_extract(prepared_submission,'$.venue_order_id'))
     WHERE prepared_submission IS NOT NULL;
-CREATE TRIGGER ord_order_prepared_immutable BEFORE UPDATE OF prepared_submission ON ord_order
+CREATE TRIGGER ord_order_prepared_immutable BEFORE UPDATE OF prepared_submission ON order_info
 WHEN OLD.prepared_submission IS NOT NULL AND NEW.prepared_submission IS NOT OLD.prepared_submission BEGIN
     SELECT RAISE(ABORT,'prepared venue submission is immutable');
 END;
 
 CREATE TABLE ord_execution (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     exchange TEXT NOT NULL,
     exchange_trade_id TEXT NOT NULL,
     exchange_order_id TEXT NOT NULL,
@@ -496,7 +583,7 @@ CREATE TABLE ord_execution_leg (
     group_seq INTEGER NOT NULL,
     leg_index INTEGER NOT NULL,
     order_node_id INTEGER NOT NULL,
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     intent_seq INTEGER NOT NULL,
     intent TEXT NOT NULL CHECK(json_valid(intent)),
     rejected INTEGER NOT NULL DEFAULT 0 CHECK(rejected IN (0,1)),
@@ -511,7 +598,7 @@ CREATE INDEX ord_execution_group_pending_idx
     WHERE state NOT IN ('completed','held','compensated','compensation_failed');
 
 CREATE TABLE ord_venue_checkpoint (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     producer_node_id INTEGER NOT NULL,
     run_id TEXT NOT NULL REFERENCES wf_run(run_id),
     seq INTEGER NOT NULL CHECK(seq >= 0),
@@ -523,7 +610,7 @@ CREATE TABLE ord_venue_checkpoint (
 );
 
 CREATE TABLE ord_venue_observation (
-    wallet_id TEXT NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id TEXT NOT NULL REFERENCES ledger_info(id),
     exchange TEXT NOT NULL,
     kind TEXT NOT NULL CHECK(kind IN ('execution','status')),
     venue_reference TEXT NOT NULL,
@@ -581,20 +668,6 @@ CREATE TABLE ntf_delivery (
 CREATE INDEX ntf_delivery_pending_idx
     ON ntf_delivery(env,tenant_id,workflow_id,owner_node_id,state,available_at);
 
-CREATE TABLE ntf_read (
-    env TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    run_id TEXT NOT NULL,
-    producer_node_id INTEGER NOT NULL,
-    seq INTEGER NOT NULL,
-    channel TEXT NOT NULL,
-    recipient TEXT NOT NULL,
-    read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(env,tenant_id,run_id,producer_node_id,seq,channel,recipient),
-    FOREIGN KEY(env,tenant_id,producer_node_id,run_id,seq,channel,recipient)
-        REFERENCES ntf_delivery(env,tenant_id,producer_node_id,run_id,seq,channel,recipient)
-);
-
 CREATE TABLE exp_checkpoint (
     env TEXT NOT NULL,
     tenant_id TEXT NOT NULL,
@@ -605,5 +678,5 @@ CREATE TABLE exp_checkpoint (
     cursor TEXT NOT NULL CHECK(json_valid(cursor)),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(env,tenant_id,connection_id,run_id,partition_key),
-    FOREIGN KEY(env,tenant_id,connection_id) REFERENCES cfg_connection(env,tenant_id,id)
+    FOREIGN KEY(env,tenant_id,connection_id) REFERENCES exporter_info(env,tenant_id,id)
 );

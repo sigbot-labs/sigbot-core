@@ -54,7 +54,7 @@ impl IGenericRepository<WorkflowInfo> for WorkflowSQLiteRepository {
         anyhow::ensure!(workflow.tenant_id.is_some(), "explicit workflow tenant scope required");
         let result = dynamic_sqlite_query!(
             workflow,
-            "wf_workflow",
+            "workflow_info",
             self.inner.get_pool(),
             "updated_at",
             page,
@@ -81,12 +81,12 @@ impl IGenericRepository<WorkflowInfo> for WorkflowSQLiteRepository {
         let id = workflow.base.id.ok_or_else(|| Error::msg("workflow id required"))?;
         let flow = workflow.flow_info.as_ref().map(serde_json::to_string).transpose()?;
         let result = sqlx::query_scalar::<_, String>(
-            "INSERT INTO wf_workflow (id, name, status, flow_json, properties, secrets, description, created_at, updated_at, created_by, updated_by, del_flag, tenant_id, env)
+            "INSERT INTO workflow_info (id, name, status, dag_config, properties, secrets, description, created_at, updated_at, created_by, updated_by, del_flag, tenant_id, env)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = excluded.status,
-             flow_json = excluded.flow_json, properties = excluded.properties, secrets = excluded.secrets,
+             dag_config = excluded.dag_config, properties = excluded.properties, secrets = excluded.secrets,
              description = excluded.description, updated_at = excluded.updated_at, updated_by = excluded.updated_by
-             WHERE wf_workflow.del_flag = 0 AND wf_workflow.tenant_id = excluded.tenant_id AND wf_workflow.env = excluded.env RETURNING id")
+             WHERE workflow_info.del_flag = 0 AND workflow_info.tenant_id = excluded.tenant_id AND workflow_info.env = excluded.env RETURNING id")
             .bind(id.to_string()).bind(&workflow.name).bind(workflow.status.as_ref().map(|value| value.as_str()))
             .bind(flow).bind(workflow.properties.as_ref().map(serde_json::to_string).transpose()?)
             .bind(workflow.secrets.as_ref().map(serde_json::to_string).transpose()?)
@@ -108,7 +108,7 @@ impl IGenericRepository<WorkflowInfo> for WorkflowSQLiteRepository {
         workflow.base.pre_update(actor).await;
         let flow = workflow.flow_info.as_ref().map(serde_json::to_string).transpose()?;
         let rows = sqlx::query(
-            "UPDATE wf_workflow SET name = ?, status = ?, flow_json = ?,
+            "UPDATE workflow_info SET name = ?, status = ?, dag_config = ?,
              properties = ?, secrets = ?, description = ?, updated_at = ?, updated_by = ?, del_flag = ?
              WHERE id = ? AND tenant_id = ? AND env = ? AND del_flag = 0 AND (status = ? OR ? NOT IN ('STOPPED','SUCCESS','FAILED'))",
         )

@@ -26,16 +26,20 @@ use std::collections::HashMap;
 // Manual impl for decode.
 // #[derive(Serialize, Deserialize, Clone, Debug, sqlx::sqlite::FromRow, sqlx::sqlite::Decode)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema, Default)]
+#[serde(deny_unknown_fields)]
 pub struct MessagerConfig {
+    #[serde(default)]
+    pub provider: MessagerProvider,
     pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema, Default)]
 pub enum MessagerProvider {
     #[serde(rename = "LOCAL")]
     Local, // Local queue based (in-memory), for testing standalone mode.
     #[serde(rename = "MQTT")]
+    #[default]
     Mqtt, // MQTT based, for production.
 }
 

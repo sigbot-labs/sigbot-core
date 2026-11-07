@@ -66,7 +66,7 @@ class ReplayVerifier:
                 pending = connection.execute("SELECT COUNT(*) FROM msg_outbox WHERE run_id=%s AND state<>'sent'",
                                              (target.run_id,)).fetchone()[0]
                 assert pending == 0, "replay completed before outgoing effects reached the real broker"
-                incomplete = connection.execute("SELECT COUNT(*) FROM ord_order WHERE run_id=%s AND state<>'filled'",
+                incomplete = connection.execute("SELECT COUNT(*) FROM order_info WHERE run_id=%s AND state<>'filled'",
                                                 (target.run_id,)).fetchone()[0]
                 assert incomplete == 0, "replay completed before execution acknowledgement was reconciled"
                 journals = connection.execute("SELECT COUNT(*) FROM wlt_journal WHERE run_id=%s AND source='execution'",

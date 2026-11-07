@@ -4,20 +4,18 @@ use crate::ledger::account::WalletAccountProcessor;
 use common_context::ApplicationContext;
 use sigbot_core::config::config::get_config;
 use sigbot_messager::server::MessagerServer;
-use sigbot_types::wallet::WalletArgument;
-use sigbot_types::ArgumentConfig;
 
 pub struct SigbotWalletServer;
 
 impl SigbotWalletServer {
-    pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        let encoded = matches
-            .get_one::<String>("WALLET_MANAGER_CONFIGURATION")
-            .expect("wallet host configuration required");
-        let argument =
-            WalletArgument::from_json(&ArgumentConfig::decode(encoded).expect("invalid wallet configuration encoding"))
-                .expect("invalid wallet configuration");
-        let messager = MessagerServer::connect(matches, argument.messager_config.clone())
+    pub async fn startup() {
+        let argument = sigbot_core::config::config::get_config()
+            .services
+            .component
+            .wallet
+            .clone()
+            .expect("services.component.wallet required");
+        let messager = MessagerServer::connect(get_config().services.component.messager.clone())
             .await
             .expect("wallet host messager initialization failed");
         let config = get_config();

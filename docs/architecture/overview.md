@@ -21,13 +21,13 @@ the deterministic boundary emits no opening intent.
 
 ```mermaid
 flowchart LR
-    Clients[Clients / Researcher] --> API[SigbotAPIServer]
+    Clients[Clients / Researcher] --> API[SigbotHttpStarter]
     API --> CoreDB[(Core control-plane DB)]
-    Controller[SigbotController] --> CoreDB
+    Controller[SigbotControllerStarter] --> CoreDB
 
-    Sources[Markets / News] --> Datafeed[Tenant SigbotDatafeed]
+    Sources[Markets / News] --> Datafeed[Tenant SigbotDatafeedStarter]
     Controller -. logical binding .-> Datafeed
-    Controller -. strategy-scoped runtime .-> Evaluator[SigbotEvaluator]
+    Controller -. strategy-scoped runtime .-> Evaluator[SigbotEvaluatorStarter]
     Controller -. strategy-scoped runtime .-> Strategy[SigbotStrategyRunner]
 
     Datafeed -->|DatafeedEvent| Evaluator
@@ -55,7 +55,7 @@ configuration; Controller owns startup, update, shutdown, and health recovery
 for the nine tenant components. Authguard remains the sole owner of users,
 memberships, roles, and permissions.
 
-The data plane consists of Backtest, Datafeed, Evaluator, Strategy, Logservice,
+The data plane consists of Backtest, Datafeed, Evaluator, Strategy, Logger,
 Exporter, Notifier, Order, and Wallet. Controller dynamically deploys these nine
 components with tenant/Workflow resource isolation; they asynchronously pub/sub
 the different Workflow node types. A long-running tenant-shared Workflow uses
@@ -118,7 +118,7 @@ an unknown node kind, bypass Order/Wallet, or create a direct AI-to-Exchange edg
 | Backtest | Tenant/Workflow component | Reuses the decision contracts with virtual time and simulated exchange | [Backtest](engine/backtest/overview.md) |
 | Notifier | Tenant/Workflow component | Idempotently delivers Email, Telegram, and in-product notifications | [Notifier](engine/notifier/overview.md) |
 | Exporter | Tenant/Workflow component | Cursor-based, batched export with retries and backpressure | [Exporter](engine/exporter/overview.md) |
-| Logservice | Tenant/Workflow component | Durably buffers and archives Python/Rust logs outside the decision path | [Logservice](engine/log-service/overview.md) |
+| Logger | Tenant/Workflow component | Durably buffers and archives Python/Rust logs outside the decision path | [Logger](engine/logger/overview.md) |
 
 Tenant, user, identity, membership, role, permission, policy, and logical
 namespace semantics have one canonical owner:
@@ -153,8 +153,8 @@ deployed Workflow nodes.
 
 | Module | Service root | Primary extension ports |
 |---|---|---|
-| APIServer | `SigbotAPIServer` | Core handlers and repositories exposed through HTTP/A2A/MCP adapters |
-| Controller | `SigbotController` | `WorkerProvider` |
+| APIServer | `SigbotHttpStarter` | Core handlers and repositories exposed through HTTP/A2A/MCP adapters |
+| Controller | `SigbotControllerStarter` | `WorkerProvider` |
 | Datafeed | `SigbotDatafeedIngestor` | `IDatafeed` |
 | Backtest | `SigbotBacktestServer` | `ReplaySource`, `ReplayDecision`, `IExchange` |
 | Evaluator | `SigbotEvaluatorRunner` | `IEvaluator` |
@@ -241,7 +241,7 @@ deployed Workflow nodes.
 | Order and Wallet | Reservation-first ordering, hard risk, prepared submissions, unknown-result reconciliation, immutable executions, balanced ledger/projections, and transactional Inbox/Outbox are implemented | Real-money venue settlement, long-running reconciliation, corporate actions/margin, and genuine cross-venue compensation remain unaccepted |
 | Backtest | Frozen history, virtual time, replay barriers, deterministic matching/fees, resting limit orders, and isolated replay are implemented | Depth queues, realistic partial liquidity/latency, and all model-shard equivalence are outside the current simulator |
 | Notifier and Exporter | In-app/Email/Telegram delivery state and Kafka/Google Sheets sinks have typed requests, checkpoints, retries, and idempotency boundaries | Real SMTP/Telegram/Sheets credentials and Kafka multi-broker failover have not been accepted |
-| Logservice | SQLite WAL durable ACK, immutable conditional S3 chunks, hash verification, PostgreSQL cursors, and Python/Rust capture are implemented | Host-volume loss, production bucket retention/replication, and capture from every Rust host remain open |
+| Logger | SQLite WAL durable ACK, immutable conditional S3 chunks, hash verification, PostgreSQL cursors, and Python/Rust capture are implemented | Host-volume loss, production bucket retention/replication, and capture from every Rust host remain open |
 | Messager | MQTT QoS 1 persistent sessions, manual ACK, scoped topics, Inbox/Outbox, replay, backpressure, and temporary reply pairing are implemented | Broker-disk disaster and sustained-load tests remain open; Local transport is intentionally not durability-equivalent |
 
 The component documents own their detailed contracts and capability status.

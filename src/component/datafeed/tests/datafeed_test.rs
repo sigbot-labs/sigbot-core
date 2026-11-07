@@ -12,7 +12,7 @@ async fn source_revisions_preserve_canonical_delivery_and_allocate_distinct_sequ
     let env = format!("e2e-source-revision-{}", Utc::now().timestamp_micros());
     let tenant_id = Uuid::now_v7();
     let workflow = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'revision contract')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'revision contract')")
         .bind(workflow)
         .bind(&env)
         .bind(tenant_id)

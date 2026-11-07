@@ -18,28 +18,4 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messager::messager::MessagerConfig;
-use anyhow::Context;
-use anyhow::Error;
-use serde::Deserialize;
-use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
-
 pub mod evaluator;
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct EvaluatorArgument {
-    pub messager_config: Arc<MessagerConfig>,
-    pub properties: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
-}
-
-impl EvaluatorArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse evaluator manager info from JSON")
-    }
-}
-
-#[cfg(test)]
-mod tests {}

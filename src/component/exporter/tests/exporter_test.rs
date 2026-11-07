@@ -43,7 +43,11 @@ impl Fixture {
         };
         let workflow_id = Uuid::now_v7();
         let run_id = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'export owner fixture')")
+        sqlx::query("INSERT INTO tenant_info(id,name) VALUES($1,'export owner tenant')")
+            .bind(scope.tenant_id)
+            .execute(&pool)
+            .await?;
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'export owner fixture')")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)
@@ -56,7 +60,7 @@ impl Fixture {
             .bind(scope.tenant_id)
             .execute(&pool)
             .await?;
-        let connection: Uuid = sqlx::query_scalar("INSERT INTO cfg_connection(env,tenant_id,name,provider,transport,configuration,secret_ref) VALUES($1,$2,'export contract','KAFKA','kafka',$3,'local-isolated-broker') RETURNING id")
+        let connection: Uuid = sqlx::query_scalar("INSERT INTO exporter_info(env,tenant_id,name,provider,transport,configuration,secret_ref) VALUES($1,$2,'export contract','KAFKA','kafka',$3,'local-isolated-broker') RETURNING id")
             .bind(&scope.env).bind(scope.tenant_id)
             .bind(json!({"kind":"exporter","endpoint":"kafka://isolated"}))
             .fetch_one(&pool)
@@ -202,7 +206,7 @@ async fn same_node_two_workflows_have_independent_inbox_and_outbox_owners() -> R
     let mut config: Value = serde_json::from_str(&f.properties["runtime_config"])?;
     let other_workflow = Uuid::now_v7();
     let other_run = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'second export owner')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'second export owner')")
         .bind(other_workflow)
         .bind(&f.scope.env)
         .bind(f.scope.tenant_id)

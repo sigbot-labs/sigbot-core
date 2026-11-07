@@ -1,6 +1,7 @@
 //! Explicit trusted identity passed from HTTP middleware to business handlers.
 use anyhow::ensure;
 use anyhow::Result;
+use authguard_adapter_rust::AccessGrantSet;
 use authguard_adapter_rust::RequestAccess;
 use authguard_adapter_rust::ResourceUrn;
 use authguard_adapter_rust::UrnPattern;
@@ -14,6 +15,24 @@ pub struct RequestIdentity {
 }
 
 impl RequestIdentity {
+    /// Protocol adapters may carry this value only after Authguard verification.
+    pub fn to_verified_value(&self) -> serde_json::Value {
+        serde_json::json!({"principal_id":self.access.principal_id,"action":self.access.action,
+            "resource_urn":self.access.resource_urn,"allow":self.access.grants.allow_resource_urns,"deny":self.access.grants.deny_resource_urns})
+    }
+
+    pub fn from_verified_value(value: serde_json::Value) -> Result<Self> {
+        Self::new(RequestAccess {
+            principal_id: serde_json::from_value(value["principal_id"].clone())?,
+            action: serde_json::from_value(value["action"].clone())?,
+            resource_urn: serde_json::from_value(value["resource_urn"].clone())?,
+            grants: AccessGrantSet::new(
+                serde_json::from_value(value["allow"].clone())?,
+                serde_json::from_value(value["deny"].clone())?,
+            ),
+        })
+    }
+
     pub fn new(access: RequestAccess) -> Result<Self> {
         ensure!(!access.principal_id.is_empty(), "missing principal");
         let resource = ResourceUrn::from_str(&access.resource_urn)?;

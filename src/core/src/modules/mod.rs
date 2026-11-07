@@ -21,6 +21,7 @@
 pub mod backtest;
 pub mod controller;
 pub mod datafeed;
+pub mod domain;
 pub mod evaluator;
 pub mod exporter;
 pub mod notifier;
@@ -29,6 +30,6 @@ pub mod strategy;
 pub mod wallet;
 pub mod workflow;
 
-pub mod logservice;
+pub mod logger;
 
 pub mod messager;

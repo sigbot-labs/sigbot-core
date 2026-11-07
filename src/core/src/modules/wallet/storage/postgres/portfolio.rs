@@ -31,7 +31,7 @@ impl WalletPortfolioPostgresRepository {
             .execute(&mut *transaction)
             .await?;
         let wallet =
-            sqlx::query("SELECT id,portfolio_version FROM wlt_wallet WHERE env=$1 AND tenant_id=$2 AND account_id=$3")
+            sqlx::query("SELECT id,portfolio_version FROM ledger_info WHERE env=$1 AND tenant_id=$2 AND account_id=$3")
                 .bind(&scope.env)
                 .bind(scope.tenant_id)
                 .bind(account_id)
@@ -81,7 +81,7 @@ impl WalletPortfolioPostgresRepository {
         producer_traceparent: String,
     ) -> Result<()> {
         let version: i64 = sqlx::query_scalar(
-            "UPDATE wlt_wallet SET portfolio_version=portfolio_version+1 WHERE id=$1 RETURNING portfolio_version",
+            "UPDATE ledger_info SET portfolio_version=portfolio_version+1 WHERE id=$1 RETURNING portfolio_version",
         )
         .bind(wallet_id)
         .fetch_one(&mut **tx)

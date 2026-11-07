@@ -18,7 +18,7 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::storage::PostgresPropertiesBase;
+use super::config::PostgresPropertiesBase;
 use serde::Deserialize;
 use serde::Serialize;
 use std::ops::Deref;

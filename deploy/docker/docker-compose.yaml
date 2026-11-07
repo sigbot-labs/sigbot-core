@@ -90,7 +90,7 @@ services:
     cpus: '0.5'
   api:
     image: ${SIGBOT_IMAGE:?select images using make docker-up}
-    command: [api]
+    command: [api, --config, /app/config/sigbot.yaml]
     env_file: ${SIGBOT_ENV_FILE:-.env}
     environment:
       SIGBOT_CFG_PATH: /app/config/sigbot.yaml
@@ -120,9 +120,45 @@ services:
     cpus: '2'
     pids_limit: 256
     init: true
+  mcp:
+    profiles: [protocols]
+    image: ${SIGBOT_IMAGE:?select images using make docker-up}
+    command: [mcp, --config, /app/config/sigbot.yaml]
+    env_file: ${SIGBOT_ENV_FILE:-.env}
+    environment:
+      <<: *platform-environment
+      SIGBOT__SERVICES__PLATFORM__API__MCP__ENABLED: 'true'
+      SIGBOT__SERVICES__PLATFORM__API__MCP__BIND_ADDRESS: '0.0.0.0:9002'
+      SIGBOT__SERVICES__PLATFORM__API__MCP__PUBLIC_URL: ${SIGBOT_MCP_PUBLIC_URL:-http://127.0.0.1:9002/mcp}
+    ports: ['127.0.0.1:9002:9002']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    mem_limit: 1g
+    cpus: '1'
+    pids_limit: 256
+    init: true
+  a2a:
+    profiles: [protocols]
+    image: ${SIGBOT_IMAGE:?select images using make docker-up}
+    command: [a2a, --config, /app/config/sigbot.yaml]
+    env_file: ${SIGBOT_ENV_FILE:-.env}
+    environment:
+      <<: *platform-environment
+      SIGBOT__SERVICES__PLATFORM__API__A2A__ENABLED: 'true'
+      SIGBOT__SERVICES__PLATFORM__API__A2A__BIND_ADDRESS: '0.0.0.0:9003'
+      SIGBOT__SERVICES__PLATFORM__API__A2A__PUBLIC_URL: ${SIGBOT_A2A_PUBLIC_URL:-http://127.0.0.1:9003/a2a}
+    ports: ['127.0.0.1:9003:9003']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    mem_limit: 1g
+    cpus: '1'
+    pids_limit: 256
+    init: true
   controller:
     image: ${SIGBOT_IMAGE:?select images using make docker-up}
-    command: [controller]
+    command: [controller, --config, /app/config/sigbot.yaml]
     env_file: ${SIGBOT_ENV_FILE:-.env}
     environment:
       <<: *platform-environment

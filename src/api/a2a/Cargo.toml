@@ -21,3 +21,7 @@ serde.workspace = true
 serde_json.workspace = true
 a2a-lf = "0.4.2"
 a2a-server-lf = { version = "0.5.3", default-features = false }
+
+[dev-dependencies]
+reqwest.workspace = true
+authguard-adapter-rust.workspace = true

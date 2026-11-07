@@ -2,10 +2,7 @@
 use crate::worker::plan::WorkerPlan;
 use anyhow::Context;
 use anyhow::Result;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use serde_json::json;
-use serde_json::Value;
 use sigbot_types::controller::{MiddlewareDeployment, WorkerInfo, WorkerProvider};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -110,14 +107,12 @@ impl<'a> MiddlewareTopology<'a> {
             );
         }
         if self.deployment(MiddlewareKind::Emqx).is_some() {
-            let encoded = plan
-                .command
-                .get_mut(5)
-                .context("worker configuration argument missing")?;
-            let mut argument: Value = serde_json::from_slice(&STANDARD.decode(encoded.as_bytes())?)?;
+            let argument = plan
+                .configuration
+                .pointer_mut("/services/component/messager")
+                .context("worker YAML configuration missing")?;
             let properties = argument
-                .get_mut("messager_config")
-                .and_then(Value::as_object_mut)
+                .as_object_mut()
                 .context("messager configuration required")?
                 .entry("properties")
                 .or_insert_with(|| json!({}))
@@ -125,7 +120,6 @@ impl<'a> MiddlewareTopology<'a> {
                 .context("messager properties must be an object")?;
             properties.insert("mqtt_server".into(), json!(self.host(MiddlewareKind::Emqx)));
             properties.insert("mqtt_port".into(), json!(MiddlewareKind::Emqx.port().to_string()));
-            *encoded = STANDARD.encode(serde_json::to_vec(&argument)?);
         }
         Ok(())
     }

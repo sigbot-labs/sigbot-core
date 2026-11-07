@@ -15,7 +15,7 @@ import {
 export function Connections({ kind }: { kind: "datafeed" | "exchange" }) {
   const scope = useScope();
   const remote = useRemote<{ data: Connection[] }>(
-    `/api/v1/connections?${scope.query}&kind=${kind}`,
+    `/api/v1/${kind === "datafeed" ? "datasources" : "exchanges"}?${scope.query}`,
     { data: [] },
   );
   const [showForm, setShowForm] = useState(false);
@@ -39,14 +39,12 @@ export function Connections({ kind }: { kind: "datafeed" | "exchange" }) {
     setSaving(true);
     const fields = new FormData(event.currentTarget);
     try {
-      await Api.save("/api/v1/connections", {
-        kind,
+      await Api.entity(kind === "datafeed" ? "datasources" : "exchanges", String(fields.get("env")), {
         name: fields.get("name"),
         provider: fields.get("provider"),
-        mode: fields.get("mode"),
-        endpoint: fields.get("endpoint"),
+        transport: fields.get("mode"),
+        configuration: {endpoint: fields.get("endpoint")},
         secret_ref: fields.get("secret_ref"),
-        env: fields.get("env"),
       });
       setShowForm(false);
       remote.refresh();
@@ -140,9 +138,9 @@ export function Connections({ kind }: { kind: "datafeed" | "exchange" }) {
                       {connection.name}
                       <small>{connection.provider}</small>
                     </td>
-                    <td>{connection.mode}</td>
+                    <td>{connection.transport}</td>
                     <td>
-                      <Badge value={connection.status} />
+                      <Badge value="configured" />
                     </td>
                     <td>
                       <DateText value={connection.updated_at} />

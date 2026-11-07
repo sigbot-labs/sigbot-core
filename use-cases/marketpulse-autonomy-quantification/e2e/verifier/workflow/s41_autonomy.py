@@ -75,16 +75,16 @@ class PipelineVerifier:
         with psycopg.connect(self.context.secret("database_url_env"), connect_timeout=10) as connection:
             with connection.cursor() as cursor:
                 counts = {}
-                for table in ("eval_snapshot", "ord_order", "ord_execution", "wlt_journal"):
+                for table in ("eval_snapshot", "order_info", "ord_execution", "wlt_journal"):
                     cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE run_id=%s", (self.run_id,))
                     counts[table] = cursor.fetchone()[0]
                 cursor.execute("SELECT COUNT(*) FROM wlt_posting WHERE run_id=%s", (self.run_id,))
                 counts["wlt_posting"] = cursor.fetchone()[0]
                 cursor.execute("SELECT COUNT(*) FROM wlt_journal WHERE run_id=%s AND source NOT LIKE 'funding/%%'", (self.run_id,))
                 counts["wallet_execution_journal"] = cursor.fetchone()[0]
-                cursor.execute("SELECT COUNT(*) FROM ord_order WHERE run_id=%s AND state='filled'", (self.run_id,))
+                cursor.execute("SELECT COUNT(*) FROM order_info WHERE run_id=%s AND state='filled'", (self.run_id,))
                 counts["filled_orders"] = cursor.fetchone()[0]
-                cursor.execute("SELECT o.wallet_id,o.seq FROM ord_order o LEFT JOIN ord_execution e "
+                cursor.execute("SELECT o.wallet_id,o.seq FROM order_info o LEFT JOIN ord_execution e "
                                "ON e.wallet_id=o.wallet_id AND e.exchange=o.exchange AND e.exchange_order_id=o.exchange_order_id "
                                "WHERE o.run_id=%s AND o.state='filled' GROUP BY o.wallet_id,o.producer_node_id,o.run_id,o.seq,o.intent "
                                "HAVING COALESCE(SUM(e.quantity),0)<>(o.intent->>'quantity')::NUMERIC", (self.run_id,))
@@ -134,11 +134,11 @@ class PipelineVerifier:
                 observed = {message["topic"] for message in self.messages}
                 if required <= observed:
                     counts = self.snapshot()
-                    settled = (counts["ord_order"] == counts["filled_orders"]
+                    settled = (counts["order_info"] == counts["filled_orders"]
                                and counts["ord_execution"] == counts["filled_orders"]
                                and counts["wallet_execution_journal"] == counts["ord_execution"])
                     advanced = all(counts[name] > baseline[name] for name in
-                                   ("ord_order", "ord_execution", "wallet_execution_journal", "filled_orders"))
+                                   ("order_info", "ord_execution", "wallet_execution_journal", "filled_orders"))
                     if all(counts.values()) and counts["mkt_event"] == 2 and settled and advanced:
                         break
                 time.sleep(0.2)
@@ -153,7 +153,7 @@ class PipelineVerifier:
             assert requests and results and all(pairing and pairing in requests for pairing in results), "reservation reply did not echo its ephemeral producer span"
             return {"run_id": self.run_id, "observed_topics": sorted(required), "committed": counts,
                     "baseline_financial_counts": {name: baseline[name] for name in
-                                                  ("ord_order", "ord_execution", "wallet_execution_journal", "filled_orders")},
+                                                  ("order_info", "ord_execution", "wallet_execution_journal", "filled_orders")},
                     "mqtt_evidence": str(self.path), "scope": "actual Rust service chain; external fixtures only"}
         finally:
             self.client.disconnect()

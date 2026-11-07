@@ -1,41 +1,17 @@
-# A2A 协议出口
+# A2A API
 
-[English](overview.md) · [架构总览](../../overview_ZH.md)
+[English](overview.md) · [领域契约](../../domain-model_ZH.md)
 
-**状态：** 可选、已实现的 Workflow 控制面协议出口。
+src/api/a2a/src/a2a.rs 统一负责 IA2aApi、ResourceA2aApi、监听生命周期、Authguard middleware 和协议注册。src/domain/resource.rs 只汇聚领域 skills，并将 ResourceCommand 分发到共用 Core ResourceHandler。
 
-API 进程通过 Linux Foundation `a2a-lf` 与 `a2a-server-lf` 提供 Agent Card、JSON-RPC、
-流式响应和协议错误。A2A 不是 Workflow 计算节点，也不拥有业务状态。
+以下能力直接复用官方 a2a/a2a_server：
 
-## 能力与边界
+- 公开 GET/HEAD /.well-known/agent-card.json：agent_card_router/StaticAgentCard，保留官方 CORS、Cache-Control、ETag。
+- 认证 JSON-RPC POST /a2a（同时支持 /a2a/）：jsonrpc_router/DefaultRequestHandler。
+- 认证 GetExtendedAgentCard：with_extended_agent_card，公开 Card 声明 extendedAgentCard=true。
 
-`WorkflowA2aApi` 只发布并执行以下已实现能力：
+客户端发送与 Card 的 supportedInterfaces.protocolVersion 一致的 A2A-Version；版本协商和协议错误归 SDK。发布的 public_url 会被校验，其路径即真实注册的 RPC 路径。认证读取 OriginalUri，避免嵌套路由截断路径；尾斜杠别名对应同一规范 Authguard 资源。
 
-- 查询租户内的 Workflow 概览；
-- 按 Workflow 查询有序事件；
-- 幂等请求启动或停止 Workflow Run。
+配置 authguard.oauth 时，Card 使用标准 OpenID Connect security scheme 公布 discovery_url；否则使用标准 HTTP Bearer 声明网关可信凭据。原先虚构的 HTTP scheme authguard 已移除。认证保留完整资源身份及 allow/deny grants；公开发现不要求登录，伪造内部身份 header 不能调用 RPC。
 
-执行器调用 `src/core/src/modules/workflow/storage/` 的 Repository。它不直接写 SQL、访问组件私有表、
-注入任意节点、调用 Exchange，或把模型响应转成订单。交易仍只能经过 Strategy、Order、Wallet 的正常边界。
-
-## 身份与生命周期
-
-- `/a2a` 的每个请求先由 Authguard 校验，可信 tenant/principal 仅作为请求内 Header 传给官方 A2A Handler。
-- Agent Card 的 Security Scheme 声明 Authguard；Helm Gateway 保护 `/a2a`，公开
-  `/.well-known/agent-card.json` 用于协议发现。
-- A2A Provider 与 HTTP/MCP 共用同一个 `ApplicationContext`，进程关闭时停止监听并等待任务退出。
-- 配置位于 `services.api.a2a`；`public_url` 是 Agent Card 对外公布的 JSON-RPC 地址。
-
-## 可靠性规则
-
-- 只接受类型化 JSON command，未知字段和未声明 operation 直接拒绝。
-- Repository 保持 tenant、env、workflow 的所有权约束与幂等规则。
-- 服务端错误对客户端脱敏，完整原因只进入结构化日志和 Trace。
-- A2A Task ID 只属于协议任务；业务重试和恢复继续使用 `run_id`，不另建业务关联 ID。
-
-## 源码地图
-
-- 协议契约：`src/api/a2a/src/a2a.rs`
-- Agent Card、Authguard、Workflow Executor：`src/api/a2a/src/a2a/workflow.rs`
-- API 进程装配：`src/cmd/src/startup/api.rs`
-- Helm 端口与路由：`deploy/helm/sigbot/templates/`
+OAuth/OIDC 发现和发令牌由外部授权服务器拥有，A2A 在 Agent Card 中公布其地址，不在 Agent 内重建 issuer。配置位于 services.platform.api.a2a 和可选 authguard.oauth。真实 TCP 测试覆盖公开缓存/CORS 元数据、发布的接口与版本、未认证拒绝、Extended Agent Card 和路径隔离。

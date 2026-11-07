@@ -18,30 +18,28 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
+use crate::mgmt::apm::logging::LogMode;
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use config::Config as SourceConfig;
-use dotenv::dotenv;
 use lazy_static::lazy_static;
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json;
+use sigbot_utils::serde_models::{deserialize_option_u32_from_string_or_number, deserialize_u16_from_string_or_number};
 use std::collections::BTreeMap;
 use std::env;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::time::Duration;
+use url::Url;
 use validator::Validate;
 
 pub use super::authguard::*;
 
 pub use super::llm::*;
 
-pub use super::platform::*;
-
-pub use super::services::*;
-
-pub use super::storage::*;
+pub use super::component::*;
 
 // Global program information.
 pub const GIT_VERSION: &str = env!("GIT_VERSION");
@@ -55,6 +53,357 @@ lazy_static! {
         env!("GIT_COMMIT_HASH"),
         env!("GIT_BUILD_DATE")
     );
+}
+
+// Common platform configuration.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ServerProperties {
+    pub host: String,
+    pub port: u16,
+    pub context_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct MgmtProperties {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+    #[serde(default = "TokioConsoleProperties::default")]
+    pub tokio_console: TokioConsoleProperties,
+    #[serde(default = "PyroscopeAgentProperties::default")]
+    pub pyroscope: PyroscopeAgentProperties,
+    #[serde(default = "OtelProperties::default")]
+    pub otel: OtelProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct TokioConsoleProperties {
+    pub enabled: bool,
+    pub server_bind: String,
+    pub retention: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct PyroscopeAgentProperties {
+    pub enabled: bool,
+    pub server_url: String,
+    pub auth_token: Option<String>,
+    pub tags: Option<Vec<(String, String)>>,
+    pub sample_rate: f32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct OtelProperties {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub protocol: String,
+    pub timeout: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct LoggingProperties {
+    pub mode: LogMode,
+    pub level: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SwaggerProperties {
+    pub enabled: bool,
+    pub ui_path: String,
+    pub openapi_url: String,
+}
+
+impl Default for ServerProperties {
+    fn default() -> Self {
+        Self {
+            host: String::from("127.0.0.1"),
+            port: 9000,
+            context_path: None,
+        }
+    }
+}
+
+impl ServerProperties {
+    pub fn get_bind_addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}
+
+impl Default for MgmtProperties {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            host: String::from("127.0.0.1"),
+            port: 9001,
+            tokio_console: TokioConsoleProperties::default(),
+            pyroscope: PyroscopeAgentProperties::default(),
+            otel: OtelProperties::default(),
+        }
+    }
+}
+
+impl MgmtProperties {
+    pub fn get_bind_addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}
+
+impl Default for TokioConsoleProperties {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            server_bind: String::from("0.0.0.0:6669"),
+            retention: 60,
+        }
+    }
+}
+
+impl Default for PyroscopeAgentProperties {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            server_url: String::from("http://127.0.0.1:4040"),
+            auth_token: None,
+            tags: None,
+            sample_rate: 0.1,
+        }
+    }
+}
+
+impl Default for OtelProperties {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            endpoint: String::from("http://localhost:4317"),
+            protocol: String::from("grpc"),
+            timeout: Some(Duration::from_secs(10).as_millis() as u64),
+        }
+    }
+}
+
+impl Default for LoggingProperties {
+    fn default() -> Self {
+        Self {
+            mode: LogMode::HUMAN,
+            level: String::from("info"),
+        }
+    }
+}
+
+impl LoggingProperties {
+    pub fn is_human_mode(&self) -> bool {
+        self.mode == LogMode::HUMAN
+    }
+}
+
+impl Default for SwaggerProperties {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            ui_path: String::from("/swagger-ui"),
+            openapi_url: String::from("/api-docs/openapi.json"),
+        }
+    }
+}
+
+// Shared cache and storage configuration.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct CacheProperties {
+    pub provider: CacheProvider,
+    pub memory: MemoryProperties,
+    pub redis: RedisProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum CacheProvider {
+    #[serde(rename = "Memory")]
+    MEMORY,
+    #[serde(rename = "Redis")]
+    REDIS,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryProperties {
+    pub initial_capacity: Option<u32>,
+    pub max_capacity: Option<u64>,
+    pub ttl: Option<u64>,
+    pub eviction_policy: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct RedisProperties {
+    pub nodes: Vec<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub connection_timeout: Option<u64>,
+    pub response_timeout: Option<u64>,
+    pub retries: Option<u32>,
+    pub max_retry_wait: Option<u64>,
+    pub min_retry_wait: Option<u64>,
+    pub read_from_replicas: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct StorageProperties {
+    pub provider: StorageProvider,
+    #[serde(default = "SqliteStorageProperties::default")]
+    pub sqlite: SqliteStorageProperties,
+    #[serde(default = "PostgresStorageProperties::default")]
+    pub postgres: PostgresStorageProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub enum StorageProvider {
+    #[serde(rename = "SQLite")]
+    SQLite,
+    #[serde(rename = "Postgres")]
+    Postgres,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SqliteStorageProperties {
+    pub dir: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PostgresPropertiesBase {
+    #[serde(default)]
+    pub url: Option<String>,
+    pub host: String,
+    #[serde(deserialize_with = "deserialize_u16_from_string_or_number")]
+    pub port: u16,
+    pub database: String,
+    pub schema: String,
+    pub username: String,
+    pub password: Option<String>,
+    #[serde(deserialize_with = "deserialize_option_u32_from_string_or_number")]
+    pub min_connections: Option<u32>,
+    #[serde(deserialize_with = "deserialize_option_u32_from_string_or_number")]
+    pub max_connections: Option<u32>,
+    pub use_ssl: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PostgresStorageProperties {
+    #[serde(flatten)]
+    pub inner: PostgresPropertiesBase,
+}
+
+impl Default for CacheProperties {
+    fn default() -> Self {
+        Self {
+            provider: CacheProvider::MEMORY,
+            memory: MemoryProperties::default(),
+            redis: RedisProperties::default(),
+        }
+    }
+}
+
+impl Default for MemoryProperties {
+    fn default() -> Self {
+        Self {
+            initial_capacity: Some(32),
+            max_capacity: Some(65535),
+            ttl: Some(3600),
+            eviction_policy: Some(String::from("lru")),
+        }
+    }
+}
+
+impl Default for RedisProperties {
+    fn default() -> Self {
+        Self {
+            nodes: vec![String::from("redis://127.0.0.1:6379")],
+            username: None,
+            password: None,
+            connection_timeout: Some(3000),
+            response_timeout: Some(6000),
+            retries: Some(1),
+            max_retry_wait: Some(65536),
+            min_retry_wait: Some(1280),
+            read_from_replicas: Some(false),
+        }
+    }
+}
+
+impl Default for StorageProperties {
+    fn default() -> Self {
+        Self {
+            provider: StorageProvider::Postgres,
+            sqlite: SqliteStorageProperties::default(),
+            postgres: PostgresStorageProperties::default(),
+        }
+    }
+}
+
+impl Default for SqliteStorageProperties {
+    fn default() -> Self {
+        Self {
+            dir: Some(String::from("/tmp/sigbot/storage/sqlite")),
+        }
+    }
+}
+
+impl Default for PostgresPropertiesBase {
+    fn default() -> Self {
+        Self {
+            url: None,
+            host: String::from("127.0.0.1"),
+            port: 5432,
+            database: String::from("sigbot"),
+            schema: String::from("sigbot"),
+            username: String::from("postgres"),
+            password: None,
+            min_connections: Some(1),
+            max_connections: Some(10),
+            use_ssl: false,
+        }
+    }
+}
+
+impl Deref for PostgresStorageProperties {
+    type Target = PostgresPropertiesBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl PostgresStorageProperties {
+    pub fn connection_url(&self) -> anyhow::Result<String> {
+        if let Some(url) = self.url.as_deref().filter(|url| !url.trim().is_empty()) {
+            Url::parse(url).map_err(|_| anyhow::anyhow!("invalid configured PostgreSQL URL"))?;
+            return Ok(url.to_owned());
+        }
+        let mut url = Url::parse("postgresql://localhost")?;
+        url.set_host(Some(&self.host))?;
+        url.set_port(Some(self.port))
+            .map_err(|_| anyhow::anyhow!("invalid PostgreSQL port"))?;
+        url.set_username(&self.username)
+            .map_err(|_| anyhow::anyhow!("invalid PostgreSQL username"))?;
+        url.set_password(self.password.as_deref())
+            .map_err(|_| anyhow::anyhow!("invalid PostgreSQL password"))?;
+        url.set_path(&self.database);
+        if !self.schema.is_empty() {
+            url.query_pairs_mut()
+                .append_pair("options", &format!("-c search_path={}", self.schema));
+        }
+        Ok(url.into())
+    }
 }
 
 // App Properties.
@@ -154,29 +503,57 @@ impl SecretsProperties {
 
 // Global the single refreshable configuration instance.
 // see: https://github.com/wl4g-collect/openobserve/blob/v0.10.9/src/config/src/config.rs#L186
-static CONFIG: Lazy<ArcSwap<AppConfig>> = Lazy::new(|| ArcSwap::from(ConfigLoader::load()));
+static CONFIG: std::sync::OnceLock<ArcSwap<AppConfig>> = std::sync::OnceLock::new();
 
-/// Sole configuration loading entry; public wrappers preserve the existing API.
+/// Configuration path selected by the process startup entry point.
+static CONFIG_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
 pub struct ConfigLoader;
 impl ConfigLoader {
-    fn load() -> Arc<AppConfig> {
-        dotenv().ok();
+    pub fn initialize(path: impl AsRef<std::path::Path>) -> Result<()> {
+        let path = path.as_ref().to_path_buf();
+        let config = Self::load(&path)?;
+        if let Some(current) = CONFIG_PATH.get() {
+            anyhow::ensure!(current == &path, "configuration path is already initialized");
+        } else {
+            CONFIG_PATH
+                .set(path)
+                .map_err(|_| anyhow::anyhow!("configuration already initialized"))?;
+        }
+        CONFIG.get_or_init(|| ArcSwap::from(config.clone())).store(config);
+        Ok(())
+    }
+
+    fn load_current() -> Result<Arc<AppConfig>> {
+        if let Some(path) = CONFIG_PATH.get() {
+            return Self::load(path);
+        }
+        if let Some(path) = env::var_os("SIGBOT_CFG_PATH") {
+            return Self::load(std::path::Path::new(&path));
+        }
+        Self::load_sources(None)
+    }
+
+    fn load(path: impl AsRef<std::path::Path>) -> Result<Arc<AppConfig>> {
+        Self::load_sources(Some(path.as_ref()))
+    }
+
+    fn load_sources(path: Option<&std::path::Path>) -> Result<Arc<AppConfig>> {
         let defaults =
             serde_json::to_string(&AppConfigProperties::default()).expect("configuration defaults must serialize");
         let mut builder =
             SourceConfig::builder().add_source(config::File::from_str(&defaults, config::FileFormat::Json));
-        if let Ok(path) = env::var("SIGBOT_CFG_PATH") {
-            if !path.trim().is_empty() {
-                let value = SourceConfig::builder()
-                    .add_source(config::File::with_name(path.trim()))
-                    .build()
-                    .and_then(|config| config.try_deserialize::<serde_json::Value>())
-                    .unwrap_or_else(|_| panic!("configuration file cannot be loaded"));
-                let value =
-                    Self::normalize(value).expect("configuration file has conflicting keys or unresolved variables");
-                let json = serde_json::to_string(&value).expect("configuration must serialize");
-                builder = builder.add_source(config::File::from_str(&json, config::FileFormat::Json));
-            }
+        if let Some(path) = path {
+            let value = SourceConfig::builder()
+                .add_source(config::File::from(path).format(config::FileFormat::Yaml).required(true))
+                .build()
+                .and_then(|config| config.try_deserialize::<serde_json::Value>())
+                .map_err(|_| anyhow::anyhow!("configuration YAML cannot be loaded"))?;
+            let value = Self::normalize(value)?;
+            builder = builder.add_source(config::File::from_str(
+                &serde_json::to_string(&value)?,
+                config::FileFormat::Json,
+            ));
         }
         let environment = SourceConfig::builder()
             .add_source(
@@ -187,9 +564,8 @@ impl ConfigLoader {
             )
             .build()
             .and_then(|source| source.try_deserialize::<serde_json::Value>())
-            .unwrap_or_else(|_| panic!("configuration environment cannot be loaded"));
-        let environment = Self::normalize_environment(environment)
-            .unwrap_or_else(|_| panic!("configuration environment contains invalid typed values"));
+            .map_err(|_| anyhow::anyhow!("configuration environment cannot be loaded"))?;
+        let environment = Self::normalize_environment(environment)?;
         builder = builder.add_source(config::File::from_str(
             &serde_json::to_string(&environment).expect("environment configuration must serialize"),
             config::FileFormat::Json,
@@ -197,16 +573,16 @@ impl ConfigLoader {
         // Errors may contain supplied values; never print raw deserialization errors.
         let value = builder
             .build()
-            .unwrap_or_else(|_| panic!("configuration sources cannot be merged"));
-        let properties = Self::deserialize(value).unwrap_or_else(|error| panic!("{error}"));
+            .map_err(|_| anyhow::anyhow!("configuration sources cannot be merged"))?;
+        let properties = Self::deserialize(value)?;
         properties
             .validate()
-            .expect("application configuration constraints failed");
+            .map_err(|_| anyhow::anyhow!("application configuration constraints failed"))?;
         tracing::info!(service_name = %properties.service_name, "Configuration loaded");
-        AppConfig::new(&properties)
+        Ok(AppConfig::new(&properties))
     }
 
-    pub fn deserialize(value: SourceConfig) -> Result<AppConfigProperties> {
+    fn deserialize(value: SourceConfig) -> Result<AppConfigProperties> {
         let properties: AppConfigProperties = serde_path_to_error::deserialize(value).map_err(|error| {
             // Paths name typed fields; the underlying error can contain secret values.
             let path = error.path().to_string();
@@ -224,24 +600,26 @@ impl ConfigLoader {
         Ok(properties)
     }
 
-    pub fn normalize_environment(mut value: serde_json::Value) -> Result<serde_json::Value> {
-        if let Some(nodes) = value.pointer_mut("/cache/redis/nodes") {
-            let text = nodes
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("cache.redis.nodes must be a comma-separated string"))?;
-            let values = text
-                .split(',')
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(|item| serde_json::Value::String(item.to_owned()))
-                .collect::<Vec<_>>();
-            anyhow::ensure!(!values.is_empty(), "cache.redis.nodes cannot be empty");
-            *nodes = serde_json::Value::Array(values);
+    fn normalize_environment(mut value: serde_json::Value) -> Result<serde_json::Value> {
+        for (path, empty_allowed) in [("/cache/redis/nodes", false), ("/authguard/oauth/scopes", true)] {
+            if let Some(nodes) = value.pointer_mut(path) {
+                let text = nodes
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("{path} must be a comma-separated string"))?;
+                let values = text
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(|item| serde_json::Value::String(item.to_owned()))
+                    .collect::<Vec<_>>();
+                anyhow::ensure!(empty_allowed || !values.is_empty(), "{path} cannot be empty");
+                *nodes = serde_json::Value::Array(values);
+            }
         }
         Self::normalize(value)
     }
 
-    pub fn normalize(value: serde_json::Value) -> Result<serde_json::Value> {
+    fn normalize(value: serde_json::Value) -> Result<serde_json::Value> {
         use serde_json::Value;
         Ok(match value {
             Value::Object(object) => {
@@ -304,10 +682,18 @@ impl ConfigLoader {
 }
 
 pub fn get_config() -> Arc<AppConfig> {
-    CONFIG.load().clone()
+    CONFIG
+        .get_or_init(|| ArcSwap::from(ConfigLoader::load_current().expect("configuration cannot be loaded")))
+        .load()
+        .clone()
 }
 
 pub fn refresh_config() -> Result<(), anyhow::Error> {
-    CONFIG.store(ConfigLoader::load());
+    let config = ConfigLoader::load_current()?;
+    CONFIG.get_or_init(|| ArcSwap::from(config.clone())).store(config);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/config/config_loader_test.rs"]
+mod tests;

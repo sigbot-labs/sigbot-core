@@ -18,36 +18,25 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use super::api::SigbotAPIServer;
+use crate::startup::api::http::SigbotHttpStarter;
 use crate::startup::internal::banner::print_banner;
-use crate::startup::internal::management::SigbotManagementServer;
-use clap::Arg;
+use crate::startup::internal::management::SigbotManagementStarter;
 use clap::Command;
-use common_context::util::panics::PanicHelper;
-use common_context::ApplicationContext;
 use sigbot_backtest::server::SigbotBacktestServer;
 use sigbot_core::config::config::get_config;
 use sigbot_core::llm::llm::LlmApplication;
-use sigbot_core::mgmt::apm;
 use sigbot_datafeed::server::SigbotDatafeedIngestor;
 use sigbot_notifier::server::SigbotNotifier;
 use sigbot_order::server::SigbotOrderServer;
 use sigbot_strategy_runner::server::SigbotStrategyRunner;
-use sigbot_types::backtest::BacktestProvider;
-use sigbot_types::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::messager::messager::MessagerProvider;
-use sigbot_types::notifier::notification::NotificationProvider;
-use sigbot_types::order::OrderProvider;
-use sigbot_types::strategy::strategy::StrategyProvider;
-use sigbot_types::wallet::WalletProvider;
 use sigbot_wallet::server::SigbotWalletServer;
 
 #[derive(Default)]
-pub struct SigbotStandalone {
-    management: SigbotManagementServer,
+pub struct SigbotStandaloneStarter {
+    management: SigbotManagementStarter,
 }
 
-impl SigbotStandalone {
+impl SigbotStandaloneStarter {
     pub const COMMAND_NAME: &'static str = "standalone";
 
     // http://www.network-science.de/ascii/#larry3d,graffiti,basic,drpepper,rounded,roman
@@ -64,172 +53,40 @@ impl SigbotStandalone {
  "#;
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Components All-in-One.")
-            .arg_required_else_help(true) // When no args are provided, show help.
-            .arg(
-                Arg::new("MESSAGER_PROVIDER")
-                    .long("messager-provider")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(1)
-                    .help(format!(
-                        "The providers of messager. (supported are: {}, {})",
-                        MessagerProvider::Local.as_str(),
-                        MessagerProvider::Mqtt.as_str(),
-                    ))
-                    .default_value(MessagerProvider::Local.as_str()),
-            )
-            .arg(
-                Arg::new("DATAFEED_PROVIDERS")
-                    .long("datafeed-providers")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(10)
-                    .help(format!(
-                        "The providers of multi datafeeds separated by commas. (supported are: {}, {}, {}, {}, {})",
-                        DatafeedProvider::Binance.as_str(),
-                        DatafeedProvider::Twitter.as_str(),
-                        DatafeedProvider::TruthSocial.as_str(),
-                        DatafeedProvider::Fed.as_str(),
-                        DatafeedProvider::Treasury.as_str()
-                    ))
-                    .default_value(DatafeedProvider::Binance.as_str()),
-            )
-            .arg(
-                Arg::new("DATAFEED_CONFIGURATION")
-                    .long("datafeed-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(11)
-                    .help("The configuration of datafeed. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("STRATEGY_RUNNER_PROVIDER")
-                    .long("strategy-runner-provider")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(20)
-                    .help(format!(
-                        "The strategy runner provider to use. (supported are: {})",
-                        StrategyProvider::Python.as_str(),
-                    ))
-                    .default_value(StrategyProvider::Python.as_str()),
-            )
-            .arg(
-                Arg::new("STRATEGY_RUNNER_CONFIGURATION")
-                    .long("strategy-runner-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(21)
-                    .help("The configuration of strategy. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("ORDER_MANAGER_PROVIDER")
-                    .long("order-manager-provider")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(30)
-                    .help(format!(
-                        "The provider of Order Manager. (supported are: {})",
-                        OrderProvider::Default.as_str(),
-                    ))
-                    .default_value(OrderProvider::Default.as_str()),
-            )
-            .arg(
-                Arg::new("ORDER_MANAGER_CONFIGURATION")
-                    .long("order-manager-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(31)
-                    .help("The configuration of order manager. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("WALLET_MANAGER_PROVIDER")
-                    .long("wallet-manager-provider")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(40)
-                    .help(format!(
-                        "The provider of Wallet Manager. (supported are: {})",
-                        WalletProvider::Default.as_str()
-                    ))
-                    .default_value(WalletProvider::Default.as_str()),
-            )
-            .arg(
-                Arg::new("WALLET_MANAGER_CONFIGURATION")
-                    .long("wallet-manager-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(41)
-                    .help("The configuration of wallet manager. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("BACKTEST_MANAGER_PROVIDER")
-                    .long("backtest-manager-provider")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(50)
-                    .help(format!(
-                        "The backtest manager provider to use. (supported are: {}, {})",
-                        BacktestProvider::Kline.as_str(),
-                        BacktestProvider::Trades.as_str(),
-                    ))
-                    .default_value(BacktestProvider::Kline.as_str()),
-            )
-            .arg(
-                Arg::new("BACKTEST_MANAGER_CONFIGURATION")
-                    .long("backtest-manager-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(51)
-                    .help("The configuration of backtest manager. (base64 encoded JSON string)"),
-            )
-            .arg(
-                Arg::new("NOTIFIER_PROVIDERS")
-                    .long("notifier-providers")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(60)
-                    .help(format!(
-                        "The providers of multi notification separated by commas. (supported are: {}, {})",
-                        NotificationProvider::Email.as_str(),
-                        NotificationProvider::Telegram.as_str(),
-                    ))
-                    .default_value(NotificationProvider::Email.as_str()),
-            )
-            .arg(
-                Arg::new("NOTIFIER_CONFIGURATION")
-                    .long("notifier-configuration")
-                    .value_parser(clap::value_parser!(String))
-                    .display_order(61)
-                    .help("The configuration of notification. (base64 encoded JSON string)"),
-            )
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot standalone service")
     }
 
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) {
         let service = Self::default();
-        ApplicationContext::global()
-            .init()
-            .await
-            .expect("provider context initialization failed");
-
-        PanicHelper::set_hook_default(get_config().logging.is_human_mode());
-
-        print_banner(verbose, Self::ASCII_NAME, None);
-
-        apm::init().await;
-
         let signal_handle = service.management.start().await;
+        print_banner(verbose, Self::ASCII_NAME, None);
 
         Self::start(matches, verbose).await;
 
-        signal_handle.await.unwrap();
-        ApplicationContext::global()
-            .shutdown()
+        service
+            .management
+            .wait(signal_handle)
             .await
-            .expect("provider shutdown failed");
+            .expect("service lifecycle failed");
     }
 
     async fn start(matches: &clap::ArgMatches, verbose: bool) {
-        SigbotDatafeedIngestor::startup(matches, verbose).await;
-        SigbotStrategyRunner::startup(matches, verbose).await;
-        SigbotOrderServer::startup(matches, verbose).await;
-        SigbotWalletServer::startup(matches, verbose).await;
-        SigbotNotifier::startup(matches, verbose).await;
-        SigbotBacktestServer::startup(matches, verbose).await;
+        SigbotDatafeedIngestor::startup().await;
+        SigbotStrategyRunner::startup().await;
+        SigbotOrderServer::startup().await;
+        SigbotWalletServer::startup().await;
+        SigbotNotifier::startup().await;
+        SigbotBacktestServer::startup().await;
         LlmApplication::register_default()
             .await
             .expect("default LLM provider initialization failed");
-        SigbotAPIServer::startup(matches, verbose, None, None).await;
+        if get_config().services.platform.api.mcp.enabled {
+            crate::startup::api::mcp::SigbotMcpStarter::startup().await;
+        }
+        if get_config().services.platform.api.a2a.enabled {
+            crate::startup::api::a2a::SigbotA2aStarter::startup().await;
+        }
+        SigbotHttpStarter::startup(matches, verbose, None, None).await;
     }
 }

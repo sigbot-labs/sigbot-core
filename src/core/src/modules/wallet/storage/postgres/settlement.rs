@@ -63,7 +63,7 @@ impl WalletSettlementPostgresRepository {
         .await?;
         if state.get::<bool, _>("complete") {
             let expected: Decimal = sqlx::query_scalar(
-                "SELECT (intent->>'quantity')::numeric FROM ord_order
+                "SELECT (intent->>'quantity')::numeric FROM order_info
                 WHERE wallet_id=$1 AND producer_node_id=$2 AND run_id=$3 AND seq=$4",
             )
             .bind(fact.wallet_id)

@@ -19,7 +19,7 @@ class GroupPipelineVerifier:
     def financial_state(self, target):
         with psycopg.connect(target.secret("database_url_env")) as connection:
             result = {}
-            for table in ("ord_order", "ord_execution", "wlt_journal", "wlt_posting"):
+            for table in ("order_info", "ord_execution", "wlt_journal", "wlt_posting"):
                 result[table] = connection.execute(f"SELECT COUNT(*) FROM {table} WHERE run_id=%s", (target.run_id,)).fetchone()[0]
             result["balances"] = connection.execute("SELECT asset,available::text,locked::text FROM wlt_balance WHERE wallet_id=%s ORDER BY asset",
                                                     (target.config["wallet_id"],)).fetchall()
@@ -59,7 +59,7 @@ class GroupPipelineVerifier:
                 assert len(rows) == 2 and [row[0] for row in rows] == ["BUY", "SELL"], "actual buy and reverse execution are both required"
                 assert rows[0][2] == rows[1][2] == Decimal("0.001")
                 assert connection.execute("SELECT COUNT(*) FROM ord_execution WHERE run_id=%s AND wallet_id=%s", (target.run_id, wallets[1])).fetchone()[0] == 0
-                assert connection.execute("SELECT COUNT(*) FROM ord_order WHERE run_id=%s AND wallet_id=%s AND state='rejected'",
+                assert connection.execute("SELECT COUNT(*) FROM order_info WHERE run_id=%s AND wallet_id=%s AND state='rejected'",
                                           (target.run_id, wallets[1])).fetchone()[0] == 1, "second wallet must reject the actual reservation"
                 assert connection.execute("SELECT COUNT(*) FROM wlt_journal WHERE wallet_id=%s", (wallets[1],)).fetchone()[0] == 0
                 assert connection.execute("SELECT COUNT(*) FROM wlt_journal WHERE run_id=%s AND source='execution'", (target.run_id,)).fetchone()[0] == 2

@@ -45,7 +45,7 @@ impl RoutingFixture {
         let current_run = Uuid::now_v7();
         let previous_run = Uuid::now_v7();
         let next_run = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'strategy routing test')")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'strategy routing test')")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)

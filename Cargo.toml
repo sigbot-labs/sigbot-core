@@ -21,7 +21,7 @@ members = [
     "src/component/backtest",
     "src/component/datafeed",
     "src/component/evaluator",
-    "src/component/logservice",
+    "src/component/logger",
     "src/component/strategy/runner",
     "src/component/strategy/sdk",
     "src/component/order",
@@ -33,6 +33,10 @@ default-members = [
     "src/cmd",
 ]
 resolver = "2"
+exclude = ["src/api/http/vendor/utoipa-swagger-ui-vendored"]
+
+[patch.crates-io]
+utoipa-swagger-ui-vendored = { path = "src/api/http/vendor/utoipa-swagger-ui-vendored" }
 
 [workspace.package]
 version = "1.0.0"
@@ -52,6 +56,7 @@ clippy.implicit_clone = "warn"
 rust.unknown_lints = "deny"
 
 [workspace.dependencies]
+tar = "0.4"
 # workspaces members.
 authguard-adapter-rust = { git = "https://github.com/wl4g/authguard.git", rev = "56f00ee51a33136dae7e83beba558cdbf05c4a85" }
 common-audit-log = { path = "src/common/audit-log" }
@@ -76,7 +81,7 @@ sigbot-order = { path = "src/component/order" }
 sigbot-wallet = { path = "src/component/wallet" }
 sigbot-backtest = { path = "src/component/backtest" }
 sigbot-notifier = { path = "src/component/notifier" }
-sigbot-logservice = { path = "src/component/logservice" }
+sigbot-logger = { path = "src/component/logger" }
 sigbot-exporter = { path = "src/component/exporter" }
 sigbot-evaluator = { path = "src/component/evaluator" }
 sigbot-a2a = { path = "src/api/a2a" }
@@ -169,7 +174,7 @@ rust_decimal = { version = "1.36", features = ["serde-with-arbitrary-precision",
 
 # Swagger/OpenAPI libs
 utoipa = "5.3.1"
-utoipa-swagger-ui = { version = "9.0.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "9.0.0", features = ["axum", "vendored"] }
 
 # Auth libs
 oauth2 = "4.3"

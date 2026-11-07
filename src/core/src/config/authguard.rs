@@ -18,6 +18,8 @@ pub struct AuthguardProperties {
     pub region: String,
     pub read_action: String,
     pub write_action: String,
+    /// Trusted external OAuth/OIDC authority advertised by protocol discovery.
+    pub oauth: Option<OAuthDiscoveryProperties>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -40,7 +42,47 @@ impl Default for AuthguardProperties {
             region: "global".into(),
             read_action: "sigbot:read".into(),
             write_action: "sigbot:write".into(),
+            oauth: None,
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OAuthDiscoveryProperties {
+    pub issuer: String,
+    /// The authority's real OpenID Connect discovery document.
+    pub discovery_url: String,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+}
+
+impl OAuthDiscoveryProperties {
+    pub fn validate(&self) -> Result<()> {
+        let issuer = Self::validate_url(&self.issuer)?;
+        anyhow::ensure!(issuer.query().is_none(), "OAuth issuer cannot contain a query");
+        Self::validate_url(&self.discovery_url)?;
+        anyhow::ensure!(
+            self.scopes.len() <= 64
+                && self.scopes.iter().all(|scope| !scope.is_empty()
+                    && scope.len() <= 128
+                    && scope.bytes().all(|c| matches!(c,0x21|0x23..=0x5b|0x5d..=0x7e))),
+            "invalid OAuth scopes"
+        );
+        Ok(())
+    }
+
+    pub fn validate_url(value: &str) -> Result<url::Url> {
+        let url = url::Url::parse(value)?;
+        let loopback = url.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        });
+        anyhow::ensure!((url.scheme()=="https"||(url.scheme()=="http"&&loopback))&&url.host_str().is_some()&&url.username().is_empty()&&url.password().is_none()&&url.fragment().is_none(),"protocol public/discovery URLs require HTTPS (HTTP is allowed only on loopback), without credentials or fragments");
+        Ok(url)
     }
 }
 

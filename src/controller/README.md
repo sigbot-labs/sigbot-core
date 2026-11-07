@@ -8,15 +8,15 @@ Run 创建；Controller 使用平台 service principal 扫描待处理 Run，在
 
 `POST /api/v1/workflows/{id}/start` 在 Core Repository 中锁定作用域 Workflow，保存
 不可变图快照并创建或返回活动 `run_id`。Controller 使用 PostgreSQL 行锁与
-`SKIP LOCKED` 保证同一 Run 只有一个部署 owner，再按以下规则选择 `ctl_worker`：
+`SKIP LOCKED` 保证同一 Run 只有一个部署 owner，再按以下规则选择 `cluster_info`：
 
 1. `env` 和 Authguard 租户必须完全相同；
 2. Workflow 专用 Worker 优先于租户共享 Worker；
 3. Worker 必须在线且未超过 `max_concurrent_workflows`；
-4. 选定的 `worker_id` 固定到该 Run，用于恢复、更新和停止。
+4. 选定的 `cluster_id` 固定到该 Run，用于恢复、更新和停止。
 
 Controller 从不可变图生成 WorkerPlan。当前允许的模块是 `datafeed`、`evaluator`、
-`strategy`、`logservice`、`order`、`wallet`、`notifier`、`exporter` 和 `backtest`。
+`strategy`、`logger`、`order`、`wallet`、`notifier`、`exporter` 和 `backtest`。
 订阅者在生产者之前启动；停止在 Provider 确认资源删除后才更新 Run 终态。
 
 ## Worker API 与强类型配置
@@ -48,7 +48,7 @@ private key、自定义命令或进程环境都会被拒绝。
 
 ## 租户中间件
 
-`ctl_worker.middleware` 可按租户声明 Redis、pgvector、TimescaleDB 和 EMQX。每个条目
+`cluster_info.middleware` 可按租户声明 Redis、pgvector、TimescaleDB 和 EMQX。每个条目
 只允许：
 
 ```yaml
@@ -95,7 +95,7 @@ Docker 使用 `bollard`。Controller 要求预先存在且带
 
 ## 日志持久卷
 
-启用 Strategy/Logservice 的本地日志归档时，每个 Worker 必须有独占、支持 SQLite WAL
+启用 Strategy/Logger 的本地日志归档时，每个 Worker 必须有独占、支持 SQLite WAL
 的持久文件系统：Kubernetes 用 `log_pvc_prefix`，Docker 用 `log_volume_prefix`。
 Controller 校验 ownership 并挂载到 `/var/lib/sigbot/logs`。缺失或错误归属会拒绝部署；
 替换/停止保留卷，只有归档校验完成后才能由运维回收。不要让多个 Worker 共享一个

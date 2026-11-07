@@ -31,7 +31,7 @@ sigbot-order.workspace = true
 sigbot-wallet.workspace = true
 sigbot-backtest.workspace = true
 sigbot-notifier.workspace = true
-sigbot-logservice.workspace = true
+sigbot-logger.workspace = true
 sigbot-exporter.workspace = true
 sigbot-evaluator.workspace = true
 

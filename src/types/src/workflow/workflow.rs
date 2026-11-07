@@ -49,7 +49,7 @@ pub struct WorkflowInfo {
     pub base: EntityBase,
     pub name: Option<String>,
     pub status: Option<JobStatus>,
-    #[serde(rename = "flow_json", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "dag_config", skip_serializing_if = "Option::is_none")]
     pub flow_info: Option<WorkflowFlowInfo>,
     pub properties: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
@@ -427,9 +427,9 @@ impl<'r> FromRow<'r, SqliteRow> for WorkflowInfo {
             )
         })?;
 
-        // Read flow_json from database and deserialize to flow_info
+        // Read dag_config from database and deserialize to flow_info
         let flow_info = {
-            let flow_json_str: Option<String> = row.try_get("flow_json").ok().flatten();
+            let flow_json_str: Option<String> = row.try_get("dag_config").ok().flatten();
             flow_json_str
                 .as_ref()
                 .and_then(|s| serde_json::from_str::<Value>(s).ok())
@@ -481,10 +481,10 @@ impl<'r> FromRow<'r, PgRow> for WorkflowInfo {
             )
         })?;
 
-        // Read flow_json from database (PostgreSQL JSONB) and deserialize to flow_info
+        // Read dag_config from database (PostgreSQL JSONB) and deserialize to flow_info
         let flow_info = {
-            let flow_json: Option<Value> = row.try_get("flow_json").ok().flatten();
-            flow_json
+            let dag_config: Option<Value> = row.try_get("dag_config").ok().flatten();
+            dag_config
                 .and_then(|v| if v.is_null() { None } else { Some(v) })
                 .and_then(|json| serde_json::from_value::<WorkflowFlowInfo>(json).ok())
         };

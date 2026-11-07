@@ -13,7 +13,7 @@
 | `src/component/datafeed` | `IDatafeed` | 社交/政策/交易所接入、事实持久化、快照与计算 | 租户级动态组件 |
 | `src/component/evaluator` | `IEvaluator` | LLM 旁路评估、案例引用、五态概率 | 租户级动态组件 |
 | `src/component/exporter` | `IExporter` | Kafka、Google Sheets、游标与重试 | 租户级动态组件 |
-| `src/component/logservice` | `ILogservice` | WAL 缓冲、不可变对象归档、索引和游标读取 | 租户级动态组件 |
+| `src/component/logger` | `ILogger` | WAL 缓冲、不可变对象归档、索引和游标读取 | 租户级动态组件 |
 | `src/component/notifier` | `INotifier` | Email、Telegram、站内投递、模板和状态 | 租户级动态组件 |
 | `src/component/order` | `IOrder` | 风控、预占、提交、执行组、对账 | 租户级动态组件 |
 | `src/component/strategy/runner` | `IStrategy` | Python 沙箱、事务状态、串行回调和消息路由 | 租户级动态组件 |
@@ -53,7 +53,7 @@ WorkerPlan，按订阅者优先顺序启动节点，并通过同一套 Docker/Ku
 - `env + tenant_id + workflow_id + node_id + run_id` 是数据面隔离范围；
   `traceparent` 和 `requestSpanId` 不参与业务身份或持久幂等。
 
-`ctl_worker.middleware` 是强类型租户中间件声明，只允许为 Redis、pgvector、
+`cluster_info.middleware` 是强类型租户中间件声明，只允许为 Redis、pgvector、
 TimescaleDB、EMQX 配置批准的 `image` 和 `resources` 字段。Web 表单模式与 YAML
 模式使用同一 API DTO 和校验器；Controller 在九组件启动前幂等调和中间件并绑定
 端点。运行凭据必须已存在于远端 Secret 或受控 Docker env 文件，Controller 不把
@@ -74,7 +74,7 @@ migration/20261031000000/
 旧消息 topic 或旧表名的兼容层。
 
 控制面 PostgreSQL 保存 Workflow、Worker、连接等配置；部署镜像可包含 TimescaleDB
-和 pgvector 扩展。租户数据面的 pgvector/TimescaleDB 则由 scoped `ctl_worker` 独立
+和 pgvector 扩展。租户数据面的 pgvector/TimescaleDB 则由 scoped `cluster_info` 独立
 声明和调和，两者不能混写为“一定是同一个数据库”。金融事实表由对应数据面组件的
 Core Repository 唯一写入。
 

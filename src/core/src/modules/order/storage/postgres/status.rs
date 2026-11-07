@@ -100,7 +100,7 @@ impl OrderExecutionPostgresRepository {
         status: OrderStatusFact,
     ) -> Result<()> {
         sqlx::query(
-            "UPDATE ord_order SET state=$7,exchange_order_id=$8,updated_at=NOW()
+            "UPDATE order_info SET state=$7,exchange_order_id=$8,updated_at=NOW()
             WHERE env=$1 AND tenant_id=$2 AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6",
         )
         .bind(&self.scope.env)

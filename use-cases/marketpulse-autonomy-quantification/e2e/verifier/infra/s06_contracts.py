@@ -10,7 +10,7 @@ def verify(context):
             "signed_gateway_context_is_scoped_through_real_http_workflow_transactions"]),
         ("sigbot-core", "mgmt_health", [
             "real_http_requires_ready_business_and_reachable_database_and_detects_task_exit"]),
-        ("sigbot-logservice", "archive_persistence", ["durable_restart_late_cursor_dedup_and_scope"]),
+        ("sigbot-logger", "archive_persistence", ["durable_restart_late_cursor_dedup_and_scope"]),
         ("sigbot-notifier", "notifier_runtime", [
             "postgres_in_app_duplicate_scope_single_owner_and_crash_recovery"]),
         ("sigbot-strategy-runner", "strategy_routing", [

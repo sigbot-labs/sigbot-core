@@ -15,7 +15,7 @@ metadata:
   labels: {{ include "sigbot.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: ["services"]
+    resources: ["services", "configmaps"]
     verbs: ["get", "create", "patch", "delete"]
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]

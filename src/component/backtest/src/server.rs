@@ -5,33 +5,31 @@ use crate::kline::kline::KlineBacktest;
 use crate::trades::trades::TradesBacktest;
 use common_context::ApplicationContext;
 use sigbot_messager::server::MessagerServer;
-use sigbot_types::backtest::BacktestArgument;
 use sigbot_types::backtest::BacktestProvider;
-use sigbot_types::ArgumentConfig;
 use std::sync::Arc;
 
 pub struct SigbotBacktestServer;
 impl SigbotBacktestServer {
-    pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        let configuration = matches
-            .get_one::<String>("BACKTEST_MANAGER_CONFIGURATION")
-            .expect("backtest configuration required");
-        let argument =
-            BacktestArgument::from_json(&ArgumentConfig::decode(configuration).expect("invalid backtest encoding"))
-                .expect("invalid backtest configuration");
-        let provider = BacktestProvider::of(
-            matches
-                .get_one::<String>("BACKTEST_MANAGER_PROVIDER")
-                .map(String::as_str)
-                .unwrap_or("KLINE"),
-        )
-        .expect("invalid backtest provider");
+    pub async fn startup() {
+        let argument = sigbot_core::config::config::get_config()
+            .services
+            .component
+            .backtest
+            .clone()
+            .expect("services.component.backtest required");
+        let provider = argument.provider.clone().unwrap_or(BacktestProvider::Kline);
         let key = sigbot_utils::providers::ProviderInstanceId::configured(provider.as_str(), &argument)
             .expect("invalid backtest identity");
         let properties = argument.properties.expect("backtest properties required");
-        let messager = MessagerServer::connect(matches, argument.messager_config)
-            .await
-            .expect("backtest messager failed");
+        let messager = MessagerServer::connect(
+            sigbot_core::config::config::get_config()
+                .services
+                .component
+                .messager
+                .clone(),
+        )
+        .await
+        .expect("backtest messager failed");
         let context = ApplicationContext::global();
         context
             .register_with_shutdown_phase::<dyn IBacktest, _>(&key, 20, move || {

@@ -5,7 +5,7 @@
 **Status:** Implemented asynchronous evaluation side path with typed snapshots;
 real-model quality and production memory retrieval remain evidence gaps.
 
-`SigbotEvaluator` is the non-deterministic side path of one strategy pipeline.
+`SigbotEvaluatorStarter` is the non-deterministic side path of one strategy pipeline.
 It observes normalized market/news events, evaluates market structure with a
 bounded multi-agent process, and publishes an immutable recommendation for the
 deterministic Strategy Runner. It never emits an order or trading signal.

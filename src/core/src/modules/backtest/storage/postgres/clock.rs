@@ -134,7 +134,7 @@ impl BacktestClockPostgresRepository {
             }
         }
         let unsettled: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT EXISTS(SELECT 1 FROM order_info WHERE env=$1 AND tenant_id=$2
             AND run_id=$3 AND state IN ('pending','reserved','submitting','unknown'))",
         )
         .bind(&query.scope.env)

@@ -201,7 +201,7 @@ impl OrderGroupPostgresRepository {
         order_node: i64,
     ) -> Result<Option<(String, Decimal)>> {
         let order = sqlx::query(
-            "SELECT state,exchange_order_id FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT state,exchange_order_id FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6",
         )
         .bind(&self.scope.env)

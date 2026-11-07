@@ -100,7 +100,7 @@ impl WalletRequestPostgresRepository {
         );
         let wire: MessageEnvelope<Value> = serde_json::from_value(serde_json::to_value(message)?)?;
         let mut tx = self.pool.begin().await?;
-        let wallet = sqlx::query("SELECT id FROM wlt_wallet WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND del_flag=FALSE FOR UPDATE")
+        let wallet = sqlx::query("SELECT id FROM ledger_info WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND del_flag=FALSE FOR UPDATE")
             .bind(request.wallet_id).bind(self.account_id).bind(&self.scope.env).bind(self.scope.tenant_id)
             .fetch_optional(&mut *tx).await?;
         ensure!(wallet.is_some(), "reservation wallet is outside its account");
@@ -184,7 +184,7 @@ impl WalletRequestPostgresRepository {
     ) -> Result<ReservationState> {
         let request = &input.payload;
         let order = sqlx::query(
-            "SELECT state,reserve_asset,reserve_amount,intent,exchange_order_id FROM ord_order
+            "SELECT state,reserve_asset,reserve_amount,intent,exchange_order_id FROM order_info
             WHERE env=$1 AND tenant_id=$2 AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6",
         )
         .bind(&self.scope.env)

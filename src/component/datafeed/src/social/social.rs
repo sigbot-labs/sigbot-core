@@ -15,8 +15,8 @@ use serde::Serialize;
 use serde_json::json;
 use serde_json::Value;
 use sigbot_core::config::config::get_config;
+use sigbot_core::config::config::DatafeedProperties;
 pub use sigbot_types::datafeed::event::DatafeedEvent as NewsEvent;
-use sigbot_types::datafeed::DatafeedArgument;
 use sigbot_types::messager::envelope::TraceContext;
 use std::collections::HashMap;
 use std::future::Future;
@@ -109,12 +109,8 @@ impl SocialFeed {
         }
     }
 
-    pub async fn configure(&self, argument: Arc<DatafeedArgument>) -> Result<()> {
-        let properties = argument
-            .datafeed_config
-            .properties
-            .as_ref()
-            .context("datafeed properties required")?;
+    pub async fn configure(&self, argument: Arc<DatafeedProperties>) -> Result<()> {
+        let properties = argument.properties.as_ref().context("datafeed properties required")?;
         let endpoint = Self::property(properties, self.provider, "endpoint")?;
         let mode = Self::property(properties, self.provider, "transport").unwrap_or_else(|_| "rest".to_owned());
         let mode: SocialTransportMode = serde_json::from_value(Value::String(mode))?;

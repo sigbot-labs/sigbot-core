@@ -55,11 +55,11 @@ class DatabaseVerifier:
                 foreign_tenant = "0192f7b2-5c00-7000-8000-000000000202"
                 workflow = "0192f7b2-5c00-7000-8000-000000000203"
                 connection.execute(
-                    "INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES(?,?,?,'worker owner')",
+                    "INSERT INTO workflow_info(id,env,tenant_id,name) VALUES(?,?,?,'worker owner')",
                     (workflow, "test", tenant),
                 )
                 statement = (
-                    "INSERT INTO ctl_worker(id,env,tenant_id,workflow_id,name,provider,conn_url,"
+                    "INSERT INTO cluster_info(id,env,tenant_id,workflow_id,name,provider,conn_url,"
                     "auth_config,configuration,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
                 )
                 valid = (
@@ -84,7 +84,7 @@ class DatabaseVerifier:
                 cursor.execute(path.read_text())
                 cursor.execute("SELECT version,sha256 FROM mig_version ORDER BY version")
                 versions = cursor.fetchall()
-                cursor.execute("SELECT COUNT(*) FROM wlt_wallet WHERE id='0192f7b2-5c00-7000-8000-000000000104'")
+                cursor.execute("SELECT COUNT(*) FROM ledger_info WHERE id='0192f7b2-5c00-7000-8000-000000000104'")
                 if cursor.fetchone()[0] != 0:
                     raise AssertionError("database invariant fixture was not rolled back")
         script = self.runner(self.repository / "migration", "postgres").postgres_script()

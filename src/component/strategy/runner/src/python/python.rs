@@ -29,6 +29,7 @@ use async_trait::async_trait;
 use common_telemetry::debug;
 use common_telemetry::info;
 use common_telemetry::warn;
+use sigbot_core::config::config::StrategyProperties;
 use sigbot_exchange::exchange::ExchangeFactory;
 use sigbot_messager::messager::IMessager;
 use sigbot_types::messager::TOPIC_CONFIG_WORKFLOW;
@@ -36,7 +37,6 @@ use sigbot_types::messager::TOPIC_WF_MARKET_STREAM;
 use sigbot_types::strategy::models::strategy_execution::StrategyExecutionInput;
 use sigbot_types::strategy::strategy::StrategyInfo;
 use sigbot_types::strategy::strategy::StrategyProvider;
-use sigbot_types::strategy::StrategyArgument;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -44,14 +44,14 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 pub struct PythonStrategy {
-    argument: Arc<StrategyArgument>,
+    argument: Arc<StrategyProperties>,
     #[allow(unused)]
     running_batch_executors: Arc<Mutex<HashMap<String, Arc<BatchStrategyExecutor>>>>,
     running_streaming_executors: Arc<Mutex<HashMap<String, Arc<StreamingStrategyExecutor>>>>,
 }
 
 impl PythonStrategy {
-    pub async fn new(argument: Arc<StrategyArgument>) -> Arc<Self> {
+    pub async fn new(argument: Arc<StrategyProperties>) -> Arc<Self> {
         Arc::new(Self {
             argument,
             running_batch_executors: Arc::new(Mutex::new(HashMap::new())),

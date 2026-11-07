@@ -43,7 +43,7 @@ impl OrderRiskPostgresRepository {
     ) -> Result<sigbot_types::exchange::mode::ExecutionMode> {
         let intent = &message.payload;
         let wallet = sqlx::query(
-            "SELECT id,mode FROM wlt_wallet WHERE id=$1 AND account_id=$2 AND tenant_id=$3
+            "SELECT id,mode FROM ledger_info WHERE id=$1 AND account_id=$2 AND tenant_id=$3
             AND env=$4 AND exchange=$5 AND del_flag=FALSE FOR UPDATE",
         )
         .bind(intent.wallet_id)
@@ -107,7 +107,7 @@ impl OrderRiskPostgresRepository {
         .await?;
         let pending = sqlx::query("SELECT COALESCE(SUM((intent->>'quantity')::numeric),0) AS quantity,
             COALESCE(SUM((intent->>'quantity')::numeric * (intent->'market'->>'price')::numeric),0) AS notional
-            FROM ord_order o WHERE wallet_id=$1 AND (state IN ('pending','reserved','submitting','unknown','acknowledged','partially_filled')
+            FROM order_info o WHERE wallet_id=$1 AND (state IN ('pending','reserved','submitting','unknown','acknowledged','partially_filled')
             OR EXISTS(SELECT 1 FROM wlt_reservation r WHERE r.wallet_id=o.wallet_id AND r.producer_node_id=o.producer_node_id
                 AND r.run_id=o.run_id AND r.seq=o.seq AND r.state='reserved'))")
             .bind(intent.wallet_id).fetch_one(&mut **tx).await?;
@@ -132,7 +132,7 @@ impl OrderRiskPostgresRepository {
         message: &DurableMessage<TradeIntent>,
     ) -> Result<Option<String>> {
         let row = sqlx::query(
-            "SELECT state,intent FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT state,intent FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6",
         )
         .bind(&message.scope.env)
@@ -155,7 +155,7 @@ impl OrderRiskPostgresRepository {
 
     pub async fn reservation(&self, message: &DurableMessage<TradeIntent>) -> Result<(String, Decimal)> {
         Ok(sqlx::query_as(
-            "SELECT reserve_asset,reserve_amount FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT reserve_asset,reserve_amount FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6",
         )
         .bind(&message.scope.env)

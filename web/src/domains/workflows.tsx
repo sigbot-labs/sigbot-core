@@ -139,7 +139,7 @@ const nodeTypes = { stage: StageNode };
 export function Workflows() {
   const scope = useScope();
   const remote = useRemote<WorkflowList>(
-    `/api/v1/workflows?${scope.query}&num=1&limit=100`,
+    `/api/v1/workflows?${scope.query}&limit=100`,
     { data: [] },
   );
   const [editing, setEditing] = useState<Workflow | "new" | null>(null);
@@ -189,7 +189,7 @@ export function Workflows() {
                 <h3>{workflow.name}</h3>
                 <p>{workflow.description ?? "市场信息驱动的策略工作流"}</p>
                 <div className="workflow-card-pipeline">
-                  {(workflow.flow_json?.nodes ?? [])
+                  {(workflow.dag_config?.nodes ?? [])
                     .slice(0, 5)
                     .map((node, index) => (
                       <span key={node.id}>
@@ -241,7 +241,7 @@ function WorkflowEditor({
   const [mode, setMode] = useState(workflow?.properties?.mode ?? "paper");
   const [status, setStatus] = useState(workflow?.status ?? "STOPPED");
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
-    (workflow?.flow_json?.nodes ?? []).map((node) => ({
+    (workflow?.dag_config?.nodes ?? []).map((node) => ({
       id: String(node.id),
       type: "stage",
       position: node.position,
@@ -258,7 +258,7 @@ function WorkflowEditor({
     })),
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
-    (workflow?.flow_json?.connections ?? []).map((edge) => ({
+    (workflow?.dag_config?.connections ?? []).map((edge) => ({
       ...edge,
       animated: false,
     })),
@@ -364,13 +364,10 @@ function WorkflowEditor({
         })),
         connections: edges,
       };
-      const result = await Api.save<{ id: string }>("/api/v1/workflows", {
-        id,
+      const result = await Api.entity<{ id: string }>("workflows", env, {
         name: name.trim(),
-        env,
-        status,
-        plain_configuration: { ...workflow?.properties, mode },
-        flow_info: {
+        properties: { ...workflow?.properties, mode },
+        dag_config: {
           nodes: graph.nodes,
           connections: graph.connections.map(
             ({ id, source, target, kind }) => ({
@@ -381,7 +378,7 @@ function WorkflowEditor({
             }),
           ),
         },
-      });
+      }, id);
       setId(result.id);
       setDirty(false);
       setFeedback("Workflow 已保存");

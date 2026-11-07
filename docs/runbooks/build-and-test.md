@@ -34,3 +34,23 @@ The only E2E entry point is `use-cases/marketpulse-autonomy-quantification/e2e/r
 Real external-service/PG tests are explicitly ignored by plain `cargo test`; the case runner executes selected targets with actual middleware and records that they ran. Migration invariants are part of the Marketpulse `database`/`schemas` scenarios; there is no separate `migration/tests` project. See [case instructions](../../use-cases/marketpulse-autonomy-quantification/e2e/README_CN.md).
 
 PR CI checks out the exact head SHA, builds/tests all modules, and builds `dirty-<sha8>` images; forks build without publishing. A PR merged into the default branch triggers a serialized rebuild of its merge SHA for native amd64/arm64, binaries and Helm. Official version/latest tags and the OCI chart are published only after every build succeeds, then checked again; binaries, chart and checksums go to GitHub Release. One PR comment retains CI/release results and every completed Actions step. These workflow definitions require an actual GitHub run to verify registry credentials and comment permissions.
+
+## Starting a module from YAML
+
+Each process accepts `sigbot <module> --config <path>` (or `-c <path>`). The 13 modules are `api`, `mcp`, `a2a`, `controller`, `datafeed`, `evaluator`, `exporter`, `logger`, `strategy`, `backtest`, `notifier`, `order`, and `wallet`. Their entry types are `SigbotXxxStarter`. The nine tenant starters live under `startup/component/`; the API starters are `startup/api/{http.rs,a2a.rs,mcp.rs}`. REST uses `SigbotHttpStarter`; the optional aggregate command uses root-level `startup/standalone.rs` and `SigbotStandaloneStarter`. `controller.rs` remains at the startup root. All three APIs expose the same [ten-domain CRUD contract](../architecture/domain-model_ZH.md). Helm runs enabled MCP/A2A protocols beside REST with separate management ports; Compose uses the `protocols` profile.
+
+```bash
+sigbot api -c etc/sigbot.yaml
+sigbot mcp -c etc/sigbot.yaml
+sigbot a2a -c etc/sigbot.yaml
+sigbot controller -c etc/sigbot.yaml
+sigbot datafeed -c /etc/sigbot/runtime/sigbot.yaml
+```
+
+The loader reads the exact YAML path, rejects missing/invalid files and unknown typed fields, expands `${VARIABLE:default}`, then applies `SIGBOT__...` environment overrides. It does not implicitly load `.env`. Explicit startup paths take precedence over the legacy library fallback `SIGBOT_CFG_PATH`. Secrets remain named references with values supplied through the existing Secret mechanism.
+
+`services.platform` owns operational HTTP/A2A/MCP API and Controller settings. `services.component.messager` selects the shared `MQTT` or `LOCAL` transport, while `services.component.exchange` contains only non-secret exchange endpoints. Each of the nine tenant components reads its typed configuration from `services.component.<module>`; `datafeed.providers` can select multiple ingestion providers and otherwise falls back to `datafeed.provider`, while `backtest.provider` selects `KLINE` (default) or `TRADES`. Tenant exchange credentials stay outside this base configuration and continue to be supplied through encrypted tenant records or Secret references. The old base64 configuration, component argument structures, and provider CLI flags have been removed.
+
+The Controller converts each frozen node's persisted input contract into `services.component`, includes the generated content in its specification hash, and launches only `sigbot <module> --config /etc/sigbot/runtime/sigbot.yaml`. Kubernetes mounts an owned ConfigMap; Docker uploads an immutable-per-specification file into an owned configuration volume before starting the process. Both resources are removed with their worker. These files contain Secret references, while Secret values continue to come from the operator-provisioned runtime environment.
+
+The logging component, crate, module, startup command, and configuration references are named `logger` (formerly `logservice`). Existing immutable `log_chunk` business storage is unchanged. Update persisted Workflow node module names before launching existing workflows with the new version.

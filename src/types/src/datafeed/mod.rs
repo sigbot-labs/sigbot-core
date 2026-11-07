@@ -18,30 +18,5 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::datafeed::datafeed::DatafeedInfo;
-
-use crate::messager::messager::MessagerConfig;
-use anyhow::Context;
-use anyhow::Error;
-use serde::Deserialize;
-use serde::Serialize;
-use std::sync::Arc;
-
 pub mod datafeed;
 pub mod event;
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct DatafeedArgument {
-    pub messager_config: Arc<MessagerConfig>,
-    pub datafeed_config: Arc<DatafeedInfo>,
-}
-
-impl DatafeedArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse datafeed info from JSON")
-    }
-}
-
-#[cfg(test)]
-#[path = "../../tests/datafeed/argument_test.rs"]
-mod tests;

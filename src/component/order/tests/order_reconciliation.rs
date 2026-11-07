@@ -100,7 +100,7 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
     let run_id = Uuid::now_v7();
     let account = Uuid::now_v7();
     let wallet_id = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'order reconcile test')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'order reconcile test')")
         .bind(workflow_id)
         .bind(&scope.env)
         .bind(scope.tenant_id)
@@ -114,7 +114,7 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
         .execute(&pool)
         .await?;
     sqlx::query(
-        "INSERT INTO wlt_wallet(id,tenant_id,exchange,mode,env,account_id) VALUES($1,$2,'binance','backtest',$3,$4)",
+        "INSERT INTO ledger_info(id,tenant_id,exchange,mode,env,account_id) VALUES($1,$2,'binance','backtest',$3,$4)",
     )
     .bind(wallet_id)
     .bind(scope.tenant_id)
@@ -169,7 +169,7 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
     repository
         .accept_with(&input, |_| Ok(("USDT".into(), Decimal::from(100))))
         .await?;
-    sqlx::query("UPDATE ord_order SET state='unknown' WHERE wallet_id=$1 AND run_id=$2 AND seq=$3")
+    sqlx::query("UPDATE order_info SET state='unknown' WHERE wallet_id=$1 AND run_id=$2 AND seq=$3")
         .bind(wallet_id)
         .bind(&input.run_id)
         .bind(input.seq)
@@ -243,7 +243,7 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
     repository
         .accept_with(&prepared_input, |_| Ok(("USDT".into(), Decimal::from(100))))
         .await?;
-    sqlx::query("UPDATE ord_order SET state='reserved' WHERE wallet_id=$1 AND run_id=$2 AND seq=$3")
+    sqlx::query("UPDATE order_info SET state='reserved' WHERE wallet_id=$1 AND run_id=$2 AND seq=$3")
         .bind(wallet_id)
         .bind(&prepared_input.run_id)
         .bind(prepared_input.seq)
@@ -254,7 +254,7 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
     let loser = json!({"venue_order_id":"different-preparation","payload":{"ciphertext":"losing-candidate"}});
     assert_eq!(repository.persist_prepared(&prepared_input, &loser).await?, signed);
     assert!(
-        sqlx::query("UPDATE ord_order SET prepared_submission=$1 WHERE wallet_id=$2 AND seq=1")
+        sqlx::query("UPDATE order_info SET prepared_submission=$1 WHERE wallet_id=$2 AND seq=1")
             .bind(&loser)
             .bind(wallet_id)
             .execute(&pool)
@@ -266,11 +266,11 @@ async fn unknown_submission_only_reconciles_and_preparation_is_immutable() -> Re
         .bind(&input.run_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM ord_order WHERE wallet_id=$1")
+    sqlx::query("DELETE FROM order_info WHERE wallet_id=$1")
         .bind(wallet_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM wlt_wallet WHERE id=$1")
+    sqlx::query("DELETE FROM ledger_info WHERE id=$1")
         .bind(wallet_id)
         .execute(&pool)
         .await?;

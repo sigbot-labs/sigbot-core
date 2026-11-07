@@ -68,7 +68,9 @@ export interface Connection {
   kind: "datafeed" | "exchange";
   provider: string;
   mode: string;
+  transport?: string;
   status: string;
+  configuration?: {endpoint?: string};
   endpoint?: string;
   secret_ref?: string;
   updated_at?: string;
@@ -92,7 +94,7 @@ export interface Workflow {
   name: string;
   status: string;
   env: DeploymentEnvironment;
-  flow_json?: { nodes: WorkflowNode[]; connections: WorkflowEdge[] };
+  dag_config?: { nodes: WorkflowNode[]; connections: WorkflowEdge[] };
   description?: string;
   updated_at?: string;
   properties?: Record<string, string>;

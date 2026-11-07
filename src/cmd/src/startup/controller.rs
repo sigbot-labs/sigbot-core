@@ -19,20 +19,16 @@
 // This includes modifications and derived works.
 
 use crate::startup::internal::banner::print_banner;
-use crate::startup::internal::management::SigbotManagementServer;
+use crate::startup::internal::management::SigbotManagementStarter;
 use clap::Command;
-use common_context::util::panics::PanicHelper;
-use common_context::ApplicationContext;
 use sigbot_controller::server::ControllerServer;
-use sigbot_core::config::config::get_config;
-use sigbot_core::mgmt::apm;
 
 #[derive(Default)]
-pub struct SigbotController {
-    management: SigbotManagementServer,
+pub struct SigbotControllerStarter {
+    management: SigbotManagementStarter,
 }
 
-impl SigbotController {
+impl SigbotControllerStarter {
     pub const COMMAND_NAME: &'static str = "controller";
 
     // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
@@ -50,33 +46,22 @@ impl SigbotController {
  "#;
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Platformization Controller for Components Orchestration.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Platformization Controller for Components Orchestration.")
     }
 
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) {
         let service = Self::default();
-        ApplicationContext::global()
-            .init()
-            .await
-            .expect("provider context initialization failed");
-
-        PanicHelper::set_hook_default(get_config().logging.is_human_mode());
-
-        print_banner(verbose, Self::ASCII_NAME, None);
-
-        apm::init().await;
-
         let signal_handle = service.management.start().await;
+        print_banner(verbose, Self::ASCII_NAME, None);
 
         Self::start(matches, verbose).await;
 
-        signal_handle.await.expect("Failed to start Management server.");
-        ApplicationContext::global()
-            .shutdown()
+        service
+            .management
+            .wait(signal_handle)
             .await
-            .expect("provider shutdown failed");
+            .expect("service lifecycle failed");
     }
 
     async fn start(_matches: &clap::ArgMatches, _verbose: bool) {

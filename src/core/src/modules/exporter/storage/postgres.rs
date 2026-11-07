@@ -69,7 +69,7 @@ impl ExporterPostgresRepository {
 
     pub async fn connection_exists(&self, connection_id: Uuid, scope: &MessageScope) -> Result<bool> {
         Ok(
-            sqlx::query_scalar::<_, Uuid>("SELECT id FROM cfg_connection WHERE id=$1 AND env=$2 AND tenant_id=$3")
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM exporter_info WHERE id=$1 AND env=$2 AND tenant_id=$3")
                 .bind(connection_id)
                 .bind(&scope.env)
                 .bind(scope.tenant_id)

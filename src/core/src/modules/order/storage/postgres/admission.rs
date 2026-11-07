@@ -30,7 +30,7 @@ impl OrderAdmissionPostgresRepository {
             coordinators.contains(&group.coordinator_node_id),
             "execution group coordinator is outside trusted Workflow edges"
         );
-        let owned:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM wlt_wallet WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND del_flag=FALSE)")
+        let owned:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ledger_info WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND del_flag=FALSE)")
             .bind(input.payload.wallet_id).bind(input.payload.account_id).bind(&input.scope.env).bind(input.scope.tenant_id)
             .fetch_one(&mut **tx).await?;
         ensure!(owned, "execution group wallet is outside this account scope");

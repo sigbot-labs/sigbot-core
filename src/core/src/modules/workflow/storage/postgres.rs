@@ -45,20 +45,20 @@ impl WorkflowPostgresRepository {
 
     pub async fn overview(pool: &PgPool, tenant: Uuid, env: &str) -> Result<Value, Error> {
         let total: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM wf_workflow WHERE tenant_id=$1 AND env=$2 AND del_flag=0")
+            sqlx::query_scalar("SELECT count(*) FROM workflow_info WHERE tenant_id=$1 AND env=$2 AND del_flag=0")
                 .bind(tenant)
                 .bind(env)
                 .fetch_one(pool)
                 .await?;
         let active: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM wf_workflow WHERE tenant_id=$1 AND env=$2 AND del_flag=0 AND status='RUNNING'",
+            "SELECT count(*) FROM workflow_info WHERE tenant_id=$1 AND env=$2 AND del_flag=0 AND status='RUNNING'",
         )
         .bind(tenant)
         .bind(env)
         .fetch_one(pool)
         .await?;
-        let executions:i64=sqlx::query_scalar("SELECT count(*) FROM ord_execution e JOIN wlt_wallet w ON w.id=e.wallet_id WHERE w.tenant_id=$1 AND w.env=$2").bind(tenant).bind(env).fetch_one(pool).await?;
-        let runs:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('run_id',r.run_id,'workflow_id',r.workflow_id::text,'workflow_name',w.name,'status',r.state,'event_time',r.started_at,'attempt_no',r.attempt_no) FROM wf_run r JOIN wf_workflow w ON w.id=r.workflow_id WHERE r.tenant_id=$1 AND r.env=$2 AND w.tenant_id=$1 AND w.env=$2 ORDER BY r.started_at DESC LIMIT 20").bind(tenant).bind(env).fetch_all(pool).await?;
+        let executions:i64=sqlx::query_scalar("SELECT count(*) FROM ord_execution e JOIN ledger_info w ON w.id=e.wallet_id WHERE w.tenant_id=$1 AND w.env=$2").bind(tenant).bind(env).fetch_one(pool).await?;
+        let runs:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('run_id',r.run_id,'workflow_id',r.workflow_id::text,'workflow_name',w.name,'status',r.state,'event_time',r.started_at,'attempt_no',r.attempt_no) FROM wf_run r JOIN workflow_info w ON w.id=r.workflow_id WHERE r.tenant_id=$1 AND r.env=$2 AND w.tenant_id=$1 AND w.env=$2 ORDER BY r.started_at DESC LIMIT 20").bind(tenant).bind(env).fetch_all(pool).await?;
         Ok(
             json!({"workflows_total":total,"active_workflows":active,"executions_count":executions,"equity":null,"realized_pnl":null,"equity_series":[],"recent_runs":runs,"updated_at":chrono::Utc::now()}),
         )
@@ -78,7 +78,7 @@ impl WorkflowPostgresRepository {
         start: bool,
     ) -> Result<Uuid, Error> {
         let mut transaction = pool.begin().await?;
-        let row = sqlx::query("SELECT status,flow_json,properties FROM wf_workflow WHERE id=$1 AND tenant_id=$2 AND env=$3 AND del_flag=0 FOR UPDATE")
+        let row = sqlx::query("SELECT status,dag_config,properties FROM workflow_info WHERE id=$1 AND tenant_id=$2 AND env=$3 AND del_flag=0 FOR UPDATE")
             .bind(workflow_id).bind(tenant).bind(env).fetch_optional(&mut *transaction).await?.context("workflow not found")?;
         let status: String = row.get("status");
         let active: Option<Uuid> = sqlx::query_scalar("SELECT run_id FROM wf_run WHERE workflow_id=$1 AND tenant_id=$2 AND env=$3 AND state IN ('queued','running') ORDER BY started_at DESC LIMIT 1")
@@ -93,7 +93,7 @@ impl WorkflowPostgresRepository {
                 matches!(status.as_str(), "STOPPED" | "SUCCESS" | "FAILED") && active.is_none(),
                 "workflow cannot start in current state"
             );
-            let flow: Value = row.get("flow_json");
+            let flow: Value = row.get("dag_config");
             let definition = serde_json::from_value(flow.clone())?;
             sigbot_types::workflow::deployment::WorkflowDeployment::validate(&definition, true)?;
             let properties: Option<Value> = row.get("properties");
@@ -110,7 +110,7 @@ impl WorkflowPostgresRepository {
             let run = Uuid::now_v7();
             sqlx::query("INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state,params) VALUES($1,$2,$3,$4,'queued',$5)")
                 .bind(run).bind(workflow_id).bind(env).bind(tenant)
-                .bind(json!({"flow_json":flow,"execution_mode":mode,"traceparent":common_telemetry::tracing_context::MessageTrace::child("workflow.start", "").traceparent(),"properties":properties})).execute(&mut *transaction).await?;
+                .bind(json!({"dag_config":flow,"execution_mode":mode,"traceparent":common_telemetry::tracing_context::MessageTrace::child("workflow.start", "").traceparent(),"properties":properties})).execute(&mut *transaction).await?;
             run
         } else {
             ensure!(
@@ -120,7 +120,7 @@ impl WorkflowPostgresRepository {
             active.context("active workflow has no run")?
         };
         sqlx::query(
-            "UPDATE wf_workflow SET status=$4,updated_by=$5,updated_at=now() WHERE id=$1 AND tenant_id=$2 AND env=$3",
+            "UPDATE workflow_info SET status=$4,updated_by=$5,updated_at=now() WHERE id=$1 AND tenant_id=$2 AND env=$3",
         )
         .bind(workflow_id)
         .bind(tenant)
@@ -149,7 +149,7 @@ impl IGenericRepository<WorkflowInfo> for WorkflowPostgresRepository {
         let name = workflow.name;
         let status = workflow.status.map(|value| value.as_str().to_owned());
         let predicate = "tenant_id=$1 AND ($2::uuid IS NULL OR id=$2) AND ($3::text IS NULL OR env=$3) AND ($4::text IS NULL OR name=$4) AND ($5::text IS NULL OR status=$5) AND del_flag=0";
-        let count_sql = format!("SELECT count(*) FROM wf_workflow WHERE {predicate}");
+        let count_sql = format!("SELECT count(*) FROM workflow_info WHERE {predicate}");
         let count = sqlx::query_scalar::<_, i64>(&count_sql)
             .bind(tenant_id)
             .bind(id)
@@ -158,7 +158,8 @@ impl IGenericRepository<WorkflowInfo> for WorkflowPostgresRepository {
             .bind(&status)
             .fetch_one(self.inner.get_pool())
             .await?;
-        let select_sql = format!("SELECT * FROM wf_workflow WHERE {predicate} ORDER BY updated_at LIMIT $6 OFFSET $7");
+        let select_sql =
+            format!("SELECT * FROM workflow_info WHERE {predicate} ORDER BY updated_at LIMIT $6 OFFSET $7");
         let rows = sqlx::query_as::<_, WorkflowInfo>(&select_sql)
             .bind(tenant_id)
             .bind(id)
@@ -192,12 +193,12 @@ impl IGenericRepository<WorkflowInfo> for WorkflowPostgresRepository {
         let id = workflow.base.id.ok_or_else(|| Error::msg("workflow id required"))?;
         let flow = workflow.flow_info.as_ref().map(serde_json::to_value).transpose()?;
         let result = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO wf_workflow (id, name, status, flow_json, properties, secrets, description, created_at, updated_at, created_by, updated_by, del_flag, tenant_id, env)
+            "INSERT INTO workflow_info (id, name, status, dag_config, properties, secrets, description, created_at, updated_at, created_by, updated_by, del_flag, tenant_id, env)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              ON CONFLICT (id) DO UPDATE SET name = excluded.name, status = excluded.status,
-             flow_json = excluded.flow_json, properties = excluded.properties, secrets = excluded.secrets,
+             dag_config = excluded.dag_config, properties = excluded.properties, secrets = excluded.secrets,
              description = excluded.description, updated_at = excluded.updated_at, updated_by = excluded.updated_by
-             WHERE wf_workflow.del_flag = 0 AND wf_workflow.tenant_id = excluded.tenant_id AND wf_workflow.env = excluded.env RETURNING id")
+             WHERE workflow_info.del_flag = 0 AND workflow_info.tenant_id = excluded.tenant_id AND workflow_info.env = excluded.env RETURNING id")
             .bind(id).bind(&workflow.name).bind(workflow.status.as_ref().map(|value| value.as_str()))
             .bind(flow).bind(workflow.properties.as_ref().map(serde_json::to_value).transpose()?)
             .bind(workflow.secrets.as_ref().map(serde_json::to_value).transpose()?)
@@ -219,7 +220,7 @@ impl IGenericRepository<WorkflowInfo> for WorkflowPostgresRepository {
         workflow.base.pre_update(actor).await;
         let flow = workflow.flow_info.as_ref().map(serde_json::to_value).transpose()?;
         let rows = sqlx::query(
-            "UPDATE wf_workflow SET name = $1, status = $2, flow_json = $3,
+            "UPDATE workflow_info SET name = $1, status = $2, dag_config = $3,
              properties = $4, secrets = $5, description = $6, updated_at = $7, updated_by = $8, del_flag = $9
              WHERE id = $10 AND tenant_id = $11 AND env = $12 AND del_flag = 0 AND (status = $2 OR $2 NOT IN ('STOPPED','SUCCESS','FAILED'))",
         )

@@ -33,7 +33,7 @@
                                 └───────────────┘
 
 ┌──────────────┐     MQTT      ┌───────────────┐
-│  All Services│ ────────────> │  Log Service  │
+│  All Services│ ────────────> │ Logger Service│
 │   (logs)     │  wf logs      │               │
 └──────────────┘               └───────┬───────┘
                                        │
@@ -57,21 +57,21 @@
 | order → mqtt → wallet | ✅ Complete | `src/order/src/manager/order_default.rs`, `src/wallet/src/server/wallet_server.rs` |
 | wallet → postgresql | ✅ Complete | `src/wallet/src/manager/wallet_default.rs`, `src/core/src/modules/wallet/store/` |
 | order → mqtt → exporter | ⚠️ Placeholder | `src/component/exporter/src/manager/exporter_kafka.rs`, `src/component/exporter/src/manager/exporter_googlestreet.rs` |
-| all services → mqtt → log service | ✅ Complete | `src/component/logservice/src/server/log_server.rs` |
-| log service → postgresql | ✅ Complete | `src/component/logservice/src/manager/logmanager_default.rs`, `src/core/src/sys/store/log_postgres.rs` |
+| all services → mqtt → log service | ✅ Complete | `src/component/logger/src/server/log_server.rs` |
+| log service → postgresql | ✅ Complete | `src/component/logger/src/manager/logmanager_default.rs`, `src/core/src/sys/store/log_postgres.rs` |
 | log service → minio/oss | ❌ Missing | Not implemented |
-| log service → websocket | ✅ Complete | `src/component/logservice/src/server/log_server.rs` |
+| log service → websocket | ✅ Complete | `src/component/logger/src/server/log_server.rs` |
 
 ## Issues Found
 
-### Issue 1: Log Service MinIO/OSS Archiving Not Implemented
+### Issue 1: Logger Service MinIO/OSS Archiving Not Implemented
 
 **Severity**: Medium
 
 **Description**: Logs are only archived to database (PostgreSQL/SQLite/MongoDB), not to object storage (MinIO/OSS) as specified in the requirements.
 
 **Current Implementation**:
-- `src/component/logservice/src/manager/logmanager_default.rs` - Only archives to database via `LogHandler.append()`
+- `src/component/logger/src/manager/logmanager_default.rs` - Only archives to database via `LogHandler.append()`
 
 **Required Fix**:
 1. Add MinIO/OSS client configuration
@@ -150,7 +150,7 @@
    - Issue 5: E2E Test Coverage (required for validation)
 
 2. **Medium Priority**:
-   - Issue 1: Log Service MinIO/OSS Archiving (required for compliance)
+   - Issue 1: Logger Service MinIO/OSS Archiving (required for compliance)
    - Issue 2: Evaluator Event-Driven Trigger (improves responsiveness)
 
 3. **Low Priority**:

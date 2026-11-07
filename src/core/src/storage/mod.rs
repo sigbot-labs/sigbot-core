@@ -25,4 +25,4 @@ pub mod sqlite;
 mod parameters;
 mod storage;
 
-pub use storage::{IGenericRepository, RepositoryContainer, SqlQueryExecutor};
+pub use storage::{DomainPool, DomainRepository, IGenericRepository, RepositoryContainer, SqlQueryExecutor};

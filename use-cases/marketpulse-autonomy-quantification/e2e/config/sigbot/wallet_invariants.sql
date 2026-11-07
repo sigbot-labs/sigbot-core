@@ -1,5 +1,5 @@
 BEGIN;
-INSERT INTO wlt_wallet(id,tenant_id,exchange,mode,env,account_id)
+INSERT INTO ledger_info(id,tenant_id,exchange,mode,env,account_id)
 VALUES('0192f7b2-5c00-7000-8000-000000000104',
        '0192f7b2-5c00-7000-8000-000000000101',
        'BINANCE','paper','migration-test',

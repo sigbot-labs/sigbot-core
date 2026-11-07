@@ -1,4 +1,5 @@
 use serde_json::json;
+#[cfg(target_os = "linux")]
 use serde_json::Value;
 use std::io::Write;
 use std::process::Command;
@@ -32,6 +33,7 @@ impl WorkerFixture {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn real_rust_python_worker_denies_network_and_host_files_but_returns_bounded_effects() {
     let output = WorkerFixture::run(
         r#"
@@ -62,6 +64,7 @@ class Example:
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn worker_failure_returns_no_committable_state_or_effects() {
     let output = WorkerFixture::run(
         r#"
@@ -75,4 +78,13 @@ class Example:
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(result["error"].as_str().unwrap().contains("deliberate failure"));
     assert!(result.get("state").is_none() && result.get("effects").is_none());
+}
+
+#[test]
+#[cfg(not(target_os = "linux"))]
+fn unsupported_host_rejects_isolated_worker_without_committable_output() {
+    let output = WorkerFixture::run("class Example: pass");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("require Linux Landlock and seccomp"));
 }

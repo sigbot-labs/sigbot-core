@@ -106,11 +106,11 @@ class RuntimeConfiguration:
 
     def services(self):
         # Consumers are started before producers so no first event is lost.
-        return [("backtest", "backtest", "backtest-manager-configuration", self.backtest()),
-                ("wallet", "wallet", "wallet-manager-configuration", self.wallet()),
-                ("order", "order", "order-manager-configuration", self.order()),
-                ("strategy", "strategy", "strategy-runner-configuration", self.strategy()),
-                ("evaluator", "evaluator", "evaluator-runner-configuration", self.evaluator()),
-                ("twitter", "datafeed", "datafeed-configuration", self.datafeed("twitter", 1)),
-                ("truthsocial", "datafeed", "datafeed-configuration", self.datafeed("truthsocial", 2, "mcp")),
-                ("binance", "datafeed", "datafeed-configuration", self.datafeed("binance", 3))]
+        return [("backtest", "backtest", self.backtest()),
+                ("wallet", "wallet", self.wallet()),
+                ("order", "order", self.order()),
+                ("strategy", "strategy", self.strategy()),
+                ("evaluator", "evaluator", self.evaluator()),
+                ("twitter", "datafeed", self.datafeed("twitter", 1)),
+                ("truthsocial", "datafeed", self.datafeed("truthsocial", 2, "mcp")),
+                ("binance", "datafeed", self.datafeed("binance", 3))]

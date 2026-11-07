@@ -21,10 +21,10 @@ class RecoveryVerifier:
         with psycopg.connect(self.context.secret("database_url_env"), connect_timeout=10) as connection:
             with connection.cursor() as cursor:
                 result = {}
-                for table in ("ord_order", "ord_execution", "wlt_journal", "wlt_posting"):
+                for table in ("order_info", "ord_execution", "wlt_journal", "wlt_posting"):
                     cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE run_id=%s", (self.run_id,))
                     result[table] = cursor.fetchone()[0]
-                cursor.execute("SELECT p.asset,SUM(p.amount) FROM wlt_posting p JOIN wlt_wallet w ON w.id=p.wallet_id "
+                cursor.execute("SELECT p.asset,SUM(p.amount) FROM wlt_posting p JOIN ledger_info w ON w.id=p.wallet_id "
                                "WHERE w.env=%s AND w.tenant_id=%s AND w.account_id=%s "
                                "GROUP BY p.asset HAVING SUM(p.amount)<>0",
                                (scope["env"], scope["tenant_id"], self.context.config["account_id"]))
@@ -49,7 +49,7 @@ class RecoveryVerifier:
         if len(captured) != 2:
             raise RuntimeError("real signal and exchange execution evidence are both required")
         baseline = self.snapshot()
-        if any(baseline[table] == 0 for table in ("ord_order", "ord_execution", "wlt_journal", "wlt_posting")):
+        if any(baseline[table] == 0 for table in ("order_info", "ord_execution", "wlt_journal", "wlt_posting")):
             raise RuntimeError("cannot claim crash recovery before a completed financial transaction")
         processes = ProductServices(self.context).restart({"strategy", "order", "wallet"})
         settings = self.context.config["mqtt"]

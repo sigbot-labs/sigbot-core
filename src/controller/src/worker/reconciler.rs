@@ -43,7 +43,7 @@ impl WorkerReconciler {
                 .is_some_and(|id| !id.is_empty()),
             "explicit controller service principal required"
         );
-        let settings = &state.config.services.controller.workers;
+        let settings = &state.config.services.platform.controller.workers;
         Self::validate_settings(settings)?;
         let timeout = Duration::from_secs(settings.reconciliation_timeout_seconds);
         Ok(Self {

@@ -64,7 +64,7 @@ async fn postgres_late_revision_future_exclusion_and_partition_equivalence() -> 
     };
     let workflow_id = Uuid::now_v7();
     let run_id = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'compute contract')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'compute contract')")
         .bind(workflow_id)
         .bind(&scope.env)
         .bind(scope.tenant_id)

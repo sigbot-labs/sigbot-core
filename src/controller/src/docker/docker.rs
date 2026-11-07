@@ -97,8 +97,8 @@ impl DockerController {
 
     fn specification_hash(&self, target: &WorkerInfo, plan: &WorkerPlan) -> Result<String> {
         let base = plan.specification_hash(
-            &self.state.config.services.controller.images.sigbot,
-            &self.state.config.services.controller.workers,
+            &self.state.config.services.platform.controller.images.sigbot,
+            &self.state.config.services.platform.controller.workers,
         )?;
         Ok(format!(
             "{:x}",
@@ -150,7 +150,7 @@ impl DockerController {
             .collect())
     }
     async fn config(&self, target: &WorkerInfo, plan: &WorkerPlan) -> Result<Config<String>> {
-        let config = &self.state.config.services.controller;
+        let config = &self.state.config.services.platform.controller;
         let settings = &config.workers;
         let (network_name, _, log_volume_prefix) = Self::settings(target)?;
         ensure!(
@@ -169,7 +169,7 @@ impl DockerController {
             "Docker network does not match worker scope"
         );
         let hash = self.specification_hash(target, plan)?;
-        let binds = if plan.persistent_logs {
+        let mut binds = if plan.persistent_logs {
             let name = plan.log_volume_name(log_volume_prefix)?;
             let volume = self
                 .client
@@ -184,6 +184,22 @@ impl DockerController {
         } else {
             None
         };
+        let volume_name = format!("{}-config", plan.name);
+        let volume = self
+            .client
+            .create_volume(bollard::volume::CreateVolumeOptions {
+                name: volume_name.clone(),
+                labels: HashMap::from([("sigbot.io/worker".to_owned(), plan.name.clone())]),
+                ..Default::default()
+            })
+            .await?;
+        ensure!(
+            volume.labels.get("sigbot.io/worker") == Some(&plan.name),
+            "config volume owner mismatch"
+        );
+        binds
+            .get_or_insert_with(Vec::new)
+            .push(format!("{volume_name}:/etc/sigbot/runtime:rw"));
         Ok(Config {
             image: Some(config.images.sigbot.clone()),
             entrypoint: Some(vec!["/usr/bin/tini".into(), "-s".into(), "--".into()]),
@@ -230,6 +246,45 @@ impl DockerController {
         })
     }
 
+    async fn upload_configuration(&self, plan: &WorkerPlan) -> Result<()> {
+        let payload = serde_json::to_vec_pretty(&plan.configuration)?;
+        let mut archive = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o444);
+        header.set_cksum();
+        archive.append_data(&mut header, "sigbot.yaml", payload.as_slice())?;
+        let archive = archive.into_inner()?;
+        self.client
+            .upload_to_container(
+                &plan.name,
+                Some(bollard::container::UploadToContainerOptions {
+                    path: "/etc/sigbot/runtime",
+                    no_overwrite_dir_non_dir: "true",
+                }),
+                archive.into(),
+            )
+            .await
+            .context("worker YAML upload failed")?;
+        Ok(())
+    }
+    async fn remove_configuration(&self, plan: &WorkerPlan) -> Result<()> {
+        let name = format!("{}-config", plan.name);
+        match self.client.inspect_volume(&name).await {
+            Ok(volume) => {
+                ensure!(
+                    volume.labels.get("sigbot.io/worker") == Some(&plan.name),
+                    "config volume owner mismatch"
+                );
+                self.client
+                    .remove_volume(&name, None::<bollard::volume::RemoveVolumeOptions>)
+                    .await?;
+            }
+            Err(error) if Self::missing(&error) => {}
+            Err(error) => return Err(error.into()),
+        }
+        Ok(())
+    }
     fn missing(error: &bollard::errors::Error) -> bool {
         matches!(
             error,
@@ -267,7 +322,7 @@ impl WorkerProvider for DockerController {
         crate::docker::middleware::DockerMiddleware::new(
             self.client.clone(),
             target,
-            &self.state.config.services.controller.images.sigbot,
+            &self.state.config.services.platform.controller.images.sigbot,
         )
         .reconcile()
         .await
@@ -296,6 +351,7 @@ impl WorkerProvider for DockerController {
                 if same {
                     let state = container.state.context("container state unavailable")?;
                     if state.running != Some(true) {
+                        self.upload_configuration(plan).await?;
                         self.client
                             .start_container(&plan.name, None::<StartContainerOptions<String>>)
                             .await?;
@@ -333,6 +389,7 @@ impl WorkerProvider for DockerController {
             )
             .await
             .context("worker container creation failed")?;
+        self.upload_configuration(plan).await?;
         self.client
             .start_container(&plan.name, None::<StartContainerOptions<String>>)
             .await
@@ -348,7 +405,10 @@ impl WorkerProvider for DockerController {
             .inspect_container(&plan.name, None::<InspectContainerOptions>)
             .await
         {
-            Err(error) if Self::missing(&error) => return Ok(true),
+            Err(error) if Self::missing(&error) => {
+                self.remove_configuration(plan).await?;
+                return Ok(true);
+            }
             Err(error) => return Err(error.into()),
             Ok(container) => self.require_ownership(target, &container, plan)?,
         }
@@ -375,8 +435,14 @@ impl WorkerProvider for DockerController {
             )
             .await
         {
-            Ok(_) => Ok(true),
-            Err(error) if Self::missing(&error) => Ok(true),
+            Ok(_) => {
+                self.remove_configuration(plan).await?;
+                Ok(true)
+            }
+            Err(error) if Self::missing(&error) => {
+                self.remove_configuration(plan).await?;
+                Ok(true)
+            }
             Err(error) => Err(error.into()),
         }
     }

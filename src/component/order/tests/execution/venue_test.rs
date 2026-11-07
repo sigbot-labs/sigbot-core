@@ -129,7 +129,7 @@ impl VenueFixture {
             tenant_id,
         };
         let workflow_id = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,$4)")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,$4)")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)
@@ -147,7 +147,7 @@ impl VenueFixture {
         let wallet = Uuid::now_v7();
         let account = Uuid::now_v7();
         sqlx::query(
-            "INSERT INTO wlt_wallet(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','live')",
+            "INSERT INTO ledger_info(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','live')",
         )
         .bind(wallet)
         .bind(account)
@@ -236,7 +236,7 @@ impl VenueFixture {
         OrderRecordHandler::new(&self.storage)
             .accept_with(input, |_| Ok(("USDT".into(), Decimal::from(101))))
             .await?;
-        sqlx::query("UPDATE ord_order SET state='acknowledged',exchange_order_id=$1 WHERE wallet_id=$2 AND producer_node_id=$3 AND run_id=$4 AND seq=$5")
+        sqlx::query("UPDATE order_info SET state='acknowledged',exchange_order_id=$1 WHERE wallet_id=$2 AND producer_node_id=$3 AND run_id=$4 AND seq=$5")
             .bind(format!("accepted-{}", input.node_id))
             .bind(input.payload.wallet_id)
             .bind(input.node_id)
@@ -443,7 +443,7 @@ async fn restart_restores_cursor_and_repeated_trades_do_not_duplicate_execution_
             .fetch_one(&fixture.pool)
             .await?;
     assert_eq!((count, quantity, fee), (2, Decimal::ONE, Decimal::new(1, 1)));
-    let state: String = sqlx::query_scalar("SELECT state FROM ord_order WHERE wallet_id=$1")
+    let state: String = sqlx::query_scalar("SELECT state FROM order_info WHERE wallet_id=$1")
         .bind(fixture.input.payload.wallet_id)
         .fetch_one(&fixture.pool)
         .await?;

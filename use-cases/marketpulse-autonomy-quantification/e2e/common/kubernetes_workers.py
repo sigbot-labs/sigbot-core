@@ -97,7 +97,7 @@ class KubernetesWorkers(KubernetesController):
                                                               (2, "strategy", "PYCODE@EVALUATION", strategy)]]
         return {"execution_mode": "paper",
                 "traceparent": "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
-                "flow_json": {"nodes": nodes, "connections": [{"id": "news", "source": "1", "target": "2"}]}}
+                "dag_config": {"nodes": nodes, "connections": [{"id": "news", "source": "1", "target": "2"}]}}
 
     def deploy(self):
         image = WorkerCarrier(self.context).build_and_import()
@@ -143,8 +143,8 @@ class KubernetesWorkers(KubernetesController):
                                   service_principal_id="worker-acceptance-controller")
         workers = {"enabled": True, "cpu_millis": 500, "memory_mb": 384,
                    "pids_limit": 64, "reconciliation_timeout_seconds": 120}
-        config["services"]["controller"]["workers"] = workers
-        config["services"]["controller"]["images"]["sigbot"] = image["image"]
+        config["services"]["platform"]["controller"]["workers"] = workers
+        config["services"]["platform"]["controller"]["images"]["sigbot"] = image["image"]
         directory = Path("/tmp/sigbot-marketpulse-workers")
         directory.mkdir(mode=0o700, exist_ok=True)
         self.private_json(directory / "config.json", config)

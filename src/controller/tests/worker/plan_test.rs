@@ -1,5 +1,3 @@
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use serde_json::json;
 use serde_json::Value;
 use sigbot_controller::kubernetes::kubernetes::KubernetesController;
@@ -28,7 +26,7 @@ impl Fixture {
         Uuid::parse_str("0192f7b2-5c00-7000-8000-000000000304").unwrap()
     }
     fn snapshot() -> Value {
-        json!({"execution_mode":"paper","traceparent":"00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01","flow_json":{"nodes":[
+        json!({"execution_mode":"paper","traceparent":"00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01","dag_config":{"nodes":[
             {"id":1,"name":"feed","status":null,"stage":"TWITTER@INPUT","position":{"x":0,"y":0},"style":null,"icon":null,"config":{"module":"datafeed","argument_json":{
                 "messager_config":{"properties":{"mqtt_server":"broker"},"secrets":{"mqtt_password_secret":"broker_password"}},
                 "datafeed_config":{"provider":"TWITTER","properties":{"tenant_id":"999","twitter_tenant_id":"999","token_secret":"marketpulse_api_token"}}}}},
@@ -49,7 +47,10 @@ impl Fixture {
         .unwrap()
     }
     fn argument(plan: &WorkerPlan) -> Value {
-        serde_json::from_slice(&STANDARD.decode(&plan.command[5]).unwrap()).unwrap()
+        plan.configuration["services"]["component"][&plan.module].clone()
+    }
+    fn messager(plan: &WorkerPlan) -> Value {
+        plan.configuration["services"]["component"]["messager"].clone()
     }
 
     fn target() -> WorkerInfo {
@@ -94,18 +95,9 @@ fn snapshot_identity_cannot_be_overridden_and_edges_come_from_graph() {
     let plans = Fixture::plans();
     assert_eq!(plans[0].module, "strategy");
     let feed = Fixture::argument(&plans[1]);
-    assert_eq!(
-        feed["datafeed_config"]["properties"]["tenant_id"],
-        Fixture::tenant().to_string()
-    );
-    assert_eq!(
-        feed["datafeed_config"]["properties"]["twitter_tenant_id"],
-        Fixture::tenant().to_string()
-    );
-    assert_eq!(
-        feed["datafeed_config"]["properties"]["token_secret"],
-        "marketpulse_api_token"
-    );
+    assert_eq!(feed["properties"]["tenant_id"], Fixture::tenant().to_string());
+    assert_eq!(feed["properties"]["twitter_tenant_id"], Fixture::tenant().to_string());
+    assert_eq!(feed["properties"]["token_secret"], "marketpulse_api_token");
     let strategy = Fixture::argument(&plans[0]);
     let runtime: Value = serde_json::from_str(strategy["properties"]["runtime_config"].as_str().unwrap()).unwrap();
     assert_eq!(runtime["identity"]["scope"]["tenant_id"], Fixture::tenant().to_string());
@@ -168,7 +160,7 @@ fn plaintext_secret_values_and_unknown_modules_are_rejected() {
     )
     .is_ok());
     let mut snapshot = Fixture::snapshot();
-    snapshot["flow_json"]["nodes"][0]["config"]["module"] = json!("messager");
+    snapshot["dag_config"]["nodes"][0]["config"]["module"] = json!("messager");
     assert!(WorkerPlan::from_snapshot(
         &MessageScope {
             env: "paper".into(),
@@ -196,8 +188,7 @@ fn persistent_sessions_survive_restarts_but_do_not_share_queues_between_runs() {
     )
     .unwrap();
     for ((first, restarted), next) in first.iter().zip(&restarted).zip(&next) {
-        let client =
-            |plan: &WorkerPlan| Fixture::argument(plan)["messager_config"]["properties"]["mqtt_client_id"].clone();
+        let client = |plan: &WorkerPlan| Fixture::messager(plan)["properties"]["mqtt_client_id"].clone();
         assert_eq!(first.name, next.name);
         assert_eq!(client(first), client(restarted));
         assert_ne!(client(first), client(next));
@@ -227,24 +218,24 @@ fn tenant_middleware_endpoints_are_bound_after_worker_selection() {
         assert_eq!(plan.environment["SIGBOT__CACHE__PROVIDER"], "Redis");
         assert_eq!(plan.environment["SIGBOT__STORAGE__PROVIDER"], "Postgres");
         assert!(plan.environment["SIGBOT__CACHE__REDIS__NODES"].starts_with("redis://sigbot-"));
-        let argument = Fixture::argument(plan);
-        assert!(argument["messager_config"]["properties"]["mqtt_server"]
+        let messager = Fixture::messager(plan);
+        assert!(messager["properties"]["mqtt_server"]
             .as_str()
             .unwrap()
             .starts_with("sigbot-"));
-        assert_eq!(argument["messager_config"]["properties"]["mqtt_port"], "1883");
+        assert_eq!(messager["properties"]["mqtt_port"], "1883");
     }
 }
 
 #[test]
 fn durable_log_ack_requires_an_existing_per_worker_volume_and_survives_run_replacement() {
     let mut snapshot = Fixture::snapshot();
-    let raw = snapshot["flow_json"]["nodes"][1]["config"]["argument_json"]["properties"]["runtime_config"]
+    let raw = snapshot["dag_config"]["nodes"][1]["config"]["argument_json"]["properties"]["runtime_config"]
         .as_str()
         .unwrap();
     let mut runtime: Value = serde_json::from_str(raw).unwrap();
     runtime["log_archive"] = json!({"spool_path":"/tmp/unsafe.sqlite"});
-    snapshot["flow_json"]["nodes"][1]["config"]["argument_json"]["properties"]["runtime_config"] =
+    snapshot["dag_config"]["nodes"][1]["config"]["argument_json"]["properties"]["runtime_config"] =
         json!(runtime.to_string());
     let scope = MessageScope {
         env: "paper".into(),
@@ -283,7 +274,7 @@ fn durable_log_ack_requires_an_existing_per_worker_volume_and_survives_run_repla
 fn execution_service_dns_and_network_permissions_follow_the_workflow_owner() {
     let mut snapshot = Fixture::snapshot();
     snapshot["execution_mode"] = json!("backtest");
-    let nodes = snapshot["flow_json"]["nodes"].as_array_mut().unwrap();
+    let nodes = snapshot["dag_config"]["nodes"].as_array_mut().unwrap();
     nodes.push(json!({"id":3,"name":"matching","status":null,"stage":"DEFAULT@TRANSACTION","position":{"x":2,"y":0},"style":null,"icon":null,
         "config":{"module":"backtest","argument_json":{"messager_config":{"properties":{}},"properties":{"bind_addr":"127.0.0.1:18484"}}}}));
     nodes.push(json!({"id":4,"name":"order","status":null,"stage":"DEFAULT@TRANSACTION","position":{"x":3,"y":0},"style":null,"icon":null,
@@ -321,7 +312,39 @@ fn execution_service_dns_and_network_permissions_follow_the_workflow_owner() {
     );
     assert_eq!(incoming["spec"]["ingress"][0]["ports"][0]["port"], 18484);
     assert_eq!(deployment.workers.len(), 4);
-    snapshot["flow_json"]["nodes"][3]["config"]["argument_json"]["properties"]["runtime_config"] =
+    snapshot["dag_config"]["nodes"][3]["config"]["argument_json"]["properties"]["runtime_config"] =
         json!(json!({"execution_node_ids":[999],"exchange":{"mode":"paper"}}).to_string());
     assert!(WorkerPlan::from_snapshot(&scope, Fixture::workflow(), &Fixture::run(), &snapshot).is_err());
+}
+
+#[test]
+fn worker_configuration_is_mounted_and_part_of_the_specification() {
+    let mut plan = Fixture::plans()
+        .into_iter()
+        .find(|plan| plan.module == "datafeed")
+        .unwrap();
+    assert_eq!(
+        plan.command,
+        vec!["sigbot", "datafeed", "--config", "/etc/sigbot/runtime/sigbot.yaml"]
+    );
+    let settings = sigbot_core::config::config::AppConfigProperties::default();
+    let loaded: sigbot_core::config::config::ComponentServicesProperties =
+        serde_json::from_value(plan.configuration["services"]["component"].clone()).unwrap();
+    assert_eq!(loaded.messager.provider.as_str(), "MQTT");
+    let before = plan
+        .specification_hash("test-image", &settings.services.platform.controller.workers)
+        .unwrap();
+    plan.configuration["services"]["component"]["messager"]["provider"] = json!("LOCAL");
+    assert_ne!(
+        before,
+        plan.specification_hash("test-image", &settings.services.platform.controller.workers)
+            .unwrap()
+    );
+    let manifest =
+        KubernetesController::manifest(&plan, &settings.services.platform.controller, &Fixture::target()).unwrap();
+    let value = serde_json::to_value(manifest).unwrap();
+    assert_eq!(
+        value.pointer("/spec/template/spec/volumes/0/configMap/name").unwrap(),
+        &json!(plan.name)
+    );
 }

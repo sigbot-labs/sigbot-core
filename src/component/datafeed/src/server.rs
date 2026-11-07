@@ -12,10 +12,9 @@ use anyhow::Result;
 use common_context::ApplicationContext;
 use common_telemetry::debug;
 use common_telemetry::info;
+use sigbot_core::config::config::{get_config, DatafeedProperties};
 use sigbot_messager::server::MessagerServer;
 use sigbot_types::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::datafeed::DatafeedArgument;
-use sigbot_types::ArgumentConfig;
 use std::sync::Arc;
 
 pub struct SigbotDatafeedIngestor {}
@@ -25,25 +24,21 @@ impl SigbotDatafeedIngestor {
         Arc::new(Self {})
     }
 
-    pub async fn startup(matches: &clap::ArgMatches, verbose: bool) {
+    pub async fn startup() {
         common_telemetry::readiness::RuntimeReadiness::business("datafeed", false);
         debug!("Initializing Datafeed clients.");
-        let (datafeeds, argument) = SigbotDatafeedIngestor::configure(matches, verbose)
+        let (datafeeds, argument) = SigbotDatafeedIngestor::configure()
             .await
             .expect("Failed to initialize Datafeed clients.");
         info!("Initialized Datafeed clients. {}", datafeeds.len());
 
         debug!("Initializing Messager client.");
-        let messager = MessagerServer::connect(matches, argument.messager_config.clone())
+        let messager = MessagerServer::connect(get_config().services.component.messager.clone())
             .await
             .expect("Failed to initialize Messager client.");
         info!("Initialized Messager client. {}", messager.provider().as_str());
 
-        let properties = argument
-            .datafeed_config
-            .properties
-            .as_ref()
-            .expect("datafeed properties required");
+        let properties = argument.properties.as_ref().expect("datafeed properties required");
         if properties.contains_key("snapshot_input_node_ids") {
             let key = sigbot_utils::providers::ProviderInstanceId::configured("market_query", properties)
                 .expect("invalid query identity");
@@ -139,40 +134,21 @@ impl SigbotDatafeedIngestor {
 }
 
 impl SigbotDatafeedIngestor {
-    pub async fn configure(
-        matches: &clap::ArgMatches,
-        _verbose: bool,
-    ) -> Result<(Arc<Vec<Arc<dyn IDatafeed>>>, Arc<DatafeedArgument>), Error> {
-        // e.g '--datafeed-providers=binance'
-        let providers = matches
-            .try_get_one::<String>("DATAFEED_PROVIDERS")
-            .map(|s| {
-                s.map(|s| s.to_owned())
-                    .unwrap_or_else(|| DatafeedProvider::Binance.as_str().to_owned())
-            })
-            .expect("Failed to parse the datafeed providers from the command line arguments.")
-            .to_uppercase();
-
-        debug!("Registering Datafeed: {}", &providers);
-
-        // e.g '--datafeed-configuration=<base64_encoded_json_string>'
-        let configuration = matches
-            .try_get_one::<String>("DATAFEED_CONFIGURATION")
-            .map(|s| s.map(|s| s.to_owned()).unwrap_or_default())
-            .expect("Failed to parse the configuration from the command line arguments.");
-
+    pub async fn configure() -> Result<(Arc<Vec<Arc<dyn IDatafeed>>>, Arc<DatafeedProperties>), Error> {
         let argument = Arc::new(
-            DatafeedArgument::from_json(
-                &ArgumentConfig::decode(&configuration).context("Failed to decode datafeed configuration")?,
-            )
-            .context("Failed to parse datafeed configuration")?,
+            get_config()
+                .services
+                .component
+                .datafeed
+                .clone()
+                .context("services.component.datafeed required")?,
         );
+        let mut providers = argument.providers.clone();
+        if providers.is_empty() {
+            providers.push(argument.provider.clone().context("datafeed provider required")?);
+        }
 
-        let properties = argument
-            .datafeed_config
-            .properties
-            .as_ref()
-            .context("datafeed properties required")?;
+        let properties = argument.properties.as_ref().context("datafeed properties required")?;
         let query_only = properties
             .get("query_only")
             .map(|value| value.parse::<bool>())
@@ -188,11 +164,7 @@ impl SigbotDatafeedIngestor {
         }
 
         let mut datafeeds = Vec::new();
-        for provider in providers
-            .split(',')
-            .map(DatafeedProvider::of)
-            .collect::<Result<Vec<_>, _>>()?
-        {
+        for provider in providers {
             let instance_id = sigbot_utils::providers::ProviderInstanceId::configured(provider.as_str(), &*argument)?;
             let configured_argument = argument.clone();
             let context = ApplicationContext::global();

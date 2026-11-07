@@ -12,9 +12,9 @@
   (dict "component" "exporter" "title" "Exporter" "panels" (list
     (dict "title" "Export backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"export.*\"}) by (queue_name)" "legend" "{{queue_name}}")
     (dict "title" "Exporter restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*exporter.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
-  (dict "component" "logservice" "title" "Log service" "panels" (list
+  (dict "component" "logger" "title" "Log service" "panels" (list
     (dict "title" "Durable log backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"log.*|archive.*\"}) by (queue_name)" "legend" "{{queue_name}}")
-    (dict "title" "Log service restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*logservice.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
+    (dict "title" "Log service restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*logger.*\"}[1h])) by (pod)" "legend" "{{pod}}")))
   (dict "component" "notifier" "title" "Notifier" "panels" (list
     (dict "title" "Notification backlog" "expr" "sum(sigbot_system_queue_backlog{queue_name=~\"notif.*\"}) by (queue_name)" "legend" "{{queue_name}}")
     (dict "title" "Notifier restarts" "expr" "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\".*notifier.*\"}[1h])) by (pod)" "legend" "{{pod}}")))

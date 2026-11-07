@@ -6,18 +6,28 @@
 > 本文用途：新机器或新编码代理接手时的事实入口。规范设计仍以
 > [`docs/architecture/overview.md`](../architecture/overview.md) 及各领域 Overview 为准。
 
+## 启动配置变更（2026-11-07）
+
+协议发现补充：MCP 在 `src/api/mcp/src/mcp.rs` 复用 SDK RemoteAuthProvider 提供 RFC 9728/RFC 8414 元数据与 401 challenge，启用前必须配置真实 `authguard.oauth` 和 MCP `public_url`。A2A 的协议、Agent Card、Extended Agent Card 和监听已统一到 `src/api/a2a/src/a2a.rs`，`domain/resource.rs` 仅汇聚/分发资源；客户端使用 Card 公布的 A2A-Version。Helm/Compose 的协议环境变量路径已对齐 `services.platform.api`，公共发现 HTTPRoute 与受保护业务路径分离。
+
+2026-11-08 补充：启动目录现为 `startup/api/{http.rs,mcp.rs,a2a.rs}`、根 `standalone.rs` 和 `controller.rs`。数据库收敛为十个 `*_info` 领域主表；HTTP/MCP/A2A 共享同一 CRUD 与 Authguard grants。旧 `connections/workers` 等聚合接口已移除，Workflow DAG 列改为 `dag_config`。详见 [十领域配置与 CRUD](../architecture/domain-model_ZH.md)。旧库的基线 checksum 不能绕过，需要独立升级/导入方案。
+
+所有 13 个模块入口统一为 `SigbotXxxStarter`，启动方式为 `sigbot <module> --config <path>`（简写 `-c`）。REST `api`、`mcp`、`a2a` 独立启动；`logger` 替代 `logservice`，部署前需更新已有 Workflow 节点模块名。平台配置收敛到 `services.platform`，九个租户组件及其共享 Messager/Exchange 基础配置收敛到 `services.component`，旧 base64、组件 Argument 类型及 Provider CLI 参数已移除。Controller 按节点生成配置并通过 K8s ConfigMap / Docker 配置卷交付，规格哈希包含配置内容。具体结构见 [构建与启动说明](../runbooks/build-and-test.md)。本节描述改动，不代表真实远端生命周期已验收。
+
+本次 `make build-rust lint-rust`、Rust 格式检查和 `git diff --check` 均通过（Clippy 保留既有警告）。定向验证：启动 CLI、配置加载、Controller 规划/清单、类型兼容性和 Polymarket 合成 RPC 测试共 28 PASS，真实 K3s 测试 1 ignored。Helm lint 与 API 三进程配置/端口渲染检查通过。统一 runner 的 `structure,deployment` 场景在 Python 依赖安装阶段因 PyPI `httpcore` 下载超时而未执行，不能算作通过。Docker 配置卷上传与 K8s ConfigMap 的真实远端生命周期仍需环境验收。
+
 ## 1. 先读结论
 
 Sigbot 已经完成从单体/共享守护进程思路向“平台控制面 + 九个租户数据面组件”的主体
 重构。当前正确架构是：
 
 - 平台面：HTTP/A2A/MCP API、独立 Controller、Web。
-- 数据面：Backtest、Datafeed、Evaluator、Exporter、Logservice、Notifier、Order、
+- 数据面：Backtest、Datafeed、Evaluator、Exporter、Logger、Notifier、Order、
   Strategy、Wallet 九个动态组件。
 - 进程内共享库：Messager、Exchange、Core Handler/Repository、Types、Config、Telemetry。
 - IAM：Authguard 唯一拥有认证、用户、租户身份、会话、角色和授权。
 - 持久层：业务 SQL 只允许出现在 `src/core/src/modules/<domain>/storage/`。
-- 部署：Controller 根据 `ctl_worker` 在 Docker/Kubernetes 上调和租户中间件与九组件。
+- 部署：Controller 根据 `cluster_info` 在 Docker/Kubernetes 上调和租户中间件与九组件。
 - 测试：唯一 E2E 入口是
   `use-cases/marketpulse-autonomy-quantification/e2e/runner.py`。
 
@@ -38,7 +48,7 @@ HTTP / A2A / MCP API ──► Core Handler ──► Core Repository ──► 
         │                       │
         │ create immutable Run │
         ▼                       ▼
-independent Controller ──► ctl_worker (Docker or Kubernetes)
+independent Controller ──► cluster_info (Docker or Kubernetes)
                                │
                     prepare scoped middleware
                     Redis / pgvector / TimescaleDB / EMQX
@@ -54,7 +64,7 @@ Run 创建。Controller 使用平台 service principal 读取待处理 Run，通
 
 数据面组件只执行不可变 Run 图中的节点。节点之间用 v2 MQTT topic 异步通信；组件不
 读取或修改其他租户/Workflow 的配置。Messager 和 Exchange 随宿主链接，不是独立
-Deployment。Logservice 是九组件之一，不是平台共享守护进程。
+Deployment。Logger 是九组件之一，不是平台共享守护进程。
 
 ## 3. 目录地图
 
@@ -63,14 +73,15 @@ Deployment。Logservice 是九组件之一，不是平台共享守护进程。
 | `src/api/http` | Axum API、Authguard identity、Swagger、DTO 转换 |
 | `src/api/a2a` | A2A 协议 Adapter，不承载领域数据库逻辑 |
 | `src/api/mcp` | MCP 协议 Adapter，不返回硬编码业务成功 |
-| `src/cmd/src/startup` | 进程入口；每个主结构体持有 `SigbotManagementServer` |
+| `src/cmd/src/startup` | 进程入口；每个主结构体持有 `SigbotManagementStarter` |
+| `src/cmd/src/startup/internal/management.rs` | 统一 panic hook、Provider context 初始化、APM、管理监听与退出清理；关闭管理端也保留基础初始化 |
 | `src/controller` | 独立 Controller；WorkerPlan、Docker/Kubernetes Provider、中间件调和 |
 | `src/component/*` | 九个租户数据面组件 |
 | `src/core/src/modules/*/handler` | 领域用例编排、事务边界 |
 | `src/core/src/modules/*/storage` | 唯一 SQL/Repository 所有者 |
 | `src/exchange` | 市场/执行 Adapter 和统一 Instrument/precision/limit 边界 |
 | `src/messager` | Local/MQTT transport、命名订阅、Inbox/Outbox relay |
-| `src/types` | 跨 crate 契约；日志类型位于 `src/types/src/logservice` |
+| `src/types` | 跨 crate 契约；日志类型位于 `src/types/src/logger` |
 | `src/core/src/config` | 统一配置入口和强类型模型 |
 | `migration/20261031000000` | 唯一最终态 PostgreSQL/SQLite 基线 |
 | `deploy/helm/sigbot` | 控制面 Helm、Authguard wrapper、Secret bootstrap、Grafana |
@@ -92,7 +103,7 @@ Exchange、Messager 不得直接 `std::env::var`。需要新增 Secret 时：
 
 Authguard 是 IAM 唯一 owner。HTTP Adapter 验证官方 signed header/gRPC context 后创建
 `RequestIdentity`，Handler 显式接收；禁止 thread-local/global current user。Sigbot 数据库
-只有业务 `tenant_id UUID`，没有用户、角色、权限或 Authguard tenant 表。
+保存业务 `tenant_id UUID` 与 `tenant_info` 资料，不复制用户、角色、权限或 Authguard 的 IAM 租户生命周期。
 
 ## 5. 数据模型与唯一写入方
 
@@ -110,17 +121,17 @@ migration/20261031000000/
 
 | 领域 | 表前缀/核心表 | 唯一写入方 |
 | --- | --- | --- |
-| 配置 | `cfg_connection` | Core Controller Repository |
-| Workflow | `wf_workflow/run/checkpoint/sequence/timer` | Core Workflow Repository；Controller 写生命周期 |
-| Worker | `ctl_worker` | Core Controller Repository |
+| 配置 | `tenant_info/datasource_info/exchange_info/strategy_info/notifier_info/exporter_info` | Core ResourceHandler/IGenericRepository |
+| Workflow | `workflow_info/run/checkpoint/sequence/timer` | Core Workflow Repository；Controller 写生命周期 |
+| Cluster | `cluster_info` | Core ResourceHandler/IGenericRepository；Controller 维护运行状态 |
 | 消息 | `msg_inbox/outbox` | Core Messager Repository，领域事务调用 |
 | 行情 | `mkt_event/delivery` | Datafeed Repository |
 | 评估 | `eval_case/snapshot` | Evaluator Repository |
 | 回测 | `bt_checkpoint/order` | Backtest Repository |
 | 订单 | `ord_*` | Order Repository |
 | 钱包 | `wlt_*` | Wallet Repository |
-| 日志 | `log_chunk` | Logservice Repository + immutable object store |
-| 通知 | `ntf_delivery/read` | Notifier Repository |
+| 日志 | `log_chunk` | Logger Repository + immutable object store |
+| 通知 | `notifier_info`、`ntf_delivery` | ResourceHandler 配置 CRUD、Notifier 投递事务 |
 | 导出 | `exp_checkpoint` | Exporter Repository |
 
 实体主键/相互依赖外键使用 UUIDv7。`node_id`、`seq`、`revision`、`line_no` 和交易所原生
@@ -204,7 +215,7 @@ Outbox 同事务；执行 ID 去重；乱序终态等待实际成交；精确 qu
 缺口：订单簿排队优先级、真实深度/部分可用流动性、网络延迟与全部衍生品结算模型仍是
 有限模拟；批量只用于预热/计算，不能越过逐事件 `on_data`。
 
-### 7.7 Logservice
+### 7.7 Logger
 
 已实现：Python stdout/stderr/异常和 Rust tracing 接入；SQLite WAL 本地耐久缓冲；S3/
 MinIO 不可变 chunk；PG `log_chunk` 索引；重复/冲突哈希校验；cursor 读取和重启恢复。
@@ -276,7 +287,7 @@ sigbot-secrets.env.example
 S3 通用 API 不支持对已有对象原地 append。Sigbot 实现的是“逻辑追加日志流”，物理上
 每个 chunk 都是新对象：
 
-1. Logservice 先在本地 SQLite WAL 中同事务分配序列并保存 payload；使用 `FULL`
+1. Logger 先在本地 SQLite WAL 中同事务分配序列并保存 payload；使用 `FULL`
    durability 完成后，消费处理才允许返回 ACK。
 2. 归档器按连续范围生成不可变 object key，使用 `PutMode::Create` 创建新对象。
 3. key 已存在时不覆盖：读取现有对象并比较 SHA-256；一致视为幂等成功，不一致隔离并
@@ -289,10 +300,10 @@ S3 通用 API 不支持对已有对象原地 append。Sigbot 实现的是“逻�
 
 主要源码：
 
-- `src/component/logservice/src/s3/s3.rs`
-- `src/core/src/modules/logservice/storage/sqlite.rs`
-- `src/core/src/modules/logservice/storage/postgres.rs`
-- `src/component/logservice/src/s3/`
+- `src/component/logger/src/s3/s3.rs`
+- `src/core/src/modules/logger/storage/sqlite.rs`
+- `src/core/src/modules/logger/storage/postgres.rs`
+- `src/component/logger/src/s3/`
 
 ## 11. Web 与认证验收
 
@@ -369,7 +380,7 @@ scenario；ignored、mock、静态 render 和旧二进制不能描述成最新�
 1. Datafeed 补清算热力图、资金费率、借贷、多空比/量的生产级采集与 UI 数据。
 2. Evaluator 建立真实案例反馈、pgvector 召回质量与概率校准评估。
 3. Strategy/Compute 增加 Redis 热缓存、增量状态、分片调度和逐模型等价测试。
-4. Logservice 增加跨 region 复制、retention、容量/背压与全宿主接入审计。
+4. Logger 增加跨 region 复制、retention、容量/背压与全宿主接入审计。
 5. 完整组合估值、NAV、FX/多资产价格元数据。
 
 ### 外部发布阻塞

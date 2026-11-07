@@ -14,10 +14,13 @@ impl SwaggerFixture {
 #[test]
 fn document_covers_current_scoped_api_and_security() {
     let document = SwaggerFixture::document();
-    assert!(document["paths"]["/sigbot/api/v1/workers"].is_object());
-    assert!(document["paths"]["/sigbot/api/v1/workers/defaults"].is_object());
-    assert!(document["paths"]["/sigbot/api/v1/workflows/{id}/start"].is_object());
-    assert!(document["components"]["schemas"]["WorkerAuthConfig"].is_object());
+    for domain in sigbot_types::domain::Domain::ALL {
+        let path = format!("/sigbot/api/v1/{}", domain.collection());
+        assert!(document["paths"][&path]["get"].is_object());
+        assert!(document["paths"][&path]["post"].is_object());
+        assert!(document["paths"][format!("{path}/{{id}}")]["put"].is_object());
+    }
+    assert!(document["components"]["schemas"]["ResourceCommand"].is_object());
     assert_eq!(
         document["components"]["securitySchemes"]["authguard_bearer"]["scheme"],
         "bearer"

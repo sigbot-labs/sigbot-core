@@ -15,13 +15,8 @@ use std::sync::Arc;
 pub struct MessagerServer;
 
 impl MessagerServer {
-    pub async fn connect(matches: &clap::ArgMatches, config: Arc<MessagerConfig>) -> Result<Arc<dyn IMessager>, Error> {
-        // e.g '--messager-provider=mqtt'
-        let provider = MessagerProvider::of(
-            matches
-                .get_one::<String>("MESSAGER_PROVIDER")
-                .unwrap_or(&MessagerProvider::Mqtt.as_str().to_owned()),
-        )?;
+    pub async fn connect(config: Arc<MessagerConfig>) -> Result<Arc<dyn IMessager>, Error> {
+        let provider = config.provider.clone();
 
         let properties = config.properties.as_ref().context("messager properties are required")?;
         let key = match provider {

@@ -116,10 +116,5 @@ name = "scoped_query"
 path = "tests/storage/scoped_query_test.rs"
 
 [[test]]
-name = "config_loader"
-path = "tests/config/config_loader_test.rs"
-
-
-[[test]]
 name = "mgmt_health"
 path = "tests/mgmt/health_test.rs"

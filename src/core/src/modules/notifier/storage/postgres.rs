@@ -10,7 +10,6 @@ use sigbot_types::notifier::request::NotificationRequest;
 use sigbot_types::notifier::request::{NotificationScope, PendingNotification};
 use sqlx::{Connection, Row};
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 pub struct NotifierPostgresRepository {
     pool: sqlx::PgPool,
@@ -238,24 +237,5 @@ impl NotifierPostgresRepository {
         };
         MessagerPostgresRepository::enqueue(transaction, &self.identity.consumer, topic, &response).await?;
         Ok(response)
-    }
-
-    pub async fn list(pool: &sqlx::PgPool, tenant_id: Uuid, env: &str, recipient: &str) -> Result<Vec<Value>> {
-        Ok(sqlx::query_scalar("SELECT jsonb_build_object('run_id',d.run_id,'producer_node_id',d.producer_node_id,'seq',d.seq,'channel',d.channel,'title',COALESCE(d.payload->>'title',d.payload->>'event_type','执行通知'),'body',COALESCE(d.payload->>'body',d.payload->>'message',''),'kind',d.payload->>'kind','status',d.state,'event_time',d.available_at,'read',r.read_at IS NOT NULL) FROM ntf_delivery d LEFT JOIN ntf_read r USING(env,tenant_id,run_id,producer_node_id,seq,channel,recipient) WHERE d.tenant_id=$1 AND d.env=$2 AND d.recipient=$3 AND d.channel='in_app' ORDER BY d.available_at DESC,d.run_id,d.seq DESC LIMIT 100")
-            .bind(tenant_id).bind(env).bind(recipient).fetch_all(pool).await?)
-    }
-
-    pub async fn mark_read(
-        pool: &sqlx::PgPool,
-        tenant_id: Uuid,
-        env: &str,
-        recipient: &str,
-        run_id: &Uuid,
-        seq: i64,
-        producer_node_id: i64,
-    ) -> Result<bool> {
-        let result=sqlx::query("INSERT INTO ntf_read(env,tenant_id,run_id,producer_node_id,seq,channel,recipient) SELECT env,tenant_id,run_id,producer_node_id,seq,channel,recipient FROM ntf_delivery WHERE tenant_id=$1 AND env=$2 AND recipient=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6 AND channel='in_app' ON CONFLICT DO NOTHING")
-            .bind(tenant_id).bind(env).bind(recipient).bind(run_id).bind(seq).bind(producer_node_id).execute(pool).await?;
-        Ok(result.rows_affected() > 0)
     }
 }

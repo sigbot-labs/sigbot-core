@@ -18,7 +18,7 @@ sigbot-core.workspace = true
 sigbot-strategy-sdk.workspace = true
 sigbot-messager.workspace = true
 sigbot-exchange.workspace = true
-sigbot-logservice.workspace = true
+sigbot-logger.workspace = true
 
 # Thirdparty dependencies.
 axum.workspace = true

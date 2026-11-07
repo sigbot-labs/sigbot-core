@@ -80,7 +80,7 @@ impl OrderReservationPostgresRepository {
         );
         let release = matches!(action, ReservationAction::Release);
         let row = sqlx::query(
-            "SELECT wallet_request_seq,wallet_release_seq FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT wallet_request_seq,wallet_release_seq FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6 FOR UPDATE",
         )
         .bind(&input.scope.env)
@@ -102,7 +102,7 @@ impl OrderReservationPostgresRepository {
         let seq = MessagerPostgresRepository::next_sequence(tx, &input.scope, self.node_id, &input.run_id).await?;
         // Only a fixed internal column name is interpolated, never caller text.
         sqlx::query(&format!(
-            "UPDATE ord_order SET {column}=$7 WHERE env=$1 AND tenant_id=$2
+            "UPDATE order_info SET {column}=$7 WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6"
         ))
         .bind(&input.scope.env)
@@ -191,7 +191,7 @@ impl OrderReservationPostgresRepository {
         );
         if let ReservationAction::Reserve { asset, amount } = &request.action {
             let terms: (String, Decimal) = sqlx::query_as(
-                "SELECT reserve_asset,reserve_amount FROM ord_order WHERE env=$1 AND tenant_id=$2
+                "SELECT reserve_asset,reserve_amount FROM order_info WHERE env=$1 AND tenant_id=$2
                 AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6 FOR UPDATE",
             )
             .bind(&self.scope.env)

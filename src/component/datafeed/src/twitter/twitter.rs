@@ -6,8 +6,8 @@ use crate::social::social::SocialFeed;
 use anyhow::Result;
 use async_trait::async_trait;
 use common_context::IProvider;
+use sigbot_core::config::config::DatafeedProperties;
 use sigbot_types::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::datafeed::DatafeedArgument;
 use std::sync::Arc;
 
 pub struct TwitterDatafeed {
@@ -27,7 +27,7 @@ impl IDatafeed for TwitterDatafeed {
     fn provider(&self) -> DatafeedProvider {
         DatafeedProvider::Twitter
     }
-    async fn configure(&self, argument: Arc<DatafeedArgument>) -> Result<()> {
+    async fn configure(&self, argument: Arc<DatafeedProperties>) -> Result<()> {
         self.feed.configure(argument).await
     }
 

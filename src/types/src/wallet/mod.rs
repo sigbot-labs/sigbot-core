@@ -18,13 +18,8 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messager::messager::MessagerConfig;
-use anyhow::Context;
-use anyhow::Error;
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
 
 pub mod balance;
 pub mod funding;
@@ -33,19 +28,6 @@ pub mod position;
 pub mod projection;
 pub mod reservation;
 pub mod wallet;
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct WalletArgument {
-    pub messager_config: Arc<MessagerConfig>,
-    pub properties: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
-}
-
-impl WalletArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse wallet manager info from JSON")
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum WalletProvider {
@@ -67,6 +49,3 @@ impl WalletProvider {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {}

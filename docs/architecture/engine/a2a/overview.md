@@ -1,51 +1,17 @@
-# A2A Protocol Outlet
+# A2A API
 
-[中文](overview_ZH.md) · [Architecture overview](../../overview.md)
+[中文](overview_ZH.md) · [Domain contracts](../../domain-model_ZH.md)
 
-**Status:** Optional, implemented Workflow control-plane protocol outlet.
+src/api/a2a/src/a2a.rs owns IA2aApi, ResourceA2aApi, listener lifecycle, Authguard middleware and all protocol registration. src/domain/resource.rs only aggregates domain skills and dispatches ResourceCommand through the shared Core ResourceHandler.
 
-The API process uses the Linux Foundation `a2a-lf` and `a2a-server-lf` crates
-for Agent Card discovery, JSON-RPC, streaming responses, and protocol errors.
-A2A is not a Workflow compute node and owns no business state.
+The official a2a/a2a_server library provides:
 
-## Capability Boundary
+- Public GET/HEAD /.well-known/agent-card.json through agent_card_router/StaticAgentCard, including its CORS, Cache-Control and ETag behavior.
+- Authenticated JSON-RPC POST /a2a (also /a2a/) through jsonrpc_router/DefaultRequestHandler.
+- Authenticated GetExtendedAgentCard through with_extended_agent_card; the public card declares extendedAgentCard=true.
 
-`WorkflowA2aApi` advertises and executes only implemented operations:
+Clients send A2A-Version matching supportedInterfaces.protocolVersion from the card. The SDK handles version negotiation and protocol errors. Published public_url is validated and its path is the actual registered RPC path, including prefixed deployments. Authentication verifies OriginalUri rather than the stripped nested path; both trailing-slash variants use the same canonical Authguard resource.
 
-- read a tenant-scoped Workflow overview;
-- read ordered events for one Workflow;
-- idempotently request a Workflow Run start or stop.
+The card advertises the standard OpenID Connect security scheme and authguard.oauth.discovery_url when configured. Otherwise it advertises standard HTTP Bearer for trusted Authguard credentials; the invented HTTP scheme authguard is removed. Authenticated requests preserve the complete verified resource identity and grants. Discovery stays public; forged internal identity headers do not authorize RPC calls.
 
-The executor delegates to Repositories under
-`src/core/src/modules/workflow/storage/`. It contains no SQL, does not access
-component-private storage, inject arbitrary nodes, call an exchange, or turn a
-model response into an order. Trading remains behind Strategy, Order, and
-Wallet boundaries.
-
-## Identity and Lifecycle
-
-- Authguard validates every `/a2a` request. Verified tenant and principal data
-  is passed to the official handler only as request-local headers.
-- The Agent Card declares an Authguard security scheme. The Helm Gateway
-  protects `/a2a` and exposes `/.well-known/agent-card.json` for discovery.
-- A2A, HTTP, and MCP share one `ApplicationContext`; shutdown stops the listener
-  and awaits its task.
-- Configuration lives under `services.api.a2a`; `public_url` is the JSON-RPC
-  address advertised by the Agent Card.
-
-## Reliability Rules
-
-- Commands are typed JSON; unknown fields and operations are rejected.
-- Repositories enforce tenant, environment, Workflow ownership, and
-  idempotency.
-- Client errors are sanitized while complete causes remain in structured logs
-  and traces.
-- A2A task IDs remain protocol-local. Business retries and recovery use
-  `run_id`; no additional business correlation ID is introduced.
-
-## Source Map
-
-- Contract: `src/api/a2a/src/a2a.rs`
-- Agent Card, Authguard, Workflow executor: `src/api/a2a/src/a2a/workflow.rs`
-- API composition: `src/cmd/src/startup/api.rs`
-- Helm ports and routes: `deploy/helm/sigbot/templates/`
+The external authority owns OAuth/OIDC discovery and token issuance; an A2A agent publishes their location in its Agent Card instead of hosting a second issuer. Configuration is services.platform.api.a2a plus optional authguard.oauth. Real TCP tests verify public caching/CORS metadata, advertised interface/version, unauthorized requests, authenticated extended cards and resource-path isolation.

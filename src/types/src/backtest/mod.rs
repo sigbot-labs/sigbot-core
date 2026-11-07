@@ -18,15 +18,10 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messager::messager::MessagerConfig;
 use crate::messager::topic::{MessageScope, WorkflowTopic};
-use anyhow::Context;
-use anyhow::Error;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -68,19 +63,6 @@ pub struct ReplayCheckpoint {
     pub virtual_time: DateTime<Utc>,
     pub steps: u64,
     pub timer_firings: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct BacktestArgument {
-    pub messager_config: Arc<MessagerConfig>,
-    pub properties: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
-}
-
-impl BacktestArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse backtest manager info from JSON")
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, ToSchema)]

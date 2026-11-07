@@ -41,7 +41,7 @@ impl WorkerClaim<'_> {
                 .bind(self.stopping)
                 .execute(&mut *self.transaction)
                 .await?;
-            sqlx::query("UPDATE wf_workflow SET status=$2,updated_at=now() WHERE id=$1")
+            sqlx::query("UPDATE workflow_info SET status=$2,updated_at=now() WHERE id=$1")
                 .bind(self.workflow_id)
                 .bind(if self.stopping { "STOPPED" } else { "RUNNING" })
                 .execute(&mut *self.transaction)
@@ -65,7 +65,7 @@ impl ControllerPostgresRepository {
     }
 
     pub async fn active_workflows(&self) -> Result<Vec<ActiveWorkflow>> {
-        let rows = sqlx::query("SELECT id,env,tenant_id FROM wf_workflow WHERE del_flag=0 AND status IN ('PENDING','STARTING','RUNNING','STOPPING','CANCELLING') ORDER BY updated_at,id LIMIT 128")
+        let rows = sqlx::query("SELECT id,env,tenant_id FROM workflow_info WHERE del_flag=0 AND status IN ('PENDING','STARTING','RUNNING','STOPPING','CANCELLING') ORDER BY updated_at,id LIMIT 128")
             .fetch_all(&self.pool)
             .await?;
         rows.into_iter()
@@ -85,7 +85,7 @@ impl ControllerPostgresRepository {
 
     pub async fn claim(&self, scope: &MessageScope, workflow_id: Uuid) -> Result<Option<WorkerClaim<'_>>> {
         let mut transaction = self.pool.begin().await?;
-        let row = sqlx::query("SELECT status FROM wf_workflow WHERE id=$1 AND tenant_id=$2 AND env=$3 AND del_flag=0 FOR UPDATE SKIP LOCKED")
+        let row = sqlx::query("SELECT status FROM workflow_info WHERE id=$1 AND tenant_id=$2 AND env=$3 AND del_flag=0 FOR UPDATE SKIP LOCKED")
             .bind(workflow_id)
             .bind(scope.tenant_id)
             .bind(&scope.env)
@@ -101,7 +101,7 @@ impl ControllerPostgresRepository {
         ) {
             return Ok(None);
         }
-        let run = sqlx::query("SELECT run_id,params,worker_id FROM wf_run WHERE workflow_id=$1 AND tenant_id=$2 AND env=$3 AND state IN ('queued','running') ORDER BY started_at DESC LIMIT 1 FOR UPDATE")
+        let run = sqlx::query("SELECT run_id,params,cluster_id FROM wf_run WHERE workflow_id=$1 AND tenant_id=$2 AND env=$3 AND state IN ('queued','running') ORDER BY started_at DESC LIMIT 1 FOR UPDATE")
             .bind(workflow_id)
             .bind(scope.tenant_id)
             .bind(&scope.env)
@@ -113,10 +113,10 @@ impl ControllerPostgresRepository {
             scope.tenant_id,
             &scope.env,
             workflow_id,
-            run.try_get("worker_id")?,
+            run.try_get("cluster_id")?,
         )
         .await?;
-        sqlx::query("UPDATE wf_run SET worker_id=$2 WHERE run_id=$1 AND worker_id IS NULL")
+        sqlx::query("UPDATE wf_run SET cluster_id=$2 WHERE run_id=$1 AND cluster_id IS NULL")
             .bind(run.get::<Uuid, _>("run_id"))
             .bind(worker.id)
             .execute(&mut *transaction)

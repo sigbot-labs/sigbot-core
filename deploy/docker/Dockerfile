@@ -69,7 +69,6 @@ COPY benchmarks ./benchmarks
 COPY src ./src
 COPY Cargo.toml Cargo.lock ./
 
-ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/src/api/http/src/swagger/swagger-ui-5.17.14.zip
 
 # Setup dependency caching structure
 RUN find src benchmarks -type f -not -name "Cargo.toml" -not -name "swagger-ui-5.17.14.zip" -delete && \
@@ -118,7 +117,6 @@ COPY migration ./migration
 COPY src ./src
 COPY Cargo.toml Cargo.lock ./
 
-ENV SWAGGER_UI_DOWNLOAD_URL=file:/usr/src/app/src/api/http/src/swagger/swagger-ui-5.17.14.zip
 
 # COPY can preserve source timestamps older than the throwaway cache build.
 # Invalidate workspace stubs before Cargo checks their dependency fingerprints.
@@ -208,4 +206,4 @@ ENV SIGBOT_CFG_PATH=/app/config/sigbot.yaml
 ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/sigbot"]
 
 # Default command if none provided
-CMD ["api"]
+CMD ["api", "--config", "/app/config/sigbot.yaml"]

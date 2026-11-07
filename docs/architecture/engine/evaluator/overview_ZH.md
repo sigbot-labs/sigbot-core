@@ -4,7 +4,7 @@
 
 **状态：** 已实现异步评估旁路和类型化 Snapshot；真实模型质量与生产记忆检索仍缺证据。
 
-`SigbotEvaluator` 是单个 Strategy Pipeline 的非确定性旁路。它观察规范化市场/新闻
+`SigbotEvaluatorStarter` 是单个 Strategy Pipeline 的非确定性旁路。它观察规范化市场/新闻
 事件，通过受限 LLM 过程评估市场结构，并向确定性 Strategy Runner 发布
 不可变建议。它永远不产生 Order 或 Trading Signal。
 

@@ -17,7 +17,7 @@ impl ControllerServer {
             .register_if_absent::<dyn IController, _>("controller", move || {
                 let state = state.clone();
                 async move {
-                    let settings = &state.config.services.controller;
+                    let settings = &state.config.services.platform.controller;
                     let cron = Some(settings.inner.cron.clone());
                     let channels = Some(settings.inner.channel_size);
                     let controller: Arc<dyn IController> = CentralController::new(cron, channels, state);

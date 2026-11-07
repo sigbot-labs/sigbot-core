@@ -16,7 +16,6 @@ use sigbot_core::modules::evaluator::handler::evaluator::EvaluatorHandler;
 use sigbot_messager::messager::IMessager;
 use sigbot_messager::messager::OutboxRelay;
 use sigbot_types::evaluator::evaluator::EvaluatorProvider;
-use sigbot_types::evaluator::EvaluatorArgument;
 use sigbot_types::messager::envelope::DurableMessage;
 use sigbot_types::messager::envelope::MessageEnvelope;
 use sigbot_types::messager::envelope::MessageKind;
@@ -334,7 +333,7 @@ impl crate::evaluator::IEvaluator for LlmEvaluator {
     fn provider(&self) -> EvaluatorProvider {
         EvaluatorProvider::Llm
     }
-    async fn startup(self: Arc<Self>, _argument: Arc<EvaluatorArgument>, messager: Arc<dyn IMessager>) -> Result<()> {
+    async fn startup(self: Arc<Self>, messager: Arc<dyn IMessager>) -> Result<()> {
         self.start(messager).await
     }
 }

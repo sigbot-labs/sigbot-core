@@ -64,8 +64,8 @@ impl Fixture {
             serde_json::from_slice(&std::fs::read(std::env::var("MARKETPULSE_WORKER_SNAPSHOT_PATH")?)?)?;
         let egress_cidrs: Vec<String> = serde_json::from_str(&std::env::var("MARKETPULSE_WORKER_EGRESS_CIDRS")?)?;
         let workflow = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name,flow_json) VALUES($1,$2,$3,'Kubernetes provider acceptance',$4)")
-            .bind(workflow).bind(&scope.env).bind(scope.tenant_id).bind(&snapshot["flow_json"]).execute(&pool).await?;
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name,dag_config) VALUES($1,$2,$3,'Kubernetes provider acceptance',$4)")
+            .bind(workflow).bind(&scope.env).bind(scope.tenant_id).bind(&snapshot["dag_config"]).execute(&pool).await?;
         let run = Uuid::now_v7();
         sqlx::query(
             "INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state,params) VALUES($1,$2,$3,$4,'running',$5)",
@@ -237,7 +237,7 @@ impl Fixture {
             self.ready(None).await? == before,
             "controller restart replaced unchanged hosts"
         );
-        let node = self.snapshot["flow_json"]["nodes"]
+        let node = self.snapshot["dag_config"]["nodes"]
             .as_array_mut()
             .unwrap()
             .iter_mut()
@@ -304,7 +304,8 @@ impl Fixture {
         self.stop().await?;
         // A name collision must never grant ownership over an existing object.
         let plan = &self.plans[0];
-        let mut unmanaged = KubernetesController::manifest(plan, &self.state.config.services.controller, &self.target)?;
+        let mut unmanaged =
+            KubernetesController::manifest(plan, &self.state.config.services.platform.controller, &self.target)?;
         unmanaged
             .metadata
             .labels

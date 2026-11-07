@@ -3,23 +3,26 @@
 use crate::notifier::NotifierService;
 use common_context::ApplicationContext;
 use sigbot_messager::server::MessagerServer;
-use sigbot_types::notifier::NotifierArgument;
-use sigbot_types::ArgumentConfig;
 
 pub struct SigbotNotifier;
 
 impl SigbotNotifier {
-    pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        let encoded = matches
-            .get_one::<String>("NOTIFIER_CONFIGURATION")
-            .expect("notifier host configuration required");
-        let argument = NotifierArgument::from_json(
-            &ArgumentConfig::decode(encoded).expect("invalid notifier configuration encoding"),
+    pub async fn startup() {
+        let argument = sigbot_core::config::config::get_config()
+            .services
+            .component
+            .notifier
+            .clone()
+            .expect("services.component.notifier required");
+        let messager = MessagerServer::connect(
+            sigbot_core::config::config::get_config()
+                .services
+                .component
+                .messager
+                .clone(),
         )
-        .expect("invalid notifier configuration");
-        let messager = MessagerServer::connect(matches, argument.messager_config.clone())
-            .await
-            .expect("notifier messager initialization failed");
+        .await
+        .expect("notifier messager initialization failed");
         let properties = argument.properties.expect("notifier runtime properties required");
         let context = ApplicationContext::global();
         context

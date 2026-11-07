@@ -196,7 +196,7 @@ impl OrderExecutionPostgresRepository {
         sequence: i64,
     ) -> Result<sqlx::postgres::PgRow> {
         sqlx::query(
-            "SELECT o.intent,o.state,o.exchange_order_id FROM ord_order o JOIN wlt_wallet w ON w.id=o.wallet_id
+            "SELECT o.intent,o.state,o.exchange_order_id FROM order_info o JOIN ledger_info w ON w.id=o.wallet_id
             JOIN msg_inbox i ON i.env=o.env AND i.tenant_id=o.tenant_id
                 AND i.node_id=o.producer_node_id AND i.run_id=o.run_id AND i.seq=o.seq AND i.consumer=$8
             WHERE o.env=$1 AND o.tenant_id=$2 AND o.wallet_id=$3 AND o.producer_node_id=$4

@@ -9,6 +9,7 @@ use common_context::IProvider;
 use common_telemetry::tracing_context::MessageTrace;
 use serde::Deserialize;
 use sigbot_core::config::config::get_config;
+use sigbot_core::config::config::RuntimeComponentProperties;
 use sigbot_core::modules::wallet::handler::wallet::WalletReservationHandler;
 use sigbot_messager::messager::IMessager;
 use sigbot_messager::messager::OutboxRelay;
@@ -20,7 +21,6 @@ use sigbot_types::order::execution::ExecutionFact;
 use sigbot_types::order::execution::OrderStatusFact;
 use sigbot_types::wallet::funding::FundingFact;
 use sigbot_types::wallet::reservation::ReservationRequest;
-use sigbot_types::wallet::WalletArgument;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -40,7 +40,7 @@ pub struct WalletAccountProcessor {
 }
 
 impl WalletAccountProcessor {
-    pub async fn start(argument: &WalletArgument, messager: Arc<dyn IMessager>) -> Result<Arc<Self>> {
+    pub async fn start(argument: &RuntimeComponentProperties, messager: Arc<dyn IMessager>) -> Result<Arc<Self>> {
         common_telemetry::readiness::RuntimeReadiness::business("wallet", false);
         let properties = argument
             .properties

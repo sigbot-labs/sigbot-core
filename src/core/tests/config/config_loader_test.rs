@@ -1,6 +1,5 @@
+use super::{AppConfigProperties, ConfigLoader, StorageProvider};
 use serde_json::json;
-use sigbot_core::config::config::AppConfigProperties;
-use sigbot_core::config::config::ConfigLoader;
 #[test]
 fn only_canonical_snake_case_keys_are_accepted() {
     let tenant = "0192f7b2-5c00-7000-8000-000000000501";
@@ -82,15 +81,11 @@ fn shipped_configuration_accepts_nested_environment_overrides() {
     let typed = ConfigLoader::deserialize(value).unwrap();
     assert_eq!(typed.mgmt.port, 19490);
     assert!(!typed.mgmt.otel.enabled);
-    assert_eq!(
-        typed.storage.provider,
-        sigbot_core::config::config::StorageProvider::Postgres
-    );
+    assert_eq!(typed.storage.provider, StorageProvider::Postgres);
 }
 
 #[test]
 fn storage_accepts_only_the_canonical_section_and_provider_key() {
-    use sigbot_core::config::config::StorageProvider;
     let canonical = ConfigLoader::normalize(
         json!({"storage": {"provider": "SQLite", "sqlite": {"dir": "/tmp/sigbot-config-test"}}}),
     )
@@ -149,4 +144,41 @@ fn redis_nodes_environment_override_is_typed_without_parsing_other_strings() {
         normalized.pointer("/secrets/values/numeric_password").unwrap(),
         "123456"
     );
+}
+
+#[test]
+fn oauth_discovery_supports_typed_environment_overrides_and_rejects_unsafe_urls() {
+    let environment = serde_json::json!({"authguard":{"oauth":{"issuer":"https://authority.example.test/","discovery_url":"https://authority.example.test/.well-known/openid-configuration","scopes":"sigbot:read,sigbot:write"}}});
+    let normalized = ConfigLoader::normalize_environment(environment).unwrap();
+    let oauth: crate::config::authguard::OAuthDiscoveryProperties =
+        serde_json::from_value(normalized["authguard"]["oauth"].clone()).unwrap();
+    oauth.validate().unwrap();
+    assert_eq!(oauth.scopes, vec!["sigbot:read", "sigbot:write"]);
+    for url in [
+        "http://public.example.test/",
+        "https://user:password@example.test/",
+        "https://example.test/#fragment",
+    ] {
+        assert!(crate::config::authguard::OAuthDiscoveryProperties::validate_url(url).is_err());
+    }
+}
+
+#[test]
+fn explicit_yaml_path_is_required_and_errors_do_not_expose_values() {
+    let directory = std::env::temp_dir().join(format!("sigbot-config-{}", sigbot_types::Uuid::now_v7()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("runtime.yaml");
+    assert!(ConfigLoader::load(&path).is_err());
+    std::fs::write(
+        &path,
+        "service_name: yaml-startup\nservices:\n  component:\n    messager:\n      provider: LOCAL\n    wallet: {}\n",
+    )
+    .unwrap();
+    let config = ConfigLoader::load(&path).unwrap();
+    assert_eq!(config.service_name, "yaml-startup");
+    assert_eq!(config.services.component.messager.provider.as_str(), "LOCAL");
+    std::fs::write(&path, "services:\n  component:\n    typo: sensitive-value\n").unwrap();
+    let error = ConfigLoader::load(&path).unwrap_err().to_string();
+    assert!(!error.contains("sensitive-value"));
+    std::fs::remove_dir_all(directory).unwrap();
 }

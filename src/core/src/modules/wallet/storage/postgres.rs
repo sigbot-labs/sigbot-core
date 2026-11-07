@@ -95,7 +95,7 @@ impl WalletPostgresRepository {
         let wire: MessageEnvelope<Value> = serde_json::from_value(serde_json::to_value(message)?)?;
         let mut transaction = self.pool.begin().await?;
         let wallet = sqlx::query(
-            "SELECT portfolio_version FROM wlt_wallet WHERE id=$1 AND tenant_id=$2
+            "SELECT portfolio_version FROM ledger_info WHERE id=$1 AND tenant_id=$2
             AND env=$3 AND exchange=$4 AND account_id=$5 FOR UPDATE",
         )
         .bind(fact.wallet_id)

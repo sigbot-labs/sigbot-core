@@ -8,6 +8,7 @@ use authguard_adapter_rust::AccessRequest;
 use authguard_adapter_rust::GrpcAccessContextResolver;
 use authguard_adapter_rust::HeaderAccessContextResolver;
 use authguard_adapter_rust::IAccessContextResolver;
+use authguard_adapter_rust::{ACCESS_CONTEXT_HEADER, SCOPE_TOKEN_HEADER};
 use axum::http::HeaderMap;
 use axum::http::Method;
 use std::sync::Arc;
@@ -48,6 +49,22 @@ impl AuthguardProvider {
     }
     pub fn is_configured(&self) -> bool {
         self.resolver.is_some()
+    }
+
+    /// Protocol SDKs expose Bearer credentials separately from the HTTP headers.
+    pub async fn authenticate_bearer(&self, token: &str, method: &Method, path: &str) -> Result<RequestIdentity> {
+        let mut headers = HeaderMap::new();
+        let name = match self.config.provider {
+            AuthguardProviderKind::SignedHeader => ACCESS_CONTEXT_HEADER,
+            AuthguardProviderKind::Grpc => SCOPE_TOKEN_HEADER,
+        };
+        headers.insert(
+            name,
+            token
+                .parse()
+                .map_err(|_| anyhow::anyhow!("invalid Authguard credential header"))?,
+        );
+        self.authenticate(&headers, method, path).await
     }
 
     pub async fn authenticate(&self, headers: &HeaderMap, method: &Method, path: &str) -> Result<RequestIdentity> {

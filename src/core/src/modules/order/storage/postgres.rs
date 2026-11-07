@@ -140,7 +140,7 @@ impl OrderPostgresRepository {
 
     pub async fn owns_account(&self, scope: &MessageScope, account_id: Uuid) -> Result<bool> {
         Ok(sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM wlt_wallet WHERE account_id=$1 AND env=$2 AND tenant_id=$3
+            "SELECT EXISTS(SELECT 1 FROM ledger_info WHERE account_id=$1 AND env=$2 AND tenant_id=$3
             AND del_flag=FALSE)",
         )
         .bind(account_id)

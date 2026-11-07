@@ -47,6 +47,57 @@ impl Fixture {
     }
 }
 
+struct ScopeTokenFixture {
+    encoded: String,
+}
+#[async_trait::async_trait]
+impl authguard_adapter_rust::ScopeTokenClient for ScopeTokenFixture {
+    async fn resolve_scope(&self, token: &str) -> Result<String, authguard_adapter_rust::AccessError> {
+        if token == "isolated-scope-token" {
+            Ok(self.encoded.clone())
+        } else {
+            Err(authguard_adapter_rust::AccessError::InvalidContext(
+                "invalid fixture token".into(),
+            ))
+        }
+    }
+}
+
+#[tokio::test]
+async fn bearer_bridge_uses_the_official_signed_header_and_grpc_scope_resolvers() {
+    let context = Fixture::context("10", "alice");
+    let signed = sign_access_context(&context, Fixture::KEY).unwrap();
+    let identity = Fixture::provider()
+        .authenticate_bearer(&signed, &Method::GET, "/api/v1/workflows")
+        .await
+        .unwrap();
+    assert_eq!(identity.principal_id(), "alice");
+    let config = AuthguardProperties {
+        provider: sigbot_core::config::authguard::AuthguardProviderKind::Grpc,
+        ..Default::default()
+    };
+    let resolver = authguard_adapter_rust::GrpcAccessContextResolver::new(Arc::new(ScopeTokenFixture {
+        encoded: authguard_adapter_rust::encode_access_context(&context).unwrap(),
+    }));
+    let provider = AuthguardProvider::with_resolver(config, Arc::new(resolver));
+    assert_eq!(
+        provider
+            .authenticate_bearer("isolated-scope-token", &Method::GET, "/api/v1/workflows")
+            .await
+            .unwrap()
+            .principal_id(),
+        "alice"
+    );
+    assert!(provider
+        .authenticate_bearer("wrong-token", &Method::GET, "/api/v1/workflows")
+        .await
+        .is_err());
+    assert!(provider
+        .authenticate_bearer("isolated-scope-token", &Method::GET, "/api/v1/other")
+        .await
+        .is_err());
+}
+
 #[tokio::test]
 async fn identities_are_isolated_across_concurrent_requests() {
     let provider = Arc::new(Fixture::provider());

@@ -1,23 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::notifier::NotificationRead;
-use crate::worker::WorkerStatusRequest;
 use sigbot_core::config::config::AppConfig;
-use sigbot_types::controller::SaveConnection;
-use sigbot_types::controller::{
-    MiddlewareDeployment, MiddlewareResources, SaveWorker, TenantMiddlewareConfiguration, WorkerAuthConfig,
-    WorkerConfiguration, WorkerInfo, WorkerProvider, WorkerStatus,
-};
-use sigbot_types::llm::knowledge::KnowledgeUploadInfo;
-use sigbot_types::workflow::workflow::{
-    DeleteWorkflowRequest, DeleteWorkflowResponse, QueryWorkflowResponse, SaveWorkflowRequest, SaveWorkflowResponse,
-    WorkflowFlowInfo, WorkflowInfo,
-};
+use sigbot_types::domain::{Domain, ResourceCommand};
 use utoipa::openapi::external_docs::ExternalDocsBuilder;
 use utoipa::openapi::info::{ContactBuilder, InfoBuilder, LicenseBuilder};
-use utoipa::openapi::path::{HttpMethod, Operation, OperationBuilder};
-use utoipa::openapi::schema::ComponentsBuilder;
+use utoipa::openapi::path::{HttpMethod, Operation, OperationBuilder, ParameterBuilder, ParameterIn};
+use utoipa::openapi::request_body::RequestBodyBuilder;
+use utoipa::openapi::schema::{ComponentsBuilder, ObjectBuilder, Type};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityRequirement, SecurityScheme};
+use utoipa::openapi::{ContentBuilder, Required};
 use utoipa::openapi::{OpenApi, OpenApiBuilder, PathItem, Paths, Response, Tag};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -33,8 +24,8 @@ impl SwaggerHttpApi {
     pub fn document(config: &AppConfig) -> OpenApi {
         let mut paths = Paths::new();
         for (path, method, tag, id, summary) in Self::operations() {
-            let path = Self::join_context_path(config, path);
-            let item = PathItem::new(method, Self::operation(tag, id, summary));
+            let path = Self::join_context_path(config, &path);
+            let item = PathItem::new(method, Self::operation(tag, &id, &summary));
             paths
                 .paths
                 .entry(path)
@@ -49,18 +40,7 @@ impl SwaggerHttpApi {
                 "authguard_bearer",
                 Vec::<String>::new(),
             )]))
-            .tags(Some(
-                [
-                    "Connections",
-                    "Knowledge",
-                    "Market",
-                    "Notifications",
-                    "Workers",
-                    "Workflows",
-                ]
-                .into_iter()
-                .map(Tag::new),
-            ))
+            .tags(Some(Domain::ALL.into_iter().map(|domain| Tag::new(domain.as_str()))))
             .external_docs(Some(
                 ExternalDocsBuilder::new()
                     .url("https://github.com/sigbot-labs/sigbot-core/tree/main/docs")
@@ -75,7 +55,7 @@ impl SwaggerHttpApi {
             .title("Sigbot Core API")
             .version(env!("CARGO_PKG_VERSION"))
             .description(Some(
-                "Tenant-scoped APIs for Workflow authoring, compute workers, connections, market observations and notifications. Authentication and authorization are delegated to Authguard.",
+                "Tenant-scoped CRUD for tenant, cluster, datasource, exchange, strategy, order, ledger, notifier, exporter and workflow entities. Authentication and authorization are delegated to Authguard.",
             ))
             .terms_of_service(Some("https://github.com/sigbot-labs/sigbot-core"))
             .contact(Some(
@@ -96,26 +76,7 @@ impl SwaggerHttpApi {
 
     fn components() -> utoipa::openapi::Components {
         ComponentsBuilder::new()
-            .schema_from::<SaveConnection>()
-            .schema_from::<KnowledgeUploadInfo>()
-            .schema_from::<NotificationRead>()
-            .schema_from::<WorkflowInfo>()
-            .schema_from::<WorkflowFlowInfo>()
-            .schema_from::<SaveWorkflowRequest>()
-            .schema_from::<SaveWorkflowResponse>()
-            .schema_from::<QueryWorkflowResponse>()
-            .schema_from::<DeleteWorkflowRequest>()
-            .schema_from::<DeleteWorkflowResponse>()
-            .schema_from::<WorkerProvider>()
-            .schema_from::<WorkerStatus>()
-            .schema_from::<WorkerAuthConfig>()
-            .schema_from::<WorkerConfiguration>()
-            .schema_from::<SaveWorker>()
-            .schema_from::<WorkerInfo>()
-            .schema_from::<WorkerStatusRequest>()
-            .schema_from::<MiddlewareResources>()
-            .schema_from::<MiddlewareDeployment>()
-            .schema_from::<TenantMiddlewareConfiguration>()
+            .schema_from::<ResourceCommand>()
             .security_scheme(
                 "authguard_bearer",
                 SecurityScheme::Http(
@@ -129,8 +90,8 @@ impl SwaggerHttpApi {
             .build()
     }
 
-    fn operation(tag: &'static str, id: &'static str, summary: &'static str) -> Operation {
-        OperationBuilder::new()
+    fn operation(tag: &str, id: &str, summary: &str) -> Operation {
+        let mut operation = OperationBuilder::new()
             .operation_id(Some(id))
             .tag(tag)
             .summary(Some(summary))
@@ -140,145 +101,64 @@ impl SwaggerHttpApi {
             .response("403", Response::new("Resource scope denied"))
             .response("409", Response::new("Resource state conflict"))
             .response("503", Response::new("Required provider unavailable"))
-            .build()
+            .parameter(
+                ParameterBuilder::new()
+                    .name("env")
+                    .parameter_in(ParameterIn::Query)
+                    .required(Required::True)
+                    .schema(Some(ObjectBuilder::new().schema_type(Type::String)))
+                    .build(),
+            );
+        if !id.ends_with("_list") && !id.ends_with("_create") {
+            operation = operation.parameter(
+                ParameterBuilder::new()
+                    .name("id")
+                    .parameter_in(ParameterIn::Path)
+                    .required(Required::True)
+                    .schema(Some(ObjectBuilder::new().schema_type(Type::String)))
+                    .build(),
+            );
+        }
+        if id.ends_with("_create") || id.ends_with("_update") {
+            operation = operation
+                .request_body(Some(
+                    RequestBodyBuilder::new()
+                        .description(Some(
+                            "Entity fields; tenant and audit identity are server-owned. Unknown fields are rejected.",
+                        ))
+                        .required(Some(Required::True))
+                        .content(
+                            "application/json",
+                            ContentBuilder::new().schema(Some(ObjectBuilder::new())).build(),
+                        )
+                        .build(),
+                ))
+                .response("201", Response::new("Entity created"));
+        }
+        operation.build()
     }
 
-    fn operations() -> [(&'static str, HttpMethod, &'static str, &'static str, &'static str); 19] {
-        [
-            (
-                "/api/v1/connections",
-                HttpMethod::Get,
-                "Connections",
-                "listConnections",
-                "List scoped connections",
-            ),
-            (
-                "/api/v1/connections",
-                HttpMethod::Post,
-                "Connections",
-                "saveConnection",
-                "Create or update a scoped connection",
-            ),
-            (
-                "/api/v1/knowledge/upload",
-                HttpMethod::Post,
-                "Knowledge",
-                "uploadKnowledge",
-                "Upload a knowledge document",
-            ),
-            (
-                "/api/v1/market",
-                HttpMethod::Get,
-                "Market",
-                "listMarket",
-                "List recent market observations",
-            ),
-            (
-                "/api/v1/notifications",
-                HttpMethod::Get,
-                "Notifications",
-                "listNotifications",
-                "List in-app notifications",
-            ),
-            (
-                "/api/v1/notifications/read",
-                HttpMethod::Post,
-                "Notifications",
-                "readNotification",
-                "Mark a notification as read",
-            ),
-            (
-                "/api/v1/workers",
-                HttpMethod::Get,
-                "Workers",
-                "listWorkers",
-                "List remote compute workers",
-            ),
-            (
-                "/api/v1/workers/defaults",
-                HttpMethod::Get,
-                "Workers",
-                "getWorkerDefaults",
-                "Get controller-approved tenant middleware defaults",
-            ),
-            (
-                "/api/v1/workers",
-                HttpMethod::Post,
-                "Workers",
-                "saveWorker",
-                "Create or update a remote compute worker",
-            ),
-            (
-                "/api/v1/workers/{id}",
-                HttpMethod::Delete,
-                "Workers",
-                "deleteWorker",
-                "Delete an idle compute worker",
-            ),
-            (
-                "/api/v1/workers/{id}/status",
-                HttpMethod::Post,
-                "Workers",
-                "setWorkerStatus",
-                "Update worker availability",
-            ),
-            (
-                "/api/v1/workflows",
-                HttpMethod::Get,
-                "Workflows",
-                "listWorkflows",
-                "List Workflows",
-            ),
-            (
-                "/api/v1/workflows",
-                HttpMethod::Post,
-                "Workflows",
-                "saveWorkflow",
-                "Create or update a Workflow",
-            ),
-            (
-                "/api/v1/workflows/{id}",
-                HttpMethod::Get,
-                "Workflows",
-                "getWorkflow",
-                "Get a Workflow",
-            ),
-            (
-                "/api/v1/workflows/{id}",
-                HttpMethod::Delete,
-                "Workflows",
-                "deleteWorkflow",
-                "Delete a Workflow",
-            ),
-            (
-                "/api/v1/workflows/{id}/start",
-                HttpMethod::Post,
-                "Workflows",
-                "startWorkflow",
-                "Start a Workflow run",
-            ),
-            (
-                "/api/v1/workflows/{id}/stop",
-                HttpMethod::Post,
-                "Workflows",
-                "stopWorkflow",
-                "Stop a Workflow run",
-            ),
-            (
-                "/api/v1/overview",
-                HttpMethod::Get,
-                "Workflows",
-                "getOverview",
-                "Get recent Workflow metrics",
-            ),
-            (
-                "/api/v1/workflows/{id}/events",
-                HttpMethod::Get,
-                "Workflows",
-                "listWorkflowEvents",
-                "List Workflow run events and spans",
-            ),
-        ]
+    fn operations() -> Vec<(String, HttpMethod, &'static str, String, String)> {
+        let mut operations = Vec::new();
+        for domain in Domain::ALL {
+            let path = format!("/api/v1/{}", domain.collection());
+            for (method, action, item) in [
+                (HttpMethod::Get, "list", false),
+                (HttpMethod::Post, "create", false),
+                (HttpMethod::Get, "get", true),
+                (HttpMethod::Put, "update", true),
+                (HttpMethod::Delete, "delete", true),
+            ] {
+                operations.push((
+                    if item { format!("{path}/{{id}}") } else { path.clone() },
+                    method,
+                    domain.as_str(),
+                    format!("{}_{}", domain.as_str(), action),
+                    format!("{action} {} info", domain.as_str()),
+                ));
+            }
+        }
+        operations
     }
 
     fn join_context_path(config: &AppConfig, path: &str) -> String {

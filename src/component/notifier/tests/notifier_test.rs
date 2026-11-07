@@ -44,7 +44,7 @@ async fn postgres_in_app_duplicate_scope_single_owner_and_crash_recovery() {
     let id = Uuid::now_v7();
     let run = Uuid::now_v7();
     let tenant_id = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,name,status,env,tenant_id,flow_json) VALUES($1,'notification integration','RUNNING','test',$2,'{}')")
+    sqlx::query("INSERT INTO workflow_info(id,name,status,env,tenant_id,dag_config) VALUES($1,'notification integration','RUNNING','test',$2,'{}')")
         .bind(id).bind(tenant_id).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state) VALUES($1,$2,'test',$3,'running')")
         .bind(&run)
@@ -131,7 +131,7 @@ async fn postgres_in_app_duplicate_scope_single_owner_and_crash_recovery() {
             .await
             .unwrap();
     }
-    sqlx::query("DELETE FROM wf_workflow WHERE id=$1")
+    sqlx::query("DELETE FROM workflow_info WHERE id=$1")
         .bind(id)
         .execute(&pool)
         .await

@@ -2,8 +2,6 @@
 use anyhow::ensure;
 use anyhow::Context;
 use anyhow::Result;
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
@@ -26,6 +24,7 @@ pub struct WorkerPlan {
     pub module: String,
     pub node_id: i64,
     pub command: Vec<String>,
+    pub configuration: Value,
     pub environment: BTreeMap<String, String>,
     pub persistent_logs: bool,
     pub service: Option<WorkerService>,
@@ -72,7 +71,7 @@ impl WorkerPlan {
         );
         let flow: WorkflowFlowInfo = serde_json::from_value(
             snapshot
-                .get("flow_json")
+                .get("dag_config")
                 .cloned()
                 .context("run snapshot missing flow")?,
         )?;
@@ -139,7 +138,7 @@ impl WorkerPlan {
                 vec![WorkflowTopic::NotificationRequest]
             } else if target_module == "exporter" {
                 vec![WorkflowTopic::ExportRequest]
-            } else if target_module == "logservice" {
+            } else if target_module == "logger" {
                 vec![WorkflowTopic::LogEvent]
             } else {
                 match module.as_str() {
@@ -193,7 +192,7 @@ impl WorkerPlan {
             "order" => 2,
             "strategy" => 3,
             "evaluator" => 4,
-            "logservice" | "notifier" | "exporter" => 5,
+            "logger" | "notifier" | "exporter" => 5,
             _ => 6,
         });
         Ok(WorkflowDeploymentPlan { workers: plans })
@@ -206,7 +205,7 @@ impl WorkerPlan {
             if plans[index].module != "order" {
                 continue;
             }
-            let mut argument: Value = serde_json::from_slice(&STANDARD.decode(&plans[index].command[5])?)?;
+            let mut argument = plans[index].configuration["services"]["component"]["order"].clone();
             let raw = argument
                 .pointer("/properties/runtime_config")
                 .and_then(Value::as_str)
@@ -236,7 +235,7 @@ impl WorkerPlan {
             let name = plans[target].name.clone();
             runtime["exchange"]["endpoint"] = json!(format!("http://{name}:{port}"));
             argument["properties"]["runtime_config"] = json!(runtime.to_string());
-            plans[index].command[5] = STANDARD.encode(serde_json::to_vec(&argument)?);
+            plans[index].configuration["services"]["component"]["order"] = argument;
             plans[index].service_targets.push(WorkerServiceTarget {
                 worker_name: name,
                 port,
@@ -264,7 +263,7 @@ impl WorkerPlan {
                 "datafeed"
                     | "evaluator"
                     | "strategy"
-                    | "logservice"
+                    | "logger"
                     | "order"
                     | "wallet"
                     | "notifier"
@@ -418,16 +417,16 @@ impl WorkerPlan {
                 } else {
                     runtime_object.insert("scope".into(), serde_json::to_value(scope)?);
                     runtime_object.insert("node_id".into(), json!(node.id));
-                    if matches!(module.as_str(), "order" | "notifier" | "exporter" | "logservice") {
+                    if matches!(module.as_str(), "order" | "notifier" | "exporter" | "logger") {
                         runtime_object.insert("workflow_id".into(), json!(workflow));
                         runtime_object.insert("input_node_ids".into(), json!(inputs));
                     }
-                    if module == "logservice" {
+                    if module == "logger" {
                         runtime_object.insert("run_id".into(), json!(run));
                         runtime_object
                             .get_mut("archive")
                             .and_then(Value::as_object_mut)
-                            .context("logservice archive configuration required")?
+                            .context("logger archive configuration required")?
                             .insert("spool_path".into(), json!("/var/lib/sigbot/logs/archive.sqlite"));
                         persistent_logs = true;
                     }
@@ -436,11 +435,12 @@ impl WorkerPlan {
             }
         }
         let name = Self::name(scope, workflow, node.id);
-        let mqtt = argument
+        let messager = argument
             .get_mut("messager_config")
             .and_then(Value::as_object_mut)
             .context("messager configuration required")?;
-        let props = mqtt
+        messager.insert("provider".into(), json!("MQTT"));
+        let props = messager
             .entry("properties")
             .or_insert_with(|| json!({}))
             .as_object_mut()
@@ -449,35 +449,38 @@ impl WorkerPlan {
         props.insert("mqtt_client_id".into(), json!(format!("{name}-{}", &run_hash[..16])));
         props.insert("mqtt_qos".into(), json!("1"));
         props.insert("mqtt_clean_start".into(), json!("false"));
-        let flag = match module.as_str() {
-            "datafeed" => "datafeed-configuration",
-            "strategy" => "strategy-runner-configuration",
-            "evaluator" => "evaluator-runner-configuration",
-            "logservice" => "log-manager-configuration",
-            "notifier" => "notifier-configuration",
-            "order" => "order-manager-configuration",
-            "wallet" => "wallet-manager-configuration",
-            "exporter" => "exporter-manager-configuration",
-            _ => "backtest-manager-configuration",
+        let messager = argument
+            .as_object_mut()
+            .context("component configuration must be an object")?
+            .remove("messager_config")
+            .context("messager configuration required")?;
+        let component_config = if module == "datafeed" {
+            let object = argument
+                .as_object()
+                .context("datafeed configuration must be an object")?;
+            let config = object
+                .get("datafeed_config")
+                .and_then(Value::as_object)
+                .context("datafeed configuration required")?;
+            json!({
+                "providers": object.get("providers").cloned().unwrap_or_else(|| json!([])),
+                "provider": config.get("provider").cloned().unwrap_or(Value::Null),
+                "properties": config.get("properties").cloned().unwrap_or(Value::Null),
+                "secrets": config.get("secrets").cloned().unwrap_or(Value::Null),
+            })
+        } else {
+            argument
         };
-        let mut command = vec![
+        let command = vec![
             "sigbot".into(),
             module.clone(),
-            "--messager-provider".into(),
-            "MQTT".into(),
-            format!("--{flag}"),
-            STANDARD.encode(serde_json::to_vec(&argument)?),
+            "--config".into(),
+            "/etc/sigbot/runtime/sigbot.yaml".into(),
         ];
-        if module == "datafeed" {
-            command.extend([
-                "--datafeed-providers".into(),
-                argument
-                    .pointer("/datafeed_config/provider")
-                    .and_then(Value::as_str)
-                    .context("datafeed provider required")?
-                    .to_owned(),
-            ]);
-        }
+        let mut component = Map::new();
+        component.insert("messager".into(), messager);
+        component.insert(module.clone(), component_config);
+        let configuration = json!({"services": {"component": component}});
         let environment = BTreeMap::from([
             (
                 "SIGBOT__AUTHGUARD__SERVICE_TENANT_ID".into(),
@@ -496,6 +499,7 @@ impl WorkerPlan {
             module,
             node_id: node.id,
             command,
+            configuration,
             environment,
             persistent_logs,
             service,
@@ -531,6 +535,7 @@ impl WorkerPlan {
             Sha256::digest(serde_json::to_vec(&(
                 image,
                 &self.command,
+                &self.configuration,
                 &self.environment,
                 &self.service,
                 &self.service_targets,

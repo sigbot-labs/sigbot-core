@@ -213,7 +213,7 @@ impl WalletReservationPostgresRepository {
         tenant_id: Uuid,
         env: &str,
     ) -> Result<()> {
-        let row = sqlx::query("SELECT id FROM wlt_wallet WHERE id=$1 AND tenant_id=$2 AND env=$3 FOR UPDATE")
+        let row = sqlx::query("SELECT id FROM ledger_info WHERE id=$1 AND tenant_id=$2 AND env=$3 FOR UPDATE")
             .bind(wallet_id)
             .bind(tenant_id)
             .bind(env)

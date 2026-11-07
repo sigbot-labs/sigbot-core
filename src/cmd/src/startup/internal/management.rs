@@ -1,22 +1,33 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 
+use anyhow::Context;
 use axum::routing::get;
 use axum::Router;
 use axum_prometheus::PrometheusMetricLayer;
+use common_context::util::panics::PanicHelper;
 use common_context::util::signal::ShutdownSignal;
+use common_context::ApplicationContext;
 use common_telemetry::{debug, info};
 use prometheus::{Encoder, TextEncoder};
 use sigbot_core::config::config::get_config;
 use sigbot_core::context::state::SigbotState;
+use sigbot_core::mgmt::apm;
 use sigbot_core::mgmt::health::HealthRouter;
 use tokio::task::JoinHandle;
 
 #[derive(Default)]
-pub struct SigbotManagementServer;
+pub struct SigbotManagementStarter;
 
-impl SigbotManagementServer {
+impl SigbotManagementStarter {
     pub async fn start(&self) -> JoinHandle<()> {
         let config = get_config();
+        PanicHelper::set_hook_default(config.logging.is_human_mode());
+        ApplicationContext::global()
+            .init()
+            .await
+            .expect("provider context initialization failed");
+        apm::init().await;
+
         if !config.mgmt.enabled {
             return tokio::spawn(ShutdownSignal::wait());
         }
@@ -55,4 +66,16 @@ impl SigbotManagementServer {
                 .expect("management server failed");
         })
     }
+
+    /// Close providers even when the management task fails or is cancelled.
+    pub async fn wait(&self, handle: JoinHandle<()>) -> anyhow::Result<()> {
+        let result = handle.await;
+        let shutdown = ApplicationContext::global().shutdown().await;
+        result.context("management task failed")?;
+        shutdown.context("provider shutdown failed")
+    }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/startup/internal/management_test.rs"]
+mod tests;

@@ -125,13 +125,13 @@ class ReplayFixture:
             if history is None:
                 source = connection.execute(
                     "SELECT run_id::text,workflow_id::text FROM wf_run r WHERE env=%s AND tenant_id=%s "
-                    "AND (%s::text IS NULL OR run_id=%s) AND EXISTS(SELECT 1 FROM ord_order o WHERE o.run_id=r.run_id AND state='filled') "
+                    "AND (%s::text IS NULL OR run_id=%s) AND EXISTS(SELECT 1 FROM order_info o WHERE o.run_id=r.run_id AND state='filled') "
                     "ORDER BY started_at DESC LIMIT 1", (scope["env"], scope["tenant_id"], requested_run, requested_run)).fetchone()
                 if not source:
                     raise RuntimeError("replay requires a previously completed actual product pipeline")
                 begin = connection.execute("SELECT MIN(available_at) FROM mkt_event WHERE env=%s AND tenant_id=%s AND run_id=%s",
                                            (scope["env"], scope["tenant_id"], source[0])).fetchone()[0]
-                last = connection.execute("SELECT MAX(updated_at) FROM ord_order WHERE run_id=%s AND state='filled'", (source[0],)).fetchone()[0]
+                last = connection.execute("SELECT MAX(updated_at) FROM order_info WHERE run_id=%s AND state='filled'", (source[0],)).fetchone()[0]
                 if begin is None or last is None:
                     raise RuntimeError("historical source lacks persisted market facts and completed executions")
                 until = min(frozen, last + timedelta(seconds=5))
@@ -145,13 +145,13 @@ class ReplayFixture:
             target_scope = {**scope, "env": f"replay-marketpulse-{context.run_id}-{context.round_number}-{pass_number}"}
             workflow = UuidV7.generate()
             workflow = connection.execute(
-                "INSERT INTO wf_workflow(id,env,tenant_id,name,status,flow_json,created_by,updated_by) "
-                "SELECT %s,%s,tenant_id,%s,'RUNNING',flow_json,'marketpulse-e2e','marketpulse-e2e' "
-                "FROM wf_workflow WHERE id=%s RETURNING id::text",
+                "INSERT INTO workflow_info(id,env,tenant_id,name,status,dag_config,created_by,updated_by) "
+                "SELECT %s,%s,tenant_id,%s,'RUNNING',dag_config,'marketpulse-e2e','marketpulse-e2e' "
+                "FROM workflow_info WHERE id=%s RETURNING id::text",
                 (workflow, target_scope["env"], "Marketpulse frozen replay", history["workflow_id"])).fetchone()[0]
             wallet = UuidV7.generate()
             account = UuidV7.generate()
-            connection.execute("INSERT INTO wlt_wallet(id,tenant_id,account_id,exchange,mode,env) VALUES(%s,%s,%s,'BINANCE','backtest',%s)",
+            connection.execute("INSERT INTO ledger_info(id,tenant_id,account_id,exchange,mode,env) VALUES(%s,%s,%s,'BINANCE','backtest',%s)",
                                (wallet, scope["tenant_id"], account, target_scope["env"]))
             run_id = UuidV7.generate()
             connection.execute("INSERT INTO wf_run(run_id,workflow_id,env,tenant_id,state,replay_of) VALUES(%s,%s,%s,%s,'running',%s)",

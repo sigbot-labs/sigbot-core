@@ -8,7 +8,7 @@ use sigbot_core::config::config::PostgresStorageProperties;
 use sigbot_core::modules::messager::handler::messager::MessagerHandler;
 pub use sigbot_core::modules::strategy::handler::strategy::ProducerTrace;
 use sigbot_core::modules::strategy::handler::strategy::{StrategyHandler, StrategyStorageIdentity};
-use sigbot_logservice::s3::s3::{LogAppend, LogLine, S3Logservice};
+use sigbot_logger::s3::s3::{LogAppend, LogLine, S3Logger};
 use sigbot_strategy_sdk::sdk::runtime::{StrategyCheckpoint, StrategyIdentity, StrategyLog, StrategyTransaction};
 use sigbot_types::messager::envelope::{DurableMessage, MessageEnvelope, MessageKind};
 use sigbot_types::messager::topic::{AccountTopic, MessageScope, WorkflowEdge, WorkflowTopic};
@@ -20,7 +20,7 @@ pub struct CheckpointStrategyTransaction {
     handler: StrategyHandler,
     edges: Vec<WorkflowEdge>,
     producer_trace: ProducerTrace,
-    log_archive: Option<Arc<S3Logservice>>,
+    log_archive: Option<Arc<S3Logger>>,
 }
 
 impl CheckpointStrategyTransaction {
@@ -46,7 +46,7 @@ impl CheckpointStrategyTransaction {
         })
     }
 
-    pub fn with_log_archive(mut self, archive: Arc<S3Logservice>) -> Self {
+    pub fn with_log_archive(mut self, archive: Arc<S3Logger>) -> Self {
         self.log_archive = Some(archive);
         self
     }

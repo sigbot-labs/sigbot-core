@@ -74,7 +74,7 @@ class DeploymentVerifier:
                                      "--set", "sigbot.monitoring.enabled=true",
                                      "--set", "sigbot.monitoring.serviceMonitor.enabled=true",
                                      "--set", "sigbot.monitoring.grafana.enabled=true"])
-            for component in ("backtest", "datafeed", "evaluator", "exporter", "logservice", "notifier",
+            for component in ("backtest", "datafeed", "evaluator", "exporter", "logger", "notifier",
                               "strategy", "controller", "order", "wallet"):
                 if f"dashboard-{component}" not in rendered:
                     raise AssertionError(f"missing Grafana dashboard: {component}")

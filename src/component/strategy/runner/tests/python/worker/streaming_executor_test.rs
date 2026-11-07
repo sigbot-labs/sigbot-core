@@ -3,7 +3,6 @@ use super::*;
 use sigbot_types::exchange::models::trade_market::KlineModel;
 use sigbot_types::exchange::models::trade_position::OrderType;
 use sigbot_types::exchange::models::trade_position::TradeSide;
-use sigbot_types::messager::messager::MessagerConfig;
 use sigbot_types::strategy::models::strategy_execution::StrategyContext;
 use sigbot_types::strategy::strategy::StrategyInfo;
 use std::thread;
@@ -87,11 +86,10 @@ fn build_test_context() -> StrategyContext {
 #[test]
 fn test_streaming_executor() {
     let executor = StreamingStrategyExecutor::new(
-        Arc::new(StrategyArgument {
+        Arc::new(StrategyProperties {
             properties: None,
             sys_environment: Some(HashMap::new()),
             run_mode: "STREAMING".to_string(),
-            messager_config: Arc::new(MessagerConfig::default()),
         }),
         Arc::new(StrategyInfo::default()),
     );
@@ -138,11 +136,10 @@ fn test_streaming_executor() {
 #[test]
 fn test_streaming_executor_multi_thread_and_mock_cost() {
     let executor = Arc::new(StreamingStrategyExecutor::new(
-        Arc::new(StrategyArgument {
+        Arc::new(StrategyProperties {
             properties: None,
             sys_environment: Some(HashMap::new()),
             run_mode: "STREAMING".to_string(),
-            messager_config: Arc::new(MessagerConfig::default()),
         }),
         Arc::new(StrategyInfo::default()),
     ));

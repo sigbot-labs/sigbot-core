@@ -83,7 +83,7 @@ impl OrderRecordPostgresRepository {
         asset: &str,
         amount: Decimal,
     ) -> Result<bool> {
-        Ok(sqlx::query("INSERT INTO ord_order(env,tenant_id,wallet_id,run_id,seq,exchange,symbol,intent,reserve_asset,reserve_amount,producer_node_id,state)
+        Ok(sqlx::query("INSERT INTO order_info(env,tenant_id,wallet_id,run_id,seq,exchange,symbol,intent,reserve_asset,reserve_amount,producer_node_id,state)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending') ON CONFLICT DO NOTHING")
             .bind(&message.scope.env).bind(message.scope.tenant_id)
             .bind(message.payload.wallet_id).bind(&message.run_id).bind(message.seq).bind(&message.payload.exchange)
@@ -92,7 +92,7 @@ impl OrderRecordPostgresRepository {
     }
 
     pub async fn claim_submission(&self, message: &DurableMessage<TradeIntent>) -> Result<bool> {
-        Ok(sqlx::query("UPDATE ord_order SET state='submitting',updated_at=NOW() WHERE env=$1 AND tenant_id=$2
+        Ok(sqlx::query("UPDATE order_info SET state='submitting',updated_at=NOW() WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6 AND state='reserved'
             AND EXISTS(SELECT 1 FROM wlt_reservation r WHERE r.wallet_id=$3 AND r.run_id=$4 AND r.seq=$5 AND r.producer_node_id=$6 AND r.state='reserved')")
             .bind(&message.scope.env).bind(message.scope.tenant_id)
@@ -117,7 +117,7 @@ impl OrderRecordPostgresRepository {
 
     pub async fn prepared(&self, input: &DurableMessage<TradeIntent>) -> Result<Option<Value>> {
         Ok(sqlx::query_scalar(
-            "SELECT prepared_submission FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT prepared_submission FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6",
         )
         .bind(&input.scope.env)
@@ -142,7 +142,7 @@ impl OrderRecordPostgresRepository {
                 .is_some_and(|id| !id.is_empty()),
             "prepared order has no venue identity"
         );
-        sqlx::query("UPDATE ord_order SET prepared_submission=COALESCE(prepared_submission,$7)
+        sqlx::query("UPDATE order_info SET prepared_submission=COALESCE(prepared_submission,$7)
             WHERE env=$1 AND tenant_id=$2 AND wallet_id=$3 AND producer_node_id=$4 AND run_id=$5 AND seq=$6 AND state='reserved'")
             .bind(&input.scope.env).bind(input.scope.tenant_id)
             .bind(input.payload.wallet_id).bind(input.node_id).bind(&input.run_id).bind(input.seq).bind(candidate)
@@ -159,7 +159,7 @@ impl OrderRecordPostgresRepository {
         exchange_order_id: Option<&str>,
     ) -> Result<bool> {
         let previous = sqlx::query(
-            "SELECT state,exchange_order_id FROM ord_order WHERE env=$1 AND tenant_id=$2
+            "SELECT state,exchange_order_id FROM order_info WHERE env=$1 AND tenant_id=$2
             AND wallet_id=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6 FOR UPDATE",
         )
         .bind(&message.scope.env)
@@ -187,7 +187,7 @@ impl OrderRecordPostgresRepository {
             return Ok(false);
         }
         let rows = sqlx::query(
-            "UPDATE ord_order SET state=$7,exchange_order_id=COALESCE($8,exchange_order_id),updated_at=NOW()
+            "UPDATE order_info SET state=$7,exchange_order_id=COALESCE($8,exchange_order_id),updated_at=NOW()
             WHERE env=$1 AND tenant_id=$2 AND wallet_id=$3 AND run_id=$4 AND seq=$5 AND producer_node_id=$6
             AND (state IS DISTINCT FROM $7 OR exchange_order_id IS DISTINCT FROM COALESCE($8,exchange_order_id))",
         )

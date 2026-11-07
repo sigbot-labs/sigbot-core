@@ -34,7 +34,7 @@ def verify(context):
         raise AssertionError(f"config must contain declarative configuration: {unexpected}")
     verifier = context.root / "verifier"
     allowed_domains = {"infra", "workflow", "web", "backtest", "controller", "datafeed", "evaluator",
-                       "exchange", "exporter", "logservice", "messager", "notifier", "order", "strategy", "wallet"}
+                       "exchange", "exporter", "logger", "messager", "notifier", "order", "strategy", "wallet"}
     actual_domains = {path.name for path in verifier.iterdir() if path.is_dir() and path.name != "__pycache__"}
     if actual_domains - allowed_domains:
         raise AssertionError(f"non-domain verifier directories: {sorted(actual_domains - allowed_domains)}")
@@ -55,7 +55,7 @@ def verify(context):
             raise AssertionError(f"{deployer} verifier timeline is not ordered: {list(zip(scenarios, numbers))}")
     repository = context.root.parents[2]
     domains = {"component/backtest": "Backtest", "component/datafeed": "Datafeed",
-               "component/evaluator": "Evaluator", "component/logservice": "Logservice",
+               "component/evaluator": "Evaluator", "component/logger": "Logger",
                "component/strategy/runner": "Strategy", "component/exporter": "Exporter",
                "component/notifier": "Notifier", "controller": "Controller",
                "exchange": "Exchange", "messager": "Messager", "component/order": "Order",

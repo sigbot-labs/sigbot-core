@@ -107,7 +107,7 @@ pub const TOPIC_EVALUATOR_TRIGGER: &str      = "/internal/v1/{TENANT_ID}/evaluat
      │                    │                            │                            │
      │                    v                            v                            v
      │             ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
-     │             │   Exporter   │            │  Log Service │            │  Evaluator   │
+     │             │   Exporter   │            │Logger Service│            │  Evaluator   │
      │             │   (Kafka)    │            │  (Archive)   │            │    (MAS)     │
      │             └──────────────┘            └──────────────┘            └──────────────┘
      │                    │                            │                            │
@@ -142,7 +142,7 @@ pub const TOPIC_EVALUATOR_TRIGGER: &str      = "/internal/v1/{TENANT_ID}/evaluat
 | **Order** | `TOPIC_WF_TRADING_PLACED` | `TOPIC_WF_TRADING_SIGNAL` | `src/order/src/server/order_server.rs:54` |
 | **Wallet** | - | `TOPIC_WF_TRADING_PLACED` | `src/wallet/src/server/wallet_server.rs:53` |
 | **Exporter** | - | `TOPIC_WF_TRADING_PLACED` | `src/component/exporter/src/manager/exporter_kafka.rs:139` |
-| **Log Service** | - | `TOPIC_WF_LOG` (+/+/+) | `src/component/logservice/src/server/log_server.rs:150` |
+| **Logger Service** | - | `TOPIC_WF_LOG` (+/+/+) | `src/component/logger/src/server/log_server.rs:150` |
 | **Evaluator** | `TOPIC_WF_HYPERPARAMETER_UPDATE` | - (TODO: datafeed events) | `src/component/evaluator/src/executor/adk/executor_mas.rs:129` |
 
 ---
@@ -156,7 +156,7 @@ pub const TOPIC_EVALUATOR_TRIGGER: &str      = "/internal/v1/{TENANT_ID}/evaluat
 | `market_data_flow.rs` | Datafeed → Strategy | Passing | 98 |
 | `trading_signal_flow.rs` | Strategy → Order | Passing | 355 |
 | `trade_result_flow.rs` | Order → Wallet + Exporter | Passing | 397 |
-| `log_archiving_flow.rs` | All Services → Log Service | Passing | 403 |
+| `log_archiving_flow.rs` | All Services → Logger Service | Passing | 403 |
 | `complete_workflow.rs` | Full chain (6 tests) | Passing | 483 |
 
 ### 3.2 Real Container Tests
@@ -189,17 +189,17 @@ pub const TOPIC_EVALUATOR_TRIGGER: &str      = "/internal/v1/{TENANT_ID}/evaluat
 | Level | Wildcard | Example | Used By |
 |-------|----------|---------|---------|
 | Single | `+` | `/internal/v1/+/workflow_123/market/stream` | All tenants |
-| Multi | `#` | `/internal/v1/tenant_123/#` | Log Service dual subscription |
+| Multi | `#` | `/internal/v1/tenant_123/#` | Logger Service dual subscription |
 
-### 4.2 Log Service Dual Subscription
+### 4.2 Logger Service Dual Subscription
 
-The Log Service uses **two separate subscriptions** (not shared):
+The Logger Service uses **two separate subscriptions** (not shared):
 
 1. **Archiving Subscription** (via `LogManager`): Archives to PostgreSQL
 2. **Real-time Subscription** (via `LogServer`): Broadcasts to WebSocket clients
 
 ```rust
-// src/component/logservice/src/server/log_server.rs:150-157
+// src/component/logger/src/server/log_server.rs:150-157
 let topic = TOPIC_WF_LOG
     .replace("{TENANT_ID}", "+")
     .replace("{WORKFLOW_ID}", "+")
@@ -296,4 +296,4 @@ The E2E test architecture is **well-structured** with:
 - Complete Workflow: `tests/e2e/scenarios/complete_workflow.rs`
 - Real Container Tests: `tests/e2e/scenarios/real_container_test.rs`
 - Topic Definitions: `src/types/src/modules/messager/mod.rs`
-- Service Implementations: `src/{datafeed,strategy,order,wallet,exporter,logservice,evaluator}/src/server/*.rs`
+- Service Implementations: `src/{datafeed,strategy,order,wallet,exporter,logger,evaluator}/src/server/*.rs`

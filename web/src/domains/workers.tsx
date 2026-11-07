@@ -9,9 +9,9 @@ import { useScope } from "../lib/workspace";
 const middlewareNames = ["redis", "pgvector", "timescaledb", "emqx"] as const;
 export function Workers() {
   const scope = useScope();
-  const remote = useRemote<{ data: Worker[] }>(`/api/v1/workers?${scope.query}`, { data: [] });
+  const remote = useRemote<{ data: Worker[] }>(`/api/v1/clusters?${scope.query}`, { data: [] });
   const identity = useRemote<Identity | null>("/api/v1/identity", null);
-  const defaults = useRemote<TenantMiddleware>("/api/v1/workers/defaults", {});
+  const defaults: {data: TenantMiddleware} = {data: {}};
   const [editing, setEditing] = useState<Worker | null | undefined>();
   return (
     <>
@@ -53,7 +53,8 @@ function WorkerEditor({ worker, defaults, env, tenantId, close, saved }: { worke
     try {
       const payload = mode === "yaml" ? parse(document) : fromForm(new FormData(event.currentTarget), worker?.id, env, provider);
       validatePayload(payload);
-      await Api.save("/api/v1/workers", payload); saved();
+      const {id, env: targetEnv, ...fields} = payload;
+      await Api.entity("clusters", String(targetEnv), fields, typeof id === "string" ? id : undefined); saved();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Worker 配置无效");
     } finally { setSaving(false); }

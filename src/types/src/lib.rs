@@ -21,11 +21,12 @@
 pub mod backtest;
 pub mod controller;
 pub mod datafeed;
+pub mod domain;
 pub mod evaluator;
 pub mod exchange;
 pub mod exporter;
 pub mod llm;
-pub mod logservice;
+pub mod logger;
 pub mod messager;
 pub mod notifier;
 pub mod order;
@@ -42,7 +43,6 @@ use serde::Serialize;
 use sqlx::prelude::FromRow;
 use validator::Validate;
 
-use sigbot_utils::base64s;
 pub use uuid::Uuid;
 
 /// Globally unique, time-ordered identifier persisted by Sigbot-owned tables.
@@ -229,16 +229,5 @@ impl RespBase {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string(&self).unwrap()
-    }
-}
-
-pub struct ArgumentConfig;
-
-impl ArgumentConfig {
-    pub fn decode(configuration: &str) -> anyhow::Result<String> {
-        match base64s::Base64Helper::decode(configuration) {
-            Ok(bytes) => String::from_utf8(bytes).map_err(|_| Error::msg("configuration is not valid UTF-8")),
-            Err(_) => Ok(configuration.to_owned()),
-        }
     }
 }

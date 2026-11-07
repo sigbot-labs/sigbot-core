@@ -24,7 +24,7 @@ use anyhow::Result;
 use common_telemetry::info;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use sigbot_types::strategy::StrategyArgument;
+use sigbot_core::config::config::StrategyProperties;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -33,7 +33,7 @@ use std::sync::Mutex;
 /// Processes entire dataset at once, suitable for research and backtesting
 pub struct BatchStrategyExecutor {
     /// Strategy runtime argument (including system environment variables)
-    strategy_argument: Arc<StrategyArgument>,
+    strategy_argument: Arc<StrategyProperties>,
     /// Strategy runtime environment variables
     environment: Arc<Mutex<HashMap<String, String>>>,
     /// Whether init() has been called
@@ -44,7 +44,7 @@ pub struct BatchStrategyExecutor {
 }
 
 impl BatchStrategyExecutor {
-    pub fn new(strategy_argument: Arc<StrategyArgument>) -> Self {
+    pub fn new(strategy_argument: Arc<StrategyProperties>) -> Self {
         Self {
             strategy_argument,
             environment: Arc::new(Mutex::new(HashMap::new())),

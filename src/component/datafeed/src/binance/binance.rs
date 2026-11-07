@@ -12,9 +12,9 @@ use common_context::IProvider;
 use rust_decimal::Decimal;
 use serde_json::json;
 use serde_json::Value;
+use sigbot_core::config::config::DatafeedProperties;
 use sigbot_types::datafeed::datafeed::DatafeedProvider;
 use sigbot_types::datafeed::event::DatafeedEvent;
-use sigbot_types::datafeed::DatafeedArgument;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -106,9 +106,8 @@ impl IDatafeed for BinanceDatafeed {
         DatafeedProvider::Binance
     }
 
-    async fn configure(&self, argument: Arc<DatafeedArgument>) -> Result<()> {
+    async fn configure(&self, argument: Arc<DatafeedProperties>) -> Result<()> {
         let properties = argument
-            .datafeed_config
             .properties
             .as_ref()
             .context("Binance source properties required")?;

@@ -91,14 +91,14 @@ class GroupFixture:
         run_id = UuidV7.generate()
         with psycopg.connect(context.secret("database_url_env")) as connection:
             workflow = UuidV7.generate()
-            connection.execute("INSERT INTO wf_workflow(id,env,tenant_id,name,status,created_by,updated_by) "
+            connection.execute("INSERT INTO workflow_info(id,env,tenant_id,name,status,created_by,updated_by) "
                                "VALUES(%s,%s,%s,'Marketpulse multi-account compensation','RUNNING','marketpulse-e2e','marketpulse-e2e')",
                                (workflow, scope["env"], scope["tenant_id"]))
             accounts = []
             wallets = []
             for _ in range(2):
                 wallet, account = UuidV7.generate(), UuidV7.generate()
-                connection.execute("INSERT INTO wlt_wallet(id,tenant_id,account_id,exchange,mode,env) VALUES(%s,%s,%s,'BINANCE','paper',%s)",
+                connection.execute("INSERT INTO ledger_info(id,tenant_id,account_id,exchange,mode,env) VALUES(%s,%s,%s,'BINANCE','paper',%s)",
                                    (wallet, scope["tenant_id"], account, scope["env"]))
                 wallets.append(wallet)
                 accounts.append(account)

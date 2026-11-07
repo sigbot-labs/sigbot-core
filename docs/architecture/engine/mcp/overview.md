@@ -1,54 +1,20 @@
-# MCP Protocol Outlet
+# MCP API
 
-[中文](overview_ZH.md) · [Architecture overview](../../overview.md)
+[中文](overview_ZH.md) · [Domain contracts](../../domain-model_ZH.md)
 
-**Status:** Optional, implemented Streamable HTTP Workflow tool outlet.
+The official rust-mcp-sdk serves authenticated streamable HTTP. ResourceMcpRegistry advertises 50 tools: five CRUD operations for each of the ten domains.
 
-The API process uses the official `rust-mcp-sdk` server, Streamable HTTP, and
-authentication SPI. MCP is not a market-data source, Workflow node, or second
-business implementation. The former placeholder MCP client/manager layer is
-not retained.
+The IMcpApi contract, HttpMcpApi lifecycle and protocol endpoint composition live in src/api/mcp/src/mcp.rs. It uses the SDK RemoteAuthProvider, AuthorizationServerMetadata and OauthProtectedResourceMetadata directly. The SDK owns discovery serialization, CORS, method validation and the 401 WWW-Authenticate challenge; Sigbot does not implement a second authorization server.
 
-## Tool Boundary
+For public_url https://app.example/mcp, the anonymous discovery endpoints are:
 
-The allowlist contains only `workflow_overview`, `workflow_events`,
-`workflow_start`, and `workflow_stop`. Every tool declares JSON Schema and
-read-only, idempotent, and open-world annotations, then delegates to Core
-Workflow Repositories. Unknown tools produce protocol errors; business failures
-produce sanitized `is_error` results.
+- GET/HEAD/OPTIONS /.well-known/oauth-protected-resource/mcp (RFC 9728).
+- GET/HEAD/OPTIONS /.well-known/oauth-authorization-server (the SDK's copy of the configured authority's real discovery metadata).
 
-Tools cannot call an exchange, access component-private storage, or bypass
-`Strategy -> Order -> Wallet`. Parameters contain environment, tenant, and the
-Workflow ID when needed. Tenant and principal identities come only from the
-verified authentication context and cannot be supplied as tool arguments.
+The resource document advertises the canonical public_url, authority issuer, supported scopes and Bearer header usage. The challenge points to that canonical metadata URL, never to the bind address or an untrusted Host header. A prefixed resource path produces the corresponding SDK path-scoped well-known URL.
 
-## Authguard and Lifecycle
+Configure services.platform.api.mcp.public_url and authguard.oauth with issuer, discovery_url and optional scopes. discovery_url must be the authority's real OIDC discovery document. Startup fetches it through the SDK with a bounded timeout and validates issuer, HTTPS and supported scopes before binding. Missing/invalid configuration fails startup. HTTP is allowed only for loopback development. Values are non-secret; credential material remains in Secrets.
 
-- The MCP SDK extracts `Authorization: Bearer` credentials.
-  `AuthguardMcpAuth` supports both Authguard signed-header and gRPC resolvers and
-  maps verified tenant/principal data into SDK `AuthInfo`.
-- Helm routes `/mcp` through the Authguard Gateway; the health endpoint performs
-  no writes.
-- The MCP Provider shares the API process `ApplicationContext` and performs a
-  bounded graceful shutdown.
-- Configuration lives under `services.api.mcp`. Only `streamable_http` is
-  supported; obsolete SSE/STDIO compatibility paths are not retained.
+The authority owns authorize/token/registration/revocation and OIDC endpoints; their real URLs are preserved in discovery. Sigbot neither invents these addresses nor issues credentials. End-user OAuth/OIDC verification remains at the Authguard/Gateway boundary. The backend SDK token verifier in src/api/mcp/src/auth/authguard.rs accepts the trusted Authguard credential handed off by that boundary, preserving tenant and allow/deny grants. The shared Core bridge now maps signed-header and gRPC opaque scope-token modes to the appropriate official SDK headers. A gateway must hand the MCP credential callback the verified credential as Bearer; raw end-user JWTs are not treated as signed Authguard contexts.
 
-## Reliability and Observability
-
-- Credentials are verified on every HTTP request and authentication state stays
-  within the current SDK request/session context.
-- Core Repositories own start/stop idempotency and `run_id`; MCP creates no
-  correlation identifier.
-- The official SDK handles request bounds, protocol version, sessions, SSE
-  backpressure, and protocol error shapes.
-- Logs never contain Bearer credentials, Authguard signatures, or sensitive raw
-  business content.
-
-## Source Map
-
-- Contract: `src/api/mcp/src/mcp.rs`
-- Authguard adapter: `src/api/mcp/src/mcp/authguard.rs`
-- Official SDK server: `src/api/mcp/src/mcp/http.rs`
-- Workflow tool registry: `src/api/mcp/src/mcp/workflow.rs`
-- API composition: `src/cmd/src/startup/api.rs`
+Helm exposes the discovery paths through a separate public HTTPRoute while /mcp remains protected. The configured external hostname or explicit protocols.mcp.publicUrl supplies the advertised URL. Real TCP tests cover anonymous discovery, 405, 401 discovery challenge, authenticated SDK initialization and issuer/URL rejection.

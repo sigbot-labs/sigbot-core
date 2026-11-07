@@ -38,6 +38,10 @@ export class Api {
   static save<T>(path: string, body: unknown): Promise<T> {
     return Api.request(path, { method: "POST", body: JSON.stringify(body) });
   }
+  static entity<T>(collection: string, env: string, fields: Record<string, unknown>, id?: string): Promise<T> {
+    const path = `/api/v1/${collection}${id ? `/${id}` : ""}?env=${encodeURIComponent(env)}`;
+    return Api.request(path, {method: id ? "PUT" : "POST", body: JSON.stringify(fields)});
+  }
 }
 
 export function useRemote<T>(path: string, initial: T) {

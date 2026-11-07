@@ -84,7 +84,7 @@ impl WorkerHandler {
         }
     }
 
-    fn validate(request: &SaveWorker, tenant_id: Uuid) -> Result<()> {
+    pub(crate) fn validate(request: &SaveWorker, tenant_id: Uuid) -> Result<()> {
         ensure!(
             !request.name.trim().is_empty() && request.name.len() <= 128,
             "invalid worker name"

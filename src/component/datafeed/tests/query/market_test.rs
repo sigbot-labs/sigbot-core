@@ -33,7 +33,7 @@ impl QueryFixture {
             tenant_id: Uuid::now_v7(),
         };
         let workflow_id = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'active query contract')")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'active query contract')")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)

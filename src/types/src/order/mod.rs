@@ -18,30 +18,12 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messager::messager::MessagerConfig;
-use anyhow::Context;
-use anyhow::Error;
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
 
 pub mod execution;
 pub mod execution_group;
 pub mod intent;
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct OrderArgument {
-    pub messager_config: Arc<MessagerConfig>,
-    pub properties: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
-}
-
-impl OrderArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse order manager info from JSON")
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, utoipa::ToSchema)]
 pub enum OrderProvider {
@@ -63,6 +45,3 @@ impl OrderProvider {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {}

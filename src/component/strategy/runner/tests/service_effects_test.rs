@@ -48,7 +48,7 @@ impl Fixture {
             tenant_id: Uuid::now_v7(),
         };
         let workflow_id = Uuid::now_v7();
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'strategy service effects')")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'strategy service effects')")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)
@@ -65,7 +65,7 @@ impl Fixture {
         let account_id = Uuid::now_v7();
         let wallet_id = Uuid::now_v7();
         sqlx::query(
-            "INSERT INTO wlt_wallet(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','paper')",
+            "INSERT INTO ledger_info(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','paper')",
         )
         .bind(wallet_id)
         .bind(account_id)

@@ -43,7 +43,7 @@ impl Fixture {
             env: format!("resting-{}", now.timestamp_micros()),
             tenant_id,
         };
-        sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'resting order test')")
+        sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'resting order test')")
             .bind(workflow_id)
             .bind(&scope.env)
             .bind(scope.tenant_id)
@@ -56,7 +56,7 @@ impl Fixture {
             .bind(scope.tenant_id)
             .execute(&pool)
             .await?;
-        sqlx::query("INSERT INTO wlt_wallet(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','backtest')")
+        sqlx::query("INSERT INTO ledger_info(id,account_id,tenant_id,env,exchange,mode) VALUES($1,$2,$3,$4,'binance','backtest')")
             .bind(wallet_id).bind(account_id).bind(scope.tenant_id).bind(&scope.env).execute(&pool).await?;
         let config = MatchingConfig {
             scope: scope.clone(),

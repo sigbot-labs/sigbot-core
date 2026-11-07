@@ -28,7 +28,7 @@ async fn real_broker_replay_preserves_identity_and_quarantine_ack_is_durable() -
     client.init().await.unwrap();
     let workflow_id = Uuid::now_v7();
     let run_id = Uuid::now_v7();
-    sqlx::query("INSERT INTO wf_workflow(id,env,tenant_id,name) VALUES($1,$2,$3,'messager replay contract')")
+    sqlx::query("INSERT INTO workflow_info(id,env,tenant_id,name) VALUES($1,$2,$3,'messager replay contract')")
         .bind(workflow_id)
         .bind(&scope.env)
         .bind(scope.tenant_id)
@@ -195,7 +195,7 @@ async fn real_broker_replay_preserves_identity_and_quarantine_ack_is_durable() -
         .bind(run_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM wf_workflow WHERE id=$1")
+    sqlx::query("DELETE FROM workflow_info WHERE id=$1")
         .bind(workflow_id)
         .execute(&pool)
         .await?;

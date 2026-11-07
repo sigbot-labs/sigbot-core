@@ -18,14 +18,6 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use crate::messager::messager::MessagerConfig;
-use anyhow::Context;
-use anyhow::Error;
-use serde::Deserialize;
-use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Arc;
-
 pub mod execution;
 pub mod models;
 pub mod strategy;
@@ -35,25 +27,3 @@ pub mod strategy;
 pub mod runtime {
     pub use super::execution::*;
 }
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct StrategyArgument {
-    /// Messager configuration for communication with the strategy runner
-    pub messager_config: Arc<MessagerConfig>,
-    /// System-level environment variables set during strategy runner pod startup
-    pub sys_environment: Option<HashMap<String, String>>,
-    /// Execution mode: "STREAMING" (streaming) or "BATCH" (batch processing)
-    pub run_mode: String,
-    #[serde(default)]
-    pub properties: Option<HashMap<String, String>>,
-}
-
-impl StrategyArgument {
-    pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json).context("Failed to parse strategy info from JSON")
-    }
-}
-
-#[cfg(test)]
-#[path = "../../tests/strategy/argument_test.rs"]
-mod tests;

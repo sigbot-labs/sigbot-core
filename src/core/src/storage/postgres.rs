@@ -66,7 +66,7 @@ impl PostgresPoolManager {
             .map_err(|_| Error::msg("configured PostgreSQL connection failed"))?;
         // DDL has one owner: migration/migrate.py. Application
         // credentials need DML only and must never create a database or schema.
-        let ready: bool = sqlx::query_scalar("SELECT to_regclass('mig_version') IS NOT NULL AND to_regclass('wf_workflow') IS NOT NULL AND to_regclass('wf_run') IS NOT NULL")
+        let ready: bool = sqlx::query_scalar("SELECT to_regclass('mig_version') IS NOT NULL AND to_regclass('workflow_info') IS NOT NULL AND to_regclass('wf_run') IS NOT NULL")
             .fetch_one(&pool).await?;
         anyhow::ensure!(
             ready,

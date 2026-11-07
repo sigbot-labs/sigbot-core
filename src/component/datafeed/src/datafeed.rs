@@ -11,13 +11,13 @@ use common_context::IProvider;
 use common_telemetry::tracing_context::MessageTrace;
 use serde_json::json;
 use sigbot_core::config::config::get_config;
+use sigbot_core::config::config::DatafeedProperties;
 use sigbot_core::modules::datafeed::handler::datafeed::DatafeedHandler;
 use sigbot_messager::messager::IMessager;
 use sigbot_messager::messager::OutboxRelay;
 use sigbot_types::datafeed::datafeed::DatafeedProvider;
 use sigbot_types::datafeed::event::DatafeedEvent;
 use sigbot_types::datafeed::event::DatafeedPublication;
-use sigbot_types::datafeed::DatafeedArgument;
 use sigbot_types::messager::envelope::TraceContext;
 use sigbot_types::messager::topic::MessageScope;
 use sigbot_types::Uuid;
@@ -32,7 +32,7 @@ use tokio::task::JoinHandle;
 #[async_trait]
 pub trait IDatafeed: IProvider {
     fn provider(&self) -> DatafeedProvider;
-    async fn configure(&self, argument: Arc<DatafeedArgument>) -> Result<(), Error>;
+    async fn configure(&self, argument: Arc<DatafeedProperties>) -> Result<(), Error>;
 
     async fn subscribe(
         &self,
@@ -320,9 +320,8 @@ impl IDatafeed for PolicyDatafeed {
         self.provider.clone()
     }
 
-    async fn configure(&self, argument: Arc<DatafeedArgument>) -> Result<()> {
+    async fn configure(&self, argument: Arc<DatafeedProperties>) -> Result<()> {
         let properties = argument
-            .datafeed_config
             .properties
             .as_ref()
             .context("policy feed properties required")?;

@@ -19,45 +19,37 @@
 // This includes modifications and derived works.
 
 pub mod api;
-pub mod backtest;
+pub mod component;
 pub mod controller;
-pub mod datafeed;
-pub mod evaluator;
-pub mod exporter;
 pub mod internal;
-pub mod logservice;
-pub mod notifier;
-pub mod order;
 pub mod standalone;
-pub mod strategy;
-pub mod wallet;
 
-use api::SigbotAPIServer;
-use backtest::SigbotBacktest;
+use api::http::SigbotHttpStarter;
 use clap::Arg;
 use clap::ArgMatches;
 use clap::Command;
 use common_telemetry::info;
-use sigbot_core::config::config;
-use standalone::SigbotStandalone;
+use component::backtest::SigbotBacktestStarter;
+use component::strategy::SigbotStrategyStarter;
+use sigbot_core::config::config::{self, ConfigLoader};
+use standalone::SigbotStandaloneStarter;
 use std::sync::OnceLock;
-use strategy::SigbotStrategy;
 
-use crate::startup::datafeed::SigbotDatafeed;
+use crate::startup::component::datafeed::SigbotDatafeedStarter;
 
-use crate::startup::controller::SigbotController;
+use crate::startup::controller::SigbotControllerStarter;
 
-use crate::startup::evaluator::SigbotEvaluator;
+use crate::startup::component::evaluator::SigbotEvaluatorStarter;
 
-use crate::startup::exporter::SigbotExporter;
+use crate::startup::component::exporter::SigbotExporterStarter;
 
-use crate::startup::logservice::SigbotLogservice;
+use crate::startup::component::logger::SigbotLoggerStarter;
 
-use crate::startup::notifier::SigbotNotifier;
+use crate::startup::component::notifier::SigbotNotifierStarter;
 
-use crate::startup::order::SigbotOrder;
+use crate::startup::component::order::SigbotOrderStarter;
 
-use crate::startup::wallet::SigbotWallet;
+use crate::startup::component::wallet::SigbotWalletStarter;
 
 type SubcommandBuildFn = fn() -> Command;
 type SubcommandHandleFn = fn(&ArgMatches, bool) -> ();
@@ -68,154 +60,193 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
     SUBCOMMAND_MAP.get_or_init(|| {
         let mut vec = Vec::new();
         vec.push((
-            SigbotStandalone::COMMAND_NAME,
+            SigbotStandaloneStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotStandalone::build as SubcommandBuildFn,
-                SigbotStandalone::run as SubcommandHandleFn,
+                SigbotStandaloneStarter::build as SubcommandBuildFn,
+                SigbotStandaloneStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotAPIServer::COMMAND_NAME,
+            SigbotHttpStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotAPIServer::build as SubcommandBuildFn,
-                SigbotAPIServer::run as SubcommandHandleFn,
+                SigbotHttpStarter::build as SubcommandBuildFn,
+                SigbotHttpStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotController::COMMAND_NAME,
+            SigbotControllerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotController::build as SubcommandBuildFn,
-                SigbotController::run as SubcommandHandleFn,
+                SigbotControllerStarter::build as SubcommandBuildFn,
+                SigbotControllerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotDatafeed::COMMAND_NAME,
+            SigbotDatafeedStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotDatafeed::build as SubcommandBuildFn,
-                SigbotDatafeed::run as SubcommandHandleFn,
+                SigbotDatafeedStarter::build as SubcommandBuildFn,
+                SigbotDatafeedStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotStrategy::COMMAND_NAME,
+            SigbotStrategyStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotStrategy::build as SubcommandBuildFn,
-                SigbotStrategy::run as SubcommandHandleFn,
+                SigbotStrategyStarter::build as SubcommandBuildFn,
+                SigbotStrategyStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotOrder::COMMAND_NAME,
+            SigbotOrderStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotOrder::build as SubcommandBuildFn,
-                SigbotOrder::run as SubcommandHandleFn,
+                SigbotOrderStarter::build as SubcommandBuildFn,
+                SigbotOrderStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotWallet::COMMAND_NAME,
+            SigbotWalletStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotWallet::build as SubcommandBuildFn,
-                SigbotWallet::run as SubcommandHandleFn,
+                SigbotWalletStarter::build as SubcommandBuildFn,
+                SigbotWalletStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotBacktest::COMMAND_NAME,
+            SigbotBacktestStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotBacktest::build as SubcommandBuildFn,
-                SigbotBacktest::run as SubcommandHandleFn,
+                SigbotBacktestStarter::build as SubcommandBuildFn,
+                SigbotBacktestStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotNotifier::COMMAND_NAME,
+            SigbotNotifierStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotNotifier::build as SubcommandBuildFn,
-                SigbotNotifier::run as SubcommandHandleFn,
+                SigbotNotifierStarter::build as SubcommandBuildFn,
+                SigbotNotifierStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotLogservice::COMMAND_NAME,
+            SigbotLoggerStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotLogservice::build as SubcommandBuildFn,
-                SigbotLogservice::run as SubcommandHandleFn,
+                SigbotLoggerStarter::build as SubcommandBuildFn,
+                SigbotLoggerStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotExporter::COMMAND_NAME,
+            SigbotExporterStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotExporter::build as SubcommandBuildFn,
-                SigbotExporter::run as SubcommandHandleFn,
+                SigbotExporterStarter::build as SubcommandBuildFn,
+                SigbotExporterStarter::run as SubcommandHandleFn,
             ),
         ));
         vec.push((
-            SigbotEvaluator::COMMAND_NAME,
+            SigbotEvaluatorStarter::COMMAND_NAME,
             (
                 // Type inference error, forced conversion need.
-                SigbotEvaluator::build as SubcommandBuildFn,
-                SigbotEvaluator::run as SubcommandHandleFn,
+                SigbotEvaluatorStarter::build as SubcommandBuildFn,
+                SigbotEvaluatorStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            api::mcp::SigbotMcpStarter::COMMAND_NAME,
+            (
+                api::mcp::SigbotMcpStarter::build as SubcommandBuildFn,
+                api::mcp::SigbotMcpStarter::run as SubcommandHandleFn,
+            ),
+        ));
+        vec.push((
+            api::a2a::SigbotA2aStarter::COMMAND_NAME,
+            (
+                api::a2a::SigbotA2aStarter::build as SubcommandBuildFn,
+                api::a2a::SigbotA2aStarter::run as SubcommandHandleFn,
             ),
         ));
         vec
     })
 }
 
-pub fn execute_commands_app() {
-    let mut app = Command::new("Sigbot")
-        .version(sigbot_core::config::config::VERSION.as_str())
-        .author("James Wong")
-        .about(
-            format!(
-                "Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust.\n\n{}",
-                config::VERSION.as_str()
+pub struct SigbotCli;
+
+impl SigbotCli {
+    pub(crate) fn build() -> Command {
+        let mut app = Command::new("Sigbot")
+            .version(sigbot_core::config::config::VERSION.as_str())
+            .author("James Wong")
+            .about(
+                format!(
+                    "Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust.\n\n{}",
+                    config::VERSION.as_str()
+                )
+                .to_owned(),
             )
-            .to_owned(),
-        )
-        .arg_required_else_help(true) // When no args are provided, show help.
-        //.help_template("{about}\n\n{usage-heading}\n\n{usage}\n\n{all-args}")
-        .arg(
-            Arg::new("verbose")
-                .short('v')
-                .long("verbose")
-                .value_name("PRINT") // Tips for the user.
-                .help("Set up global details print flag")
-                .global(true), // Global args are available to all subcommands.
-        );
+            .arg_required_else_help(true) // When no args are provided, show help.
+            //.help_template("{about}\n\n{usage-heading}\n\n{usage}\n\n{all-args}")
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .value_name("PRINT") // Tips for the user.
+                    .help("Set up global details print flag")
+                    .global(true), // Global args are available to all subcommands.
+            );
 
-    let subcommand_map = register_subcommand_handles();
-    // Add to all subcommands.
-    for (name, (build_fn, _)) in subcommand_map.iter() {
-        app = app.subcommand(build_fn().name(name));
+        for (name, (build_fn, _)) in register_subcommand_handles() {
+            app = app.subcommand(build_fn().name(name).arg(Self::config_arg()));
+        }
+        app
     }
 
-    let matches = app.get_matches();
-    let verbose = matches.contains_id("verbose");
+    fn config_arg() -> Arg {
+        Arg::new("config")
+            .short('c')
+            .long("config")
+            .value_name("PATH")
+            .required(true)
+            .help("Path to the process YAML configuration")
+    }
 
-    // Handling to actual subcommand.
-    match matches.subcommand() {
-        Some((name, sub_matches)) => {
-            if let Some((_, (_, handler))) = subcommand_map.iter().find(|(n, _)| *n == name) {
-                info!("Executing subcommand: {}", name);
-                handler(sub_matches, verbose);
-            } else {
-                // panic!("Unknown subcommand: {}. Use --help for a list of available commands.", name);
-                eprintln!("Invalid commands and Use <command> --help for more information about a specific command.");
-                std::process::exit(1);
+    pub fn execute() {
+        let subcommand_map = register_subcommand_handles();
+        let matches = Self::build().get_matches();
+        let verbose = matches.contains_id("verbose");
+
+        match matches.subcommand() {
+            Some((name, sub_matches)) => {
+                if let Some((_, (_, handler))) = subcommand_map.iter().find(|(n, _)| *n == name) {
+                    ConfigLoader::initialize(
+                        sub_matches
+                            .get_one::<String>("config")
+                            .expect("configuration path is required"),
+                    )
+                    .expect("failed to load process configuration");
+                    info!("Executing subcommand: {}", name);
+                    handler(sub_matches, verbose);
+                } else {
+                    eprintln!(
+                        "Invalid commands and Use <command> --help for more information about a specific command."
+                    );
+                    std::process::exit(1);
+                }
             }
-        }
-        None => {
-            info!("No subcommand was used. Available commands are:");
-            for (name, _) in subcommand_map.iter() {
-                info!("  {}", name);
+            None => {
+                info!("No subcommand was used. Available commands are:");
+                for (name, _) in subcommand_map.iter() {
+                    info!("  {}", name);
+                }
+                info!("Use <command> --help for more information about a specific command.");
             }
-            info!("Use <command> --help for more information about a specific command.");
         }
     }
+}
+
+pub fn execute_commands_app() {
+    SigbotCli::execute();
 }

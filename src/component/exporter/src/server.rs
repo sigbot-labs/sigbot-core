@@ -3,23 +3,26 @@
 use crate::exporter::ExportService;
 use common_context::ApplicationContext;
 use sigbot_messager::server::MessagerServer;
-use sigbot_types::exporter::ExporterArgument;
-use sigbot_types::ArgumentConfig;
 
 pub struct SigbotExporterServer;
 
 impl SigbotExporterServer {
-    pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        let encoded = matches
-            .get_one::<String>("EXPORTER_MANAGER_CONFIGURATION")
-            .expect("exporter host configuration required");
-        let argument = ExporterArgument::from_json(
-            &ArgumentConfig::decode(encoded).expect("invalid exporter configuration encoding"),
+    pub async fn startup() {
+        let argument = sigbot_core::config::config::get_config()
+            .services
+            .component
+            .exporter
+            .clone()
+            .expect("services.component.exporter required");
+        let messager = MessagerServer::connect(
+            sigbot_core::config::config::get_config()
+                .services
+                .component
+                .messager
+                .clone(),
         )
-        .expect("invalid exporter configuration");
-        let messager = MessagerServer::connect(matches, argument.messager_config.clone())
-            .await
-            .expect("exporter messager initialization failed");
+        .await
+        .expect("exporter messager initialization failed");
         let properties = argument.properties.expect("exporter runtime properties required");
         let context = ApplicationContext::global();
         context

@@ -336,5 +336,5 @@ async fn real_alloy_http_reads_finalized_receipts_and_pages_without_resubmitting
         .iter()
         .any(|method| method.starts_with("eth_send")));
     server.abort();
-    std::env::remove_var(environment);
+    std::env::remove_var("SIGBOT__SECRETS__VALUES__POLY_RPC_FIXTURE");
 }

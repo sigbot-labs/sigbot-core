@@ -44,7 +44,7 @@ impl WalletStatusPostgresRepository {
             "wallet status scope or time mismatch"
         );
         let mut tx = self.wallet.pool.begin().await?;
-        let owned: Option<Uuid> = sqlx::query_scalar("SELECT id FROM wlt_wallet WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND exchange=$5 FOR UPDATE")
+        let owned: Option<Uuid> = sqlx::query_scalar("SELECT id FROM ledger_info WHERE id=$1 AND account_id=$2 AND env=$3 AND tenant_id=$4 AND exchange=$5 FOR UPDATE")
             .bind(fact.wallet_id).bind(self.wallet.account_id).bind(&self.wallet.scope.env).bind(self.wallet.scope.tenant_id)
             .bind(&fact.exchange).fetch_optional(&mut *tx).await?;
         ensure!(owned.is_some(), "terminal status wallet is outside its account");
@@ -116,7 +116,7 @@ impl WalletStatusPostgresRepository {
             return Ok(Some(false));
         }
         let intent: Value = sqlx::query_scalar(
-            "SELECT intent FROM ord_order WHERE wallet_id=$1 AND producer_node_id=$2 AND run_id=$3 AND seq=$4",
+            "SELECT intent FROM order_info WHERE wallet_id=$1 AND producer_node_id=$2 AND run_id=$3 AND seq=$4",
         )
         .bind(fact.wallet_id)
         .bind(fact.reservation_node_id)

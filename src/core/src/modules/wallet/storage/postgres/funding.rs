@@ -38,7 +38,7 @@ impl WalletFundingPostgresRepository {
         );
         let mut tx = self.wallet.pool.begin().await?;
         let wallet = sqlx::query(
-            "SELECT id FROM wlt_wallet WHERE id=$1 AND tenant_id=$2 AND env=$3
+            "SELECT id FROM ledger_info WHERE id=$1 AND tenant_id=$2 AND env=$3
             AND exchange=$4 AND account_id=$5 FOR UPDATE",
         )
         .bind(fact.wallet_id)
@@ -113,7 +113,7 @@ impl WalletFundingPostgresRepository {
     pub async fn rebuild_balances(&self, wallet_id: Uuid) -> Result<()> {
         let mut tx = self.wallet.pool.begin().await?;
         let exists = sqlx::query(
-            "SELECT id FROM wlt_wallet WHERE id=$1 AND env=$2 AND tenant_id=$3 AND account_id=$4 FOR UPDATE",
+            "SELECT id FROM ledger_info WHERE id=$1 AND env=$2 AND tenant_id=$3 AND account_id=$4 FOR UPDATE",
         )
         .bind(wallet_id)
         .bind(&self.wallet.scope.env)

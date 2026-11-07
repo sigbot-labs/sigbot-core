@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use common_context::IProvider;
 use sigbot_messager::messager::IMessager;
 use sigbot_types::evaluator::evaluator::EvaluatorProvider;
-use sigbot_types::evaluator::EvaluatorArgument;
 use std::sync::Arc;
 
 /// Core trait for evaluation executors
@@ -14,9 +13,5 @@ pub trait IEvaluator: IProvider {
     fn provider(&self) -> EvaluatorProvider;
 
     /// This will be called by WorkflowManager when the workflow node starts
-    async fn startup(
-        self: Arc<Self>,
-        argument: Arc<EvaluatorArgument>,
-        messager: Arc<dyn IMessager>,
-    ) -> anyhow::Result<()>;
+    async fn startup(self: Arc<Self>, messager: Arc<dyn IMessager>) -> anyhow::Result<()>;
 }

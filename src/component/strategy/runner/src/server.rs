@@ -3,26 +3,30 @@
 use crate::strategy::StrategyService;
 use common_context::ApplicationContext;
 use sigbot_messager::server::MessagerServer;
-use sigbot_types::strategy::StrategyArgument;
-use sigbot_types::ArgumentConfig;
 use std::sync::Arc;
 
 pub struct SigbotStrategyRunner;
 impl SigbotStrategyRunner {
-    pub async fn startup(matches: &clap::ArgMatches, _verbose: bool) {
-        let encoded = matches
-            .get_one::<String>("STRATEGY_RUNNER_CONFIGURATION")
-            .expect("strategy configuration required");
-        let argument = Arc::new(
-            StrategyArgument::from_json(&ArgumentConfig::decode(encoded).expect("invalid configuration encoding"))
-                .expect("invalid strategy configuration"),
-        );
+    pub async fn startup() {
+        let argument = sigbot_core::config::config::get_config()
+            .services
+            .component
+            .strategy
+            .clone()
+            .expect("services.component.strategy required");
+        let argument = Arc::new(argument);
         argument.properties.as_ref().expect("strategy properties required");
         let key = sigbot_utils::providers::ProviderInstanceId::configured("strategy", &*argument)
             .expect("invalid service identity");
-        let messager = MessagerServer::connect(matches, argument.messager_config.clone())
-            .await
-            .expect("strategy messager failed");
+        let messager = MessagerServer::connect(
+            sigbot_core::config::config::get_config()
+                .services
+                .component
+                .messager
+                .clone(),
+        )
+        .await
+        .expect("strategy messager failed");
         let context = ApplicationContext::global();
         context
             .register_with_shutdown_phase::<StrategyService, _>(&key, 20, move || {

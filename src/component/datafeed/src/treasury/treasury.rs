@@ -4,8 +4,8 @@ use crate::datafeed::IDatafeed;
 use crate::datafeed::PolicyDatafeed;
 use crate::social::social::FeedHandler;
 use common_context::IProvider;
+use sigbot_core::config::config::DatafeedProperties;
 use sigbot_types::datafeed::datafeed::DatafeedProvider;
-use sigbot_types::datafeed::DatafeedArgument;
 use std::sync::Arc;
 
 pub struct TreasuryDatafeed {
@@ -23,7 +23,7 @@ impl IDatafeed for TreasuryDatafeed {
     fn provider(&self) -> DatafeedProvider {
         DatafeedProvider::Treasury
     }
-    async fn configure(&self, argument: Arc<DatafeedArgument>) -> anyhow::Result<()> {
+    async fn configure(&self, argument: Arc<DatafeedProperties>) -> anyhow::Result<()> {
         self.policy.configure(argument).await
     }
     async fn subscribe(&self, handler: FeedHandler) -> anyhow::Result<()> {

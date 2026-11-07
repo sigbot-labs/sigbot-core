@@ -17,29 +17,114 @@ LANGUAGE SQL IMMUTABLE STRICT AS $$
     SELECT (get_byte(uuid_send(value), 6) >> 4) = 7
 $$;
 
-CREATE TABLE cfg_connection (
+-- Ten domain roots. Workflow DAGs are atomic JSON; provider channels need no child tables.
+CREATE TABLE tenant_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    name TEXT NOT NULL,
+    description TEXT,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE datasource_info (
     id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
     env TEXT NOT NULL,
-    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id),
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     transport TEXT NOT NULL,
-    configuration JSONB NOT NULL CHECK(configuration ? 'kind'),
-    secret_ref TEXT NOT NULL,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
     version BIGINT NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(env, tenant_id, name),
     UNIQUE(env, tenant_id, id)
 );
 
-CREATE TABLE wf_workflow (
+CREATE TABLE exchange_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version BIGINT NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE strategy_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    code TEXT NOT NULL DEFAULT '',
+    default_parameters JSONB NOT NULL DEFAULT '{}',
+    configuration JSONB NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE notifier_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version BIGINT NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE exporter_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    configuration JSONB NOT NULL DEFAULT '{}',
+    secret_ref TEXT,
+    version BIGINT NOT NULL DEFAULT 1 CHECK(version > 0),
+    created_by TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(env, tenant_id, name),
+    UNIQUE(env, tenant_id, id)
+);
+
+CREATE TABLE workflow_info (
     id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
     env TEXT NOT NULL,
     tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'STOPPED'
         CHECK(status IN ('PENDING','STARTING','RUNNING','STOPPING','STOPPED','SUCCESS','FAILED')),
-    flow_json JSONB NOT NULL DEFAULT '{"nodes":[],"connections":[]}',
+    dag_config JSONB NOT NULL DEFAULT '{"nodes":[],"connections":[]}',
     properties JSONB,
     secrets JSONB,
     description TEXT,
@@ -51,12 +136,10 @@ CREATE TABLE wf_workflow (
     UNIQUE(env, tenant_id, id)
 );
 
--- Controller-owned remote compute targets. Authentication values are never
--- persisted here: auth_config contains only host environment-variable names.
-CREATE TABLE ctl_worker (
+CREATE TABLE cluster_info (
     id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
     env TEXT NOT NULL,
-    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
+    tenant_id UUID NOT NULL REFERENCES tenant_info(id) CHECK(uuid_is_v7(tenant_id)),
     workflow_id UUID,
     name TEXT NOT NULL,
     provider TEXT NOT NULL CHECK(provider IN ('docker','kubernetes')),
@@ -73,13 +156,71 @@ CREATE TABLE ctl_worker (
     created_by TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by TEXT NOT NULL,
+    UNIQUE(env, tenant_id, id),
     FOREIGN KEY(env, tenant_id, workflow_id)
-        REFERENCES wf_workflow(env, tenant_id, id)
+        REFERENCES workflow_info(env, tenant_id, id)
 );
-CREATE UNIQUE INDEX ctl_worker_scope_name_idx
-    ON ctl_worker(env, tenant_id, COALESCE(workflow_id, '00000000-0000-0000-0000-000000000000'::UUID), name);
-CREATE INDEX ctl_worker_available_idx
-    ON ctl_worker(env, tenant_id, status, priority, workflow_id)
+
+CREATE TABLE ledger_info (
+    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
+    account_id UUID NOT NULL CHECK(uuid_is_v7(account_id)),
+    exchange TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('live', 'paper', 'backtest')),
+    account_type TEXT,
+    portfolio_version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    del_flag BOOLEAN NOT NULL DEFAULT FALSE,
+    UNIQUE(env, tenant_id, id),
+    UNIQUE(env, tenant_id, account_id)
+);
+
+CREATE TABLE order_info (
+    id UUID NOT NULL DEFAULT uuid_v7() UNIQUE CHECK(uuid_is_v7(id)),
+    env TEXT NOT NULL,
+    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
+    wallet_id UUID NOT NULL,
+    producer_node_id BIGINT NOT NULL,
+    run_id UUID NOT NULL,
+    seq BIGINT NOT NULL CHECK(seq >= 0),
+    exchange TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    intent JSONB NOT NULL,
+    reserve_asset TEXT NOT NULL,
+    reserve_amount NUMERIC(40,18) NOT NULL CHECK(reserve_amount > 0),
+    state TEXT NOT NULL CHECK(state IN (
+        'pending','reserved','submitting','acknowledged','unknown','rejected',
+        'partially_filled','filled','cancelled'
+    )),
+    exchange_order_id TEXT,
+    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
+    wallet_request_seq BIGINT CHECK(wallet_request_seq >= 0),
+    wallet_release_seq BIGINT CHECK(wallet_release_seq >= 0),
+    prepared_submission JSONB CHECK(
+        prepared_submission IS NULL OR (
+            prepared_submission ? 'venue_order_id' AND
+            prepared_submission ? 'payload' AND
+            octet_length(prepared_submission::text) <= 1048576
+        )
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY(env, tenant_id, wallet_id, producer_node_id, run_id, seq),
+    FOREIGN KEY(env, tenant_id, wallet_id)
+        REFERENCES ledger_info(env, tenant_id, id),
+    UNIQUE(wallet_id, exchange, exchange_order_id)
+);
+
+-- Internal execution, recovery and immutable audit storage.
+
+-- Controller-owned remote compute targets. Authentication values are never
+-- persisted here: auth_config contains only host environment-variable names.
+CREATE UNIQUE INDEX cluster_info_scope_name_idx
+    ON cluster_info(env, tenant_id, COALESCE(workflow_id, '00000000-0000-0000-0000-000000000000'::UUID), name);
+CREATE INDEX cluster_info_available_idx
+    ON cluster_info(env, tenant_id, status, priority, workflow_id)
     WHERE status='online';
 
 CREATE TABLE wf_run (
@@ -87,17 +228,21 @@ CREATE TABLE wf_run (
     workflow_id UUID NOT NULL,
     env TEXT NOT NULL,
     tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
-    worker_id UUID REFERENCES ctl_worker(id),
+    cluster_id UUID,
     attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
     state TEXT NOT NULL CHECK(state IN ('queued','running','success','failed','stopped')),
     params JSONB NOT NULL DEFAULT '{}',
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
     replay_of UUID REFERENCES wf_run(run_id),
+    FOREIGN KEY(env,tenant_id,cluster_id) REFERENCES cluster_info(env,tenant_id,id),
+    UNIQUE(env,tenant_id,run_id),
     FOREIGN KEY(env, tenant_id, workflow_id)
-        REFERENCES wf_workflow(env, tenant_id, id),
+        REFERENCES workflow_info(env, tenant_id, id),
     UNIQUE(env, tenant_id, workflow_id, run_id)
 );
+
+ALTER TABLE order_info ADD CONSTRAINT order_run_fk FOREIGN KEY(env,tenant_id,run_id) REFERENCES wf_run(env,tenant_id,run_id);
 
 CREATE TABLE wf_checkpoint (
     env TEXT NOT NULL,
@@ -145,27 +290,11 @@ CREATE INDEX wf_timer_due_idx
     ON wf_timer(env, tenant_id, run_id, scheduled_at, node_id, seq)
     WHERE state='pending';
 
-
 -- Wallet is the only writer of financial facts and projections.
-CREATE TABLE wlt_wallet (
-    id UUID PRIMARY KEY DEFAULT uuid_v7() CHECK(uuid_is_v7(id)),
-    env TEXT NOT NULL,
-    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
-    account_id UUID NOT NULL CHECK(uuid_is_v7(account_id)),
-    exchange TEXT NOT NULL,
-    mode TEXT NOT NULL CHECK (mode IN ('live', 'paper', 'backtest')),
-    account_type TEXT,
-    portfolio_version BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    del_flag BOOLEAN NOT NULL DEFAULT FALSE,
-    UNIQUE(env, tenant_id, id),
-    UNIQUE(env, tenant_id, account_id)
-);
 
 -- Immutable external execution facts retained as the public ledger projection.
 CREATE TABLE wlt_ledger (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     order_id UUID NOT NULL,
     trade_id UUID NOT NULL,
     symbol TEXT NOT NULL,
@@ -185,7 +314,7 @@ CREATE UNIQUE INDEX wlt_ledger_exchange_execution_idx
 
 -- Rebuildable wallet projections.
 CREATE TABLE wlt_balance (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     asset TEXT NOT NULL,
     available NUMERIC(40,18) NOT NULL DEFAULT 0,
     locked NUMERIC(40,18) NOT NULL DEFAULT 0,
@@ -194,7 +323,7 @@ CREATE TABLE wlt_balance (
     CHECK(available >= 0 AND locked >= 0)
 );
 CREATE TABLE wlt_position (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     symbol TEXT NOT NULL,
     side TEXT NOT NULL CHECK (side IN ('LONG', 'SHORT')),
     size NUMERIC(40,18) NOT NULL DEFAULT 0,
@@ -203,15 +332,9 @@ CREATE TABLE wlt_position (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(wallet_id, symbol, side)
 );
-CREATE TABLE wlt_equity_snapshot (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
-    equity NUMERIC(40,18) NOT NULL,
-    ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY(wallet_id, ts)
-);
 
 CREATE TABLE wlt_reservation (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     producer_node_id BIGINT NOT NULL,
     run_id UUID NOT NULL,
     seq BIGINT NOT NULL CHECK(seq >= 0),
@@ -226,7 +349,7 @@ CREATE TABLE wlt_reservation (
     CHECK(remaining >= 0 AND remaining <= amount)
 );
 CREATE TABLE wlt_journal (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     producer_node_id BIGINT NOT NULL,
     run_id UUID NOT NULL,
     seq BIGINT NOT NULL CHECK(seq >= 0),
@@ -283,13 +406,11 @@ CREATE CONSTRAINT TRIGGER wlt_journal_balanced AFTER INSERT ON wlt_journal
 CREATE CONSTRAINT TRIGGER wlt_posting_balanced AFTER INSERT ON wlt_posting
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION wlt_check_balanced();
 
-CREATE INDEX wlt_wallet_tenant_idx ON wlt_wallet(tenant_id, env);
-CREATE INDEX wlt_wallet_exchange_idx ON wlt_wallet(exchange, mode);
+CREATE INDEX wlt_wallet_tenant_idx ON ledger_info(tenant_id, env);
+CREATE INDEX wlt_wallet_exchange_idx ON ledger_info(exchange, mode);
 CREATE INDEX wlt_ledger_order_idx ON wlt_ledger(wallet_id, order_id);
 CREATE INDEX wlt_ledger_symbol_time_idx ON wlt_ledger(wallet_id, symbol, ts);
 CREATE INDEX wlt_position_symbol_idx ON wlt_position(symbol);
-CREATE INDEX wlt_equity_snapshot_time_idx ON wlt_equity_snapshot(wallet_id, ts);
-
 
 CREATE TABLE msg_inbox (
     env TEXT NOT NULL,
@@ -328,7 +449,6 @@ CREATE TABLE msg_outbox (
 );
 CREATE INDEX msg_outbox_pending_idx
     ON msg_outbox(producer, available_at) WHERE state='pending';
-
 
 CREATE TABLE mkt_event (
     env TEXT NOT NULL,
@@ -374,7 +494,6 @@ CREATE TABLE mkt_delivery (
 CREATE INDEX mkt_delivery_history_idx
     ON mkt_delivery(env, tenant_id, run_id, source, source_event_id, revision);
 
-
 CREATE TABLE eval_case (
     env TEXT NOT NULL,
     tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
@@ -417,7 +536,6 @@ CREATE TABLE eval_snapshot (
 CREATE INDEX eval_snapshot_replay_idx
     ON eval_snapshot(env, tenant_id, run_id, available_at, node_id, version);
 
-
 CREATE TABLE bt_checkpoint (
     env TEXT NOT NULL,
     tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
@@ -454,43 +572,8 @@ CREATE INDEX bt_order_resting_idx
     ON bt_order(env, tenant_id, matching_node_id, run_id, accepted_at, producer_node_id, seq, account_id)
     WHERE state='accepted';
 
-
-CREATE TABLE ord_order (
-    env TEXT NOT NULL,
-    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
-    wallet_id UUID NOT NULL,
-    producer_node_id BIGINT NOT NULL,
-    run_id UUID NOT NULL REFERENCES wf_run(run_id),
-    seq BIGINT NOT NULL CHECK(seq >= 0),
-    exchange TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    intent JSONB NOT NULL,
-    reserve_asset TEXT NOT NULL,
-    reserve_amount NUMERIC(40,18) NOT NULL CHECK(reserve_amount > 0),
-    state TEXT NOT NULL CHECK(state IN (
-        'pending','reserved','submitting','acknowledged','unknown','rejected',
-        'partially_filled','filled','cancelled'
-    )),
-    exchange_order_id TEXT,
-    attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no >= 0),
-    wallet_request_seq BIGINT CHECK(wallet_request_seq >= 0),
-    wallet_release_seq BIGINT CHECK(wallet_release_seq >= 0),
-    prepared_submission JSONB CHECK(
-        prepared_submission IS NULL OR (
-            prepared_submission ? 'venue_order_id' AND
-            prepared_submission ? 'payload' AND
-            octet_length(prepared_submission::text) <= 1048576
-        )
-    ),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY(env, tenant_id, wallet_id, producer_node_id, run_id, seq),
-    FOREIGN KEY(env, tenant_id, wallet_id)
-        REFERENCES wlt_wallet(env, tenant_id, id),
-    UNIQUE(wallet_id, exchange, exchange_order_id)
-);
 CREATE UNIQUE INDEX ord_order_prepared_venue_idx
-    ON ord_order(wallet_id, exchange, (prepared_submission->>'venue_order_id'))
+    ON order_info(wallet_id, exchange, (prepared_submission->>'venue_order_id'))
     WHERE prepared_submission IS NOT NULL;
 
 CREATE FUNCTION ord_reject_prepared_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -501,11 +584,11 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
-CREATE TRIGGER ord_order_prepared_immutable BEFORE UPDATE OF prepared_submission ON ord_order
+CREATE TRIGGER ord_order_prepared_immutable BEFORE UPDATE OF prepared_submission ON order_info
     FOR EACH ROW EXECUTE FUNCTION ord_reject_prepared_mutation();
 
 CREATE TABLE ord_execution (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     exchange TEXT NOT NULL,
     exchange_trade_id TEXT NOT NULL,
     exchange_order_id TEXT NOT NULL,
@@ -561,7 +644,7 @@ CREATE TABLE ord_execution_leg (
     group_seq BIGINT NOT NULL,
     leg_index INTEGER NOT NULL,
     order_node_id BIGINT NOT NULL,
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     intent_seq BIGINT NOT NULL,
     intent JSONB NOT NULL,
     rejected BOOLEAN NOT NULL DEFAULT FALSE,
@@ -576,7 +659,7 @@ CREATE INDEX ord_execution_group_pending_idx
     WHERE state NOT IN ('completed','held','compensated','compensation_failed');
 
 CREATE TABLE ord_venue_checkpoint (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     producer_node_id BIGINT NOT NULL,
     run_id UUID NOT NULL REFERENCES wf_run(run_id),
     seq BIGINT NOT NULL CHECK(seq >= 0),
@@ -587,7 +670,7 @@ CREATE TABLE ord_venue_checkpoint (
     PRIMARY KEY(wallet_id, producer_node_id, run_id, seq)
 );
 CREATE TABLE ord_venue_observation (
-    wallet_id UUID NOT NULL REFERENCES wlt_wallet(id),
+    wallet_id UUID NOT NULL REFERENCES ledger_info(id),
     exchange TEXT NOT NULL,
     kind TEXT NOT NULL CHECK(kind IN ('execution','status')),
     venue_reference TEXT NOT NULL,
@@ -605,7 +688,6 @@ END $$;
 CREATE TRIGGER ord_venue_observation_immutable
     BEFORE UPDATE OR DELETE ON ord_venue_observation
     FOR EACH ROW EXECUTE FUNCTION ord_reject_venue_mutation();
-
 
 CREATE TABLE log_chunk (
     cursor BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
@@ -650,21 +732,6 @@ CREATE TABLE ntf_delivery (
 CREATE INDEX ntf_delivery_pending_idx
     ON ntf_delivery(env, tenant_id, workflow_id, owner_node_id, state, available_at);
 
-CREATE TABLE ntf_read (
-    env TEXT NOT NULL,
-    tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
-    run_id UUID NOT NULL,
-    producer_node_id BIGINT NOT NULL,
-    seq BIGINT NOT NULL,
-    channel TEXT NOT NULL,
-    recipient TEXT NOT NULL,
-    read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY(env, tenant_id, run_id, producer_node_id, seq, channel, recipient),
-    FOREIGN KEY(env, tenant_id, producer_node_id, run_id, seq, channel, recipient)
-        REFERENCES ntf_delivery(env, tenant_id, producer_node_id, run_id, seq, channel, recipient)
-);
-
-
 CREATE TABLE exp_checkpoint (
     env TEXT NOT NULL,
     tenant_id UUID NOT NULL CHECK(uuid_is_v7(tenant_id)),
@@ -676,5 +743,5 @@ CREATE TABLE exp_checkpoint (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(env, tenant_id, connection_id, run_id, partition_key),
     FOREIGN KEY(env, tenant_id, connection_id)
-        REFERENCES cfg_connection(env, tenant_id, id)
+        REFERENCES exporter_info(env, tenant_id, id)
 );

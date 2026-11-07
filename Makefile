@@ -45,7 +45,6 @@ export SDKROOT := $(XCODE_SDK)
 endif
 endif
 endif
-export SWAGGER_UI_DOWNLOAD_URL := file:$(CURDIR)/src/api/http/src/swagger/swagger-ui-5.17.14.zip
 BUILD_PROXY := $(or $(HTTPS_PROXY),$(https_proxy),$(HTTP_PROXY),$(http_proxy))
 PROXY_ARGS = $(if $(BUILD_PROXY),--network=host --build-arg HTTPS_PROXY='$(BUILD_PROXY)' --build-arg HTTP_PROXY='$(BUILD_PROXY)',)
 IMAGE_SETUP = eval "$$($(PYTHON) deploy/images.py --source '$(IMAGE_SOURCE)' --version '$(VERSION)')"

@@ -1,29 +1,29 @@
 # Runtime 数据模型与领域归属
 
-本项目只维护当前数据模型，不提供旧表、旧 ID、旧消息或旧配置兼容层。认证、租户、用户与权限由 Authguard 负责；Sigbot 仅在业务记录上保存经过验证的租户 UUID。Messager 与 Exchange 是宿主进程内共享 Provider；Logservice 是 Controller 可动态部署的 Workflow 组件。
+本项目只维护当前数据模型，不提供旧表、旧 ID、旧消息或旧配置兼容层。认证、IAM 租户、用户与权限由 Authguard 负责；Sigbot 保存经过验证的租户 UUID 及 tenant_info 业务资料。十领域配置和三种协议见 [领域契约](domain-model_ZH.md)。Messager 与 Exchange 是宿主进程内共享 Provider；Logger 是 Controller 可动态部署的 Workflow 组件。
 
 ## 表与唯一写入方
 
 | 领域 | 表 | 唯一写入方 |
 | --- | --- | --- |
-| 连接 | `cfg_connection` | Core Controller Repository |
-| Workflow / Run | `wf_workflow`、`wf_run`、`wf_checkpoint`、`wf_sequence`、`wf_timer` | Core Workflow Repository 保存配置；Controller 通过 Core Repository 写 Run/Worker 生命周期状态 |
+| 业务配置 | `tenant_info`、`cluster_info`、`datasource_info`、`exchange_info`、`strategy_info`、`notifier_info`、`exporter_info` | Core ResourceHandler/IGenericRepository |
+| Workflow / Run | `workflow_info`、`wf_run`、`wf_checkpoint`、`wf_sequence`、`wf_timer` | Core Workflow Repository 保存配置；Controller 通过 Core Repository 写 Run/Worker 生命周期状态 |
 | 消息 | `msg_inbox`、`msg_outbox` | Core Messager Repository；领域事务调用它提交自己的分区 |
 | 行情 | `mkt_event`、`mkt_delivery` | Datafeed Repository |
 | 评估记忆 | `eval_case`、`eval_snapshot` | Evaluator Repository |
 | 回测 | `bt_checkpoint`、`bt_order` | Backtest Repository |
-| 订单 | `ord_order`、`ord_execution`、`ord_execution_group`、`ord_execution_leg`、`ord_venue_checkpoint`、`ord_venue_observation` | Order Repository |
-| 钱包 | `wlt_wallet`、`wlt_ledger`、`wlt_journal`、`wlt_posting`、`wlt_reservation`、`wlt_balance`、`wlt_position`、`wlt_equity_snapshot` | Wallet Repository |
-| 日志 | `log_chunk` | Logservice Repository；对象内容写入不可变 S3/MinIO 分块 |
-| 通知 | `ntf_delivery`、`ntf_read` | Notifier Repository；Core 只写用户已读投影 |
+| 订单 | `order_info`、`ord_execution`、`ord_execution_group`、`ord_execution_leg`、`ord_venue_checkpoint`、`ord_venue_observation` | Order Repository |
+| 钱包 | `ledger_info`、`wlt_ledger`、`wlt_journal`、`wlt_posting`、`wlt_reservation`、`wlt_balance`、`wlt_position` | Wallet Repository |
+| 日志 | `log_chunk` | Logger Repository；对象内容写入不可变 S3/MinIO 分块 |
+| 通知 | `notifier_info`、`ntf_delivery` | 配置 CRUD 与 Notifier 投递事务分别负责 |
 | 导出 | `exp_checkpoint` | Exporter Repository |
 
-租户、Workflow、Run、账户、钱包、订单和事实 ID 使用 UUIDv7；节点号和消息序列使用有界整数。`run_id` 是公开业务幂等键，不创建额外关联 ID。所有表名使用带领域前缀的单数 `snake_case`，已验收的钱包、账本、余额、仓位和净值表保持不变。
+租户、Workflow、Run、账户、钱包、订单和事实 ID 使用 UUIDv7；节点号和消息序列使用有界整数。`run_id` 是公开业务幂等键，不创建额外关联 ID。主表使用领域 `*_info` 名称，运行时表保留领域前缀；账本、余额与仓位保留现有约束，未使用的净值快照表已删除。
 
 ## 约束
 
-- `wf_workflow` 与 `wf_run` 通过 `(env, tenant_id, workflow_id)` 复合外键绑定，Checkpoint、Timer、行情投递、评估、日志和通知继续引用同一作用域。
-- `wlt_wallet` 以 `(env, tenant_id, account_id)` 唯一绑定账户。Order 通过同范围 UUID 外键引用钱包，不允许字符串 tenant ID 或类型转换 JOIN。
+- `workflow_info` 与 `wf_run` 通过 `(env, tenant_id, workflow_id)` 复合外键绑定，Checkpoint、Timer、行情投递、评估、日志和通知继续引用同一作用域。
+- `ledger_info` 以 `(env, tenant_id, account_id)` 唯一绑定账户。Order 通过同范围 UUID 外键引用钱包，不允许字符串 tenant ID 或类型转换 JOIN。
 - `wlt_ledger`、`wlt_journal`、`wlt_posting` 和 `ord_venue_observation` 是不可变事实；更正通过新事实或反向分录完成。
 - `wlt_posting` 在事务提交时逐资产校验借贷平衡。余额、仓位和组合版本是可删除后重建的投影。
 - Inbox/Outbox 使用 `scope + owner + node_id + run_id + seq` 去重。持久 JSON 禁止保存 `requestSpanId`。
@@ -48,7 +48,7 @@ python3 migration/migrate.py
 
 脚本通过 advisory transaction lock 保证单写入方，并在 `mig_version` 保存版本与联合 SHA-256。已应用文件发生漂移会中止。应用进程账户不得拥有 schema、trigger 或 superuser 权限。
 
-SQLite 保持相同业务表集合，用于本地单进程开发；跨进程锁、扩展函数和分布式持久性仍以 PostgreSQL 验收。控制面 PostgreSQL 镜像可同时启用 TimescaleDB 与 pgvector 扩展。租户数据面的 TimescaleDB/pgvector 由 scoped `ctl_worker` 独立声明和调和，不与控制面数据库共享写入职责。
+SQLite 保持相同业务表集合，用于本地单进程开发；跨进程锁、扩展函数和分布式持久性仍以 PostgreSQL 验收。控制面 PostgreSQL 镜像可同时启用 TimescaleDB 与 pgvector 扩展。租户数据面的 TimescaleDB/pgvector 由 scoped `cluster_info` 独立声明和调和，不与控制面数据库共享写入职责。
 
 ## 消息与恢复
 
@@ -70,6 +70,6 @@ Backtest 的 `bt_order` 固定保存原始消息、撮合 owner、InstrumentSpec
 
 ## 日志与外部输出
 
-Logservice 的 append ACK 表示本地持久缓冲已完成 WAL 提交；归档按“条件创建 S3/MinIO 对象 → SHA-256 校验 → 提交 PG 索引 → 释放本地 payload”的顺序执行。读取使用追加 cursor，晚到的小业务序列不会被跳过。
+Logger 的 append ACK 表示本地持久缓冲已完成 WAL 提交；归档按“条件创建 S3/MinIO 对象 → SHA-256 校验 → 提交 PG 索引 → 释放本地 payload”的顺序执行。读取使用追加 cursor，晚到的小业务序列不会被跳过。
 
 Kafka 使用幂等 Producer、`acks=all` 和稳定业务 key；数据库提交窗口仍要求下游去重。Google Sheets 使用固定 range 的 ValueRange PUT，通过 `reqwest` 发送，并支持显式 `proxy_url`。凭据只允许使用中央配置解析后的 Secret key 引用，业务组件不得直接读取环境变量。

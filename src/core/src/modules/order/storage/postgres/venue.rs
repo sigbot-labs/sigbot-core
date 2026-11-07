@@ -78,7 +78,7 @@ impl OrderVenuePostgresRepository {
 
     pub async fn claim(&self) -> Result<Option<VenuePoll>> {
         let mut tx = self.storage.pool.begin().await?;
-        let candidate=sqlx::query("SELECT i.payload,o.state,o.exchange_order_id,o.prepared_submission FROM ord_order o
+        let candidate=sqlx::query("SELECT i.payload,o.state,o.exchange_order_id,o.prepared_submission FROM order_info o
             JOIN msg_inbox i ON i.env=o.env AND i.tenant_id=o.tenant_id
                 AND i.node_id=o.producer_node_id AND i.run_id=o.run_id AND i.seq=o.seq AND i.consumer=$3
             LEFT JOIN ord_venue_checkpoint c ON c.wallet_id=o.wallet_id AND c.producer_node_id=o.producer_node_id AND c.run_id=o.run_id AND c.seq=o.seq

@@ -16,13 +16,13 @@ AI 永远不直接下单。市场无法判断、置信度过低、评估已过�
 
 ```mermaid
 flowchart LR
-    Clients[客户端 / Researcher] --> API[SigbotAPIServer]
+    Clients[客户端 / Researcher] --> API[SigbotHttpStarter]
     API --> CoreDB[(核心控制面 DB)]
-    Controller[SigbotController] --> CoreDB
+    Controller[SigbotControllerStarter] --> CoreDB
 
-    Sources[市场 / 新闻源] --> Datafeed[租户级 SigbotDatafeed]
+    Sources[市场 / 新闻源] --> Datafeed[租户级 SigbotDatafeedStarter]
     Controller -. 逻辑 Binding .-> Datafeed
-    Controller -. Strategy-scoped Runtime .-> Evaluator[SigbotEvaluator]
+    Controller -. Strategy-scoped Runtime .-> Evaluator[SigbotEvaluatorStarter]
     Controller -. Strategy-scoped Runtime .-> Strategy[SigbotStrategyRunner]
 
     Datafeed -->|DatafeedEvent| Evaluator
@@ -48,7 +48,7 @@ flowchart LR
 连接等配置的 CRUD；Controller 负责租户级九个组件的启动、更新、停止与健康恢复。
 认证、用户、权限和成员关系统一由 Authguard 管理，Sigbot 不复制平台 IAM 表。
 
-数据面核心是 Backtest、Datafeed、Evaluator、Strategy、Logservice、Exporter、Notifier、
+数据面核心是 Backtest、Datafeed、Evaluator、Strategy、Logger、Exporter、Notifier、
 Order、Wallet 九个租户级组件。它们由 Controller 按 tenant/workflow 隔离动态部署，分别
 通过 MQTT 异步 pub/sub 执行 Workflow 中不同类型的节点；同一架构也允许为某个租户部署
 一套长期运行的 shared Workflow，但 Topic 与持久状态仍保持 tenant/workflow 边界。
@@ -105,7 +105,7 @@ Workflow 图可配置，但不是任意代码图。Node 只能选择九种已注
 | Backtest | 租户/Workflow 动态组件 | 使用虚拟时钟和模拟交易所复用相同决策契约 | [Backtest](engine/backtest/overview_ZH.md) |
 | Notifier | 租户/Workflow 动态组件 | 幂等投递 Email、Telegram 与站内通知 | [Notifier](engine/notifier/overview_ZH.md) |
 | Exporter | 租户/Workflow 动态组件 | 以游标、批量和背压导出 Kafka、Google Sheets 等目标 | [Exporter](engine/exporter/overview_ZH.md) |
-| Logservice | 租户/Workflow 动态组件 | 持久缓冲并归档 Python/Rust 日志，不参与交易决策 | [Logservice](engine/log-service/overview_ZH.md) |
+| Logger | 租户/Workflow 动态组件 | 持久缓冲并归档 Python/Rust 日志，不参与交易决策 | [Logger](engine/logger/overview_ZH.md) |
 
 Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Namespace
 只有一个规范归属：[Tenant Governance & IAM](engine/apiserver/tenant-governance-and-iam_ZH.md)。
@@ -133,8 +133,8 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 
 | 模块 | Service Root | 主要扩展 Port |
 |---|---|---|
-| APIServer | `SigbotAPIServer` | 通过 HTTP/A2A/MCP Adapter 暴露 Core Handler/Repository |
-| Controller | `SigbotController` | `WorkerProvider` |
+| APIServer | `SigbotHttpStarter` | 通过 HTTP/A2A/MCP Adapter 暴露 Core Handler/Repository |
+| Controller | `SigbotControllerStarter` | `WorkerProvider` |
 | Datafeed | `SigbotDatafeedIngestor` | `IDatafeed` |
 | Backtest | `SigbotBacktestServer` | `ReplaySource`、`ReplayDecision`、`IExchange` |
 | Evaluator | `SigbotEvaluatorRunner` | `IEvaluator` |
@@ -204,7 +204,7 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 | Order 与 Wallet | 已实现预占先行、硬风控、Prepared Submission、未知结果对账、不可变执行、平衡账本/投影和事务 Inbox/Outbox | 实盘结算、长期对账、公司行动/保证金和真实跨所补偿未验收 |
 | Backtest | 已实现冻结历史、虚拟时钟、回放屏障、确定性撮合/费用、挂单与隔离回放 | 深度队列、真实部分流动性/延迟及全部模型分片等价不在当前模拟器范围 |
 | Notifier 与 Exporter | 站内/Email/Telegram 状态及 Kafka/Google Sheets Sink 已有类型化请求、Checkpoint、重试和幂等边界 | 真实 SMTP/Telegram/Sheets 凭据与 Kafka 多 Broker 故障切换未验收 |
-| Logservice | 已实现 SQLite WAL 持久 ACK、S3 条件创建不可变分块、哈希校验、PG Cursor 和 Python/Rust 采集 | 宿主卷损毁、生产桶保留/多副本及所有 Rust 宿主采集仍待完成 |
+| Logger | 已实现 SQLite WAL 持久 ACK、S3 条件创建不可变分块、哈希校验、PG Cursor 和 Python/Rust 采集 | 宿主卷损毁、生产桶保留/多副本及所有 Rust 宿主采集仍待完成 |
 | Messager | 已实现 MQTT QoS1 持久会话、手动 ACK、作用域 Topic、Inbox/Outbox、补放、背压和临时响应配对 | Broker 磁盘灾难与持续压力测试仍缺；Local 明确不具备持久等价性 |
 
 各组件文档拥有详细契约和能力状态。精确验证基线与下一步工作见 Coding Agent 交接文档：

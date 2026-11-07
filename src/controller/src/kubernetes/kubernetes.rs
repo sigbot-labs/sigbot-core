@@ -8,7 +8,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::PersistentVolumeClaim;
-use k8s_openapi::api::core::v1::Service;
+use k8s_openapi::api::core::v1::{ConfigMap, Service};
 use k8s_openapi::api::networking::v1::NetworkPolicy;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::api::Api;
@@ -201,11 +201,13 @@ impl KubernetesController {
                                 "initialDelaySeconds": 30, "periodSeconds": 10, "timeoutSeconds": 1, "failureThreshold": 3
                             },
                             "volumeMounts": [
+                                {"name":"runtime-config","mountPath":"/etc/sigbot/runtime","readOnly":true},
                                 {"name": "scratch", "mountPath": "/tmp"},
                                 {"name": "storage", "mountPath": "/var/lib/sigbot/storage"}
                             ]
                         }],
                         "volumes": [
+                            {"name":"runtime-config","configMap":{"name":plan.name}},
                             {"name": "scratch", "emptyDir": {"sizeLimit": "64Mi"}},
                             {"name": "storage", "emptyDir": {"sizeLimit": "128Mi"}}
                         ]
@@ -334,7 +336,7 @@ impl WorkerProvider for KubernetesController {
         crate::kubernetes::middleware::KubernetesMiddleware::new(
             self.client.clone(),
             target,
-            &self.state.config.services.controller.images.sigbot,
+            &self.state.config.services.platform.controller.images.sigbot,
         )
         .reconcile()
         .await
@@ -385,7 +387,24 @@ impl WorkerProvider for KubernetesController {
         } else {
             self.remove_service(target, plan).await?;
         }
-        let desired = Self::manifest(plan, &self.state.config.services.controller, target)?;
+        let configs: Api<ConfigMap> = Api::namespaced(self.client.clone(), namespace);
+        if let Some(existing) = configs.get_opt(&plan.name).await? {
+            Self::require_ownership(&existing.metadata, plan)?;
+        }
+        configs
+            .patch(
+                &plan.name,
+                &params,
+                &Patch::Apply(json!({
+                    "apiVersion":"v1", "kind":"ConfigMap", "metadata":{
+                        "name":plan.name, "namespace":namespace,
+                        "labels":{"sigbot.io/worker":plan.name,"app.kubernetes.io/managed-by":"sigbot-controller"}},
+                    "data":{"sigbot.yaml":serde_json::to_string_pretty(&plan.configuration)?}
+                })),
+            )
+            .await
+            .context("worker YAML ConfigMap apply failed")?;
+        let desired = Self::manifest(plan, &self.state.config.services.platform.controller, target)?;
         let result = deployments
             .patch(&plan.name, &params, &Patch::Apply(desired))
             .await
@@ -418,6 +437,11 @@ impl WorkerProvider for KubernetesController {
             return Ok(false);
         }
         self.remove_service(target, plan).await?;
+        let configs: Api<ConfigMap> = Api::namespaced(self.client.clone(), namespace);
+        if let Some(existing) = configs.get_opt(&plan.name).await? {
+            Self::require_ownership(&existing.metadata, plan)?;
+            configs.delete(&plan.name, &DeleteParams::default()).await?;
+        }
         let policies: Api<NetworkPolicy> = Api::namespaced(self.client.clone(), namespace);
         if let Some(policy) = policies.get_opt(&plan.name).await? {
             Self::require_ownership(&policy.metadata, plan)?;

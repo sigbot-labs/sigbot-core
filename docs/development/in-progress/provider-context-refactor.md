@@ -7,7 +7,7 @@
 
 ## 1. 范围与约束
 
-本轮处理 backtest、datafeed、evaluator、exchange、exporter、logservice、messager、notifier、strategy runner，并同步处理 controller、API、cmd、types 与 Core Repository 边界。核心是让现有 Provider 设计统一使用共享 ApplicationContext，并合并重复的工厂、装配、持久化与服务宿主逻辑。
+本轮处理 backtest、datafeed、evaluator、exchange、exporter、logger、messager、notifier、strategy runner，并同步处理 controller、API、cmd、types 与 Core Repository 边界。核心是让现有 Provider 设计统一使用共享 ApplicationContext，并合并重复的工厂、装配、持久化与服务宿主逻辑。
 
 - 遵循根目录及 `.agents/AGENTS.md`，保留领域边界与工作区骨架；领域接口继承 `IProvider`。
 - `lib.rs` 与 `mod.rs` 仅声明模块和导出；`server.rs` 承担装配和服务入口；具体实现放在有业务含义的包中。
@@ -78,8 +78,8 @@ src/
 │   ├── google_sheets/{mod.rs,google_sheets.rs}
 │   ├── delivery/{mod.rs,runtime.rs,sink.rs}
 │   └── server/{mod.rs,exporter_server.rs}
-├── logservice/src/
-│   ├── {lib.rs,logservice.rs}
+├── logger/src/
+│   ├── {lib.rs,logger.rs}
 │   ├── default/{mod.rs,default.rs}
 │   ├── archive/{mod.rs,archive.rs,tracing.rs}
 │   └── server/{mod.rs,log_server.rs}
@@ -112,7 +112,7 @@ src/
 src/
 ├── api/
 │   ├── a2a/src/{lib.rs,a2a.rs,a2a/workflow.rs}
-│   ├── http/src/{lib.rs,http.rs,http/axum.rs}
+│   ├── http/src/{lib.rs,http.rs,<domain>/<entity>.rs}
 │   └── mcp/src/{lib.rs,mcp.rs,mcp/{authguard.rs,http.rs,workflow.rs}}
 ├── common/context/src/
 │   ├── lifecycle/{application.rs,provider.rs}
@@ -125,8 +125,9 @@ src/
 ├── cmd/src/
 │   ├── lib.rs
 │   ├── bin/sigbot.rs
-│   └── startup/{mod.rs,api.rs,controller.rs,backtest.rs,datafeed.rs,evaluator.rs,
-│                exporter.rs,logservice.rs,notifier.rs,order.rs,standalone.rs,strategy.rs,wallet.rs,internal/}
+│   └── startup/{mod.rs,api/{mod.rs,std.rs,a2a.rs,http.rs},component/{mod.rs,backtest.rs,
+│                datafeed.rs,evaluator.rs,exporter.rs,logger.rs,notifier.rs,order.rs,strategy.rs,wallet.rs},
+│                controller.rs,mcp.rs,internal/}
 ├── component/
 │   ├── backtest/src/
 │   │   ├── {lib.rs,server.rs,backtest.rs}
@@ -145,8 +146,8 @@ src/
 │   ├── evaluator/src/
 │   │   ├── {lib.rs,server.rs,evaluator.rs}
 │   │   └── llm/{mod.rs,llm.rs}
-│   ├── logservice/src/
-│   │   ├── {lib.rs,server.rs,logservice.rs}
+│   ├── logger/src/
+│   │   ├── {lib.rs,server.rs,logger.rs}
 │   │   └── s3/{mod.rs,s3.rs,capture.rs}
 │   ├── exporter/src/
 │   │   ├── {lib.rs,server.rs,exporter.rs}
@@ -186,11 +187,11 @@ src/
 │   └── mqtt/{mod.rs,mqtt.rs}
 └── types/src/
     ├── lib.rs
-    └── {backtest,controller,datafeed,evaluator,exchange,exporter,llm,logservice,
+    └── {backtest,controller,datafeed,evaluator,exchange,exporter,llm,logger,
          messager,notifier,order,strategy,wallet,workflow}/
 ```
 
-`component/` 下九个数据面组件由 controller 按租户或 Workflow 动态调度：backtest、datafeed、evaluator、strategy、logservice、exporter、notifier、order、wallet。`api/`、controller、web 是 Helm 预部署的平台面；exchange 与 messager 是共享库，不独立部署。所有异步地址都由统一 topic 类型生成，scope 固定为 `env/tenant_id`，Workflow 再按 `workflow_id` 隔离。
+`component/` 下九个数据面组件由 controller 按租户或 Workflow 动态调度：backtest、datafeed、evaluator、strategy、logger、exporter、notifier、order、wallet。`api/`、controller、web 是 Helm 预部署的平台面；exchange 与 messager 是共享库，不独立部署。所有异步地址都由统一 topic 类型生成，scope 固定为 `env/tenant_id`，Workflow 再按 `workflow_id` 隔离。
 
 ## 4. 详细改动矩阵
 
@@ -202,7 +203,7 @@ src/
 | Evaluator | server 平铺；删除无生产调用方的旧 MAS 分支及其重复调度配置；真实 LLM Provider 接入生命周期 | 异步旁路消费、概率与超参、有效期、事实/推断、案例记忆、无未来数据及无交易副作用 |
 | Exchange | 将执行契约与公共提交类型归入 exchange.rs；具名各交易所订单实现；Paper API 独立实现；删除多套适配器工厂 | Live/Paper/Backtest 模式、精度/限流、预构建交易、未知回执先对账、成交游标和资金隔离 |
 | Exporter | 公共游标/批量/背压逻辑归入 exporter.rs；Kafka/Google 各自直接实现领域契约；删除二次 SinkFactory 包装 | 幂等固定目标范围、批量、错误重试、游标推进、Kafka 回执 |
-| Logservice | 本地 WAL、S3 与日志采集统一放入 s3；索引 Repository 位于 Core；服务入口平铺 | 持久缓冲 ACK、不可变对象、索引、断点续传、去重、游标读取、Python/Rust 输出与异常 |
+| Logger | 本地 WAL、S3 与日志采集统一放入 s3；索引 Repository 位于 Core；服务入口平铺 | 持久缓冲 ACK、不可变对象、索引、断点续传、去重、游标读取、Python/Rust 输出与异常 |
 | Messager | SQL 仓储移至 Core；消息通用暂存/重试与 MQTT 网络逻辑分离；小型配对和 relay 类合并到具名领域文件 | QoS1、持久会话、落盘后 ACK、Inbox/Outbox、租户 ACL、重试/背压/补放、traceparent |
 | Notification | 公共投递状态机并入 notification.rs；保留 Email/Telegram 实现；站内状态仍在公共事务中 | 模板、投递状态、业务幂等键、未知结果不盲重发、站内通知 |
 | Strategy runner | 外部宿主/节点协调合并到 strategy.rs；服务入口平铺；worker 源文件重命名 | 实例串行、事务草稿与 Effects 同提交、请求/结果路由、检查点、隔离 worker；SDK/Python 不改 |
@@ -253,19 +254,19 @@ worker 源码改为 `src/component/strategy/runner/src/bin/worker.rs`；通过 C
 - 业务组件不再读取自定义数据库/token 环境变量；环境覆盖只由 Core 配置加载器解析，调用方统一在顶部导入并使用短名
   `get_config()`。E2E 的 `MARKETPULSE_*` 仅属于测试宿主边界，由 runner 一次转换为 `SIGBOT__...` 层级。
 - `use-cases/runner.py` 与 `deploy/tests/` 已删除；Marketpulse case 内的 `runner.py` 是唯一入口，负责部署、场景、报告和清理。
-  verifier 已按实际时间线重排到 infra/controller/datafeed/exchange/messager/strategy/order/backtest/exporter/logservice/workflow/web。
+  verifier 已按实际时间线重排到 infra/controller/datafeed/exchange/messager/strategy/order/backtest/exporter/logger/workflow/web。
 - 镜像只有一个 `deploy/images.py` catalog 和一套 Helm values；global/aliyun 通过运行时值覆盖选择，不创建双目录或双 YAML。
 - Helm 模板由根级大文件拆为 `api/`、`controller/`、`platform/`、`middleware/`、`gateway/`、`web/`、
   `observability/`。Order/Wallet 不再静态预部署；它们与另外七个组件统一由 Controller 调度。
 - Secret bootstrap 对齐 AgentVault 的统一前缀：Kubernetes、AWS、GCP、Vault 共用 `setup-secret.sh` 和同一份 env schema；
   chart 本身只保存 Secret 引用，应用密码通过 `SIGBOT__` 中央配置层映射。
-- Grafana 使用一套 dashboard 生成模板产出 backtest、datafeed、evaluator、exporter、logservice、notifier、strategy、
+- Grafana 使用一套 dashboard 生成模板产出 backtest、datafeed、evaluator、exporter、logger、notifier、strategy、
   controller、order、wallet 十个领域仪表盘；ServiceMonitor 与 dashboard sidecar label 均为显式开关。Controller 创建的动态
   worker Pod 暴露管理端口并带 Prometheus scrape 注解。
 - `migration/tests/` 已删除；SQLite 迁移幂等/漂移、Worker scope 外键和真实 PostgreSQL 钱包约束统一由 Marketpulse
   `database` 场景验收，钱包约束 SQL 归入该 use case 的 `config/sigbot/`。
 - 命令宿主的管理端实现重命名为 `startup/internal/management.rs`。API、controller、九个动态组件与 standalone
-  的主结构体都显式持有 `management: SigbotManagementServer`，统一启动、就绪、指标与优雅关闭生命周期。
+  的主结构体都显式持有 `management: SigbotManagementStarter`，统一启动、就绪、指标与优雅关闭生命周期。
 
 ### 第一阶段实施记录
 
@@ -293,7 +294,7 @@ src/types/src/
 ├── evaluator/
 ├── exchange/
 ├── exporter/
-├── logservice/
+├── logger/
 ├── messager/
 ├── notifier/
 ├── order/
@@ -313,7 +314,7 @@ src/types/src/
 - Backtest：`history/history.rs`、`history/virtual_clock.rs`、`trades/trades.rs`；
 - Datafeed：`datafeed.rs`、`query/market_query.rs`；
 - Controller：`worker/reconciler.rs`；Evaluator：`llm/llm.rs`；Exporter：`exporter.rs`；
-- Logservice：`s3/s3.rs`、`server.rs`；Notification：`notification.rs`；
+- Logger：`s3/s3.rs`、`server.rs`；Notification：`notification.rs`；
 - Order：`execution/{events,groups,tracker,venue}.rs`、`processing/reservation.rs`、`server/order_runtime.rs`；
 - Strategy runner：`checkpoint/postgres.rs`、`strategy.rs`；
 - Wallet：`ledger/{execution,reservation}.rs`。
@@ -329,7 +330,7 @@ Evaluator 到 mock OpenAI 的请求失败而超时，旧版本运行已停止并
 
 ### 第三阶段：最终命名、宿主边界与严格配置
 
-- 顶层动态计算组件已迁至 `src/component/{backtest,datafeed,evaluator,logservice,strategy,notifier,exporter,order,wallet}`；部署域已统一为
+- 顶层动态计算组件已迁至 `src/component/{backtest,datafeed,evaluator,logger,strategy,notifier,exporter,order,wallet}`；部署域已统一为
   `src/controller`、`IController`、`XxxController`；通知域已统一为 `src/component/notifier`。旧 crate 路径和旧模块导出不保留。
 - 命令源码已从 `cmd/` 迁至 `startup/`，文件直接使用领域名；所有入口先导入 `ApplicationContext` 再使用短类型名。
 - `src/agents` 已改为 `src/api`，包含 A2A、HTTP 与 MCP 三个协议 crate。HTTP 使用 Axum 和 Authguard identity middleware；
@@ -374,7 +375,7 @@ helm template ... --set server.protocols.mcp.enabled=true --set server.protocols
 `sqlx::query*`、`PgPool`、`QueryBuilder`、PostgreSQL transaction 或 SQL 字面量；数据库实现只存在于
 `src/core/src/modules/<domain>/storage/`。该段记录的是第三阶段当时的历史状态；最新 Docker/K3s 权限和验证结果见第六阶段。
 
-平台部署边界已落到 `ctl_worker` 和 `wf_run.worker_id`：Controller 是唯一动态部署 owner，按
+平台部署边界已落到 `cluster_info` 和 `wf_run.cluster_id`：Controller 是唯一动态部署 owner，按
 `env/tenant_id/workflow_id` 创建九个数据面组件；API、Controller、Web 由 Helm 预部署。所有节点仍使用统一
 MessageScope 与 Workflow topic 生成器隔离。
 
@@ -464,7 +465,7 @@ Web 截图证据位于 `web/test-results/`，覆盖 Overview、市场行情、Wo
   注入的单个 Workflow 节点配置，不再存在 `wf_service_binding` 或平台级 order/wallet Host。Helm 仅预部署
   API、Controller、Web 及控制面 PostgreSQL/Redis；数据面组件由 Controller 统一部署。
 - Controller 变为唯一中央调度 provider。`CentralController` 持有 scheduler/reconciler；Docker 与 Kubernetes 类型仅是
-  绑定到具体 `ctl_worker` 的执行适配器，不再各自拥有 scheduler、ApplicationContext 生命周期或旧 `new()` 入口。
+  绑定到具体 `cluster_info` 的执行适配器，不再各自拥有 scheduler、ApplicationContext 生命周期或旧 `new()` 入口。
   `WorkerRouter` 根据数据库记录逐次连接任意远程 Docker/Kubernetes endpoint。
 - 新增 Worker 领域并收敛到 Controller：`types/controller` 定义 provider、status 和带 `auth_type` 标签的认证配置；
   `core/modules/controller/{handler,storage}` 提供作用域校验与 PostgreSQL/SQLite Repository；HTTP 暴露 scoped list/save/delete/status。
@@ -472,24 +473,24 @@ Web 截图证据位于 `web/test-results/`，覆盖 Overview、市场行情、Wo
   `configuration` 分别保存 Docker network/env-file/log-volume 或 Kubernetes namespace/Secret/ConfigMap/ServiceAccount/
   egress/log-PVC 资源边界；Docker env-file 名必须带 tenant 前缀且只能从固定宿主目录读取。Worker 可绑定 tenant 或
   特定 Workflow，支持 priority、capacity、heartbeat 与 online/draining/offline/error 状态。
-- `wf_run.worker_id` 固定一次运行的计算目标。中央 Controller 从每条 Workflow 读取真实 scope，不使用进程级全局用户上下文；
+- `wf_run.cluster_id` 固定一次运行的计算目标。中央 Controller 从每条 Workflow 读取真实 scope，不使用进程级全局用户上下文；
   首次 claim 优先选择 Workflow 专属 Worker，其次选择同租户的共享 Worker，
   使用行锁、容量计数和 `SKIP LOCKED` 防止重复分配；重试和停止继续使用已绑定 Worker，不因状态切换而偷偷迁移。
 - 所有迁移已归并到唯一基线 `migration/20261031000000/{postgres,sqlite}/init.{ddl,dml}.sql`。旧分散版本目录不保留；
   `migration/migrate.py` 对两个文件计算联合 SHA-256，PostgreSQL 使用事务、advisory lock 和 psql 条件执行，SQLite 使用
   `BEGIN IMMEDIATE`。迁移元数据表命名为 `mig_version`；业务表统一使用 `cfg_`、`wf_`、`ctl_`、`msg_`、
-  `mkt_`、`eval_`、`bt_`、`ord_`、`wlt_`、`ntf_`、`exp_`、`log_` 前缀。`cfg_connection.configuration`
-  约束业务 `kind`，`ctl_worker.configuration` 约束 `runtime_type`；PostgreSQL 与 SQLite 都以复合外键禁止 Worker
+  `mkt_`、`eval_`、`bt_`、`ord_`、`wlt_`、`ntf_`、`exp_`、`log_` 内部运行时前缀；配置主表使用十领域 `*_info`（见 domain-model_ZH.md）。连接主表的 `configuration`
+  约束业务 `kind`，`cluster_info.configuration` 约束 `runtime_type`；PostgreSQL 与 SQLite 都以复合外键禁止 Worker
   绑定其他租户或环境的 Workflow。
 - 部署文件已收敛到根 `deploy/`，应用镜像 Dockerfile 位于 `deploy/docker/Dockerfile`；根 `static/`
   与旧根 `tests/` 已删除。Core 中旧静态页面嵌入和 RustEmbed handler 同步删除，Web 资源只归 `web`。
 - Swagger 实现与本地 UI 压缩包位于 `src/api/http/src/swagger/`。逐项对比旧 GitHub 实现后，OpenAPI 恢复
   metadata、license、contact、external docs、
   context path、Authguard bearer security、当前 HTTP operation 及 Connection/Workflow/Worker/Notification schema；
-  `SWAGGER_UI_DOWNLOAD_URL` 在 Makefile 与 Docker 构建中指向本地 5.17.14 压缩包，避免重复联网下载。
+  `utoipa-swagger-ui` 启用 `vendored` feature，并通过 workspace 本地 patch 直接嵌入已提交的 5.17.14 压缩包；Cargo 构建不再下载 Swagger UI。
 - Helm/Compose 的迁移任务统一执行 `/app/migration/migrate.py --provider postgres`；Helm 平台 Deployment 使用迁移
   initContainer，并保持 Secret 与 ConfigMap 分离。Controller Helm 配置不再选择一个全局 Docker/Kubernetes provider，
-  provider 由每条 `ctl_worker` 记录决定。
+  provider 由每条 `cluster_info` 记录决定。
 
 本阶段已经取得的验证证据：
 
@@ -561,15 +562,15 @@ Repository。非冻结源码不存在 `_factory.rs`、`*_starter.rs` 及被禁�
   Google Sheets、Notifier、S3 及 Controller worker 认证均通过短名 `get_config().secrets.require()` 读取中央配置。
   Compose、Helm 与 Marketpulse 进程边界只负责把宿主 Secret 映射为 `SIGBOT__SECRETS__VALUES__*`，领域组件不直接读取环境变量。
 - `src/cmd/src/startup/internal/management_server.rs` 已收敛为 `management.rs`。全部 12 个启动宿主结构体显式持有
-  `management: SigbotManagementServer`；管理端关闭时仍由同一对象等待终止信号，确保 `ApplicationContext::shutdown()`
+  `management: SigbotManagementStarter`；管理端关闭时仍由同一对象等待终止信号，确保 `ApplicationContext::shutdown()`
   按统一顺序关闭 provider。Banner 不再读取配置路径环境变量，也不在 verbose 输出中序列化 Secret。
 - Helm 模板按 `api/controller/web/platform/middleware/observability/gateway` 分层；PostgreSQL 与 Redis 继续细分自己的
   service、statefulset 和 storage。`bootstrap/` 以同一 schema 支持 Kubernetes、AWS、GCP、Vault Secret 同步，任一
   bootstrap 失败都会阻止安装。Grafana sidecar ConfigMap 由一份模板生成 backtest、datafeed、evaluator、exporter、
-  logservice、notifier、strategy、controller、order、wallet 共 10 个 dashboard；ServiceMonitor 保持显式可选。
+  logger、notifier、strategy、controller、order、wallet 共 10 个 dashboard；ServiceMonitor 保持显式可选。
 - `migration/tests/` 与 `deploy/tests/` 已删除。迁移幂等、checksum drift、Worker scope 外键及钱包账本约束统一由
   `use-cases/marketpulse-autonomy-quantification/e2e/verifier/infra/s04_database.py` 在真实 E2E 环境验证；唯一入口仍是 case
-  内的 `runner.py`。`types/log` 同步对齐为 `types/logservice`，未使用的 Snowflake ID 实现删除，所有持久实体继续使用 UUIDv7。
+  内的 `runner.py`。`types/log` 同步对齐为 `types/logger`，未使用的 Snowflake ID 实现删除，所有持久实体继续使用 UUIDv7。
 - 生产源码 panic 占位复核已收敛：Memory cache 内部改用原始字节，修复 `from_utf8_lossy` 破坏 bit offset 的问题；实现与
   Redis 一致的 `set` 秒级 TTL 和 `expire` 毫秒级 TTL，并以版本令牌防止旧定时任务删除覆盖后的新值。原内联测试已迁移到
   `tests/cache/memory_test.rs`。IBKR 股票订单接口复用统一订单查询；Hyperliquid 旧接口不再 `unimplemented!()`，而是返回
@@ -625,9 +626,9 @@ make lint-helm
 ### 第九阶段：九组件数据面与租户中间件实际调度
 
 - 平台面只保留 API、Controller、Web。API 负责租户业务绑定、Workflow、Worker 与连接等配置 CRUD；Controller 负责
-  Backtest、Datafeed、Evaluator、Strategy、Logservice、Exporter、Notifier、Order、Wallet 九个组件的启动运行生命周期。
+  Backtest、Datafeed、Evaluator、Strategy、Logger、Exporter、Notifier、Order、Wallet 九个组件的启动运行生命周期。
   数据面九组件分别异步 pub/sub 执行 Workflow 中不同类型的节点。
-- `ctl_worker.middleware` 使用严格类型保存 Redis、pgvector、TimescaleDB、EMQX 的 `image/resources`，未知字段、空镜像、
+- `cluster_info.middleware` 使用严格类型保存 Redis、pgvector、TimescaleDB、EMQX 的 `image/resources`，未知字段、空镜像、
   `latest` 标签与越界资源在 Handler 层拒绝。Web 同时提供表单和 YAML 编辑；两种模式提交同一个强类型 API，不接受任意
   PodSpec、hostPath、特权、安全上下文或宿主网络片段。
 - Controller 在部署 Workflow 节点前执行 Worker 级中间件预备：Kubernetes 以 Service/StatefulSet/PVC 调度，Docker 以
@@ -637,7 +638,7 @@ make lint-helm
 - Worker 选定后，Controller 才把 Redis、TimescaleDB、pgvector 和 EMQX 的稳定服务地址注入组件配置；Secret 值继续只从
   Kubernetes runtime Secret 或宿主 owner-only env-file 读取。Helm 的 Controller middleware 值是 API 返回给 Web 的唯一默认
   image/resource catalog，`deploy/images.py` 在 CN 模式将同一值覆盖为 aliyuncs.com 地址，不维护第二套目录或 YAML。
-- `src/types/src/logservice` 是唯一日志类型目录。S3 不提供对象内 append：Logservice 先把 append 写入本地 SQLite WAL 并在
+- `src/types/src/logger` 是唯一日志类型目录。S3 不提供对象内 append：Logger 先把 append 写入本地 SQLite WAL 并在
   `FULL` 同步提交后 ACK；归档任务再按 seq 创建不可变对象，`PutMode::Create` 冲突时读取并校验 SHA-256；索引提交成功后才
   清除本地 payload。读取通过索引游标拼接分块，因此逻辑上是 append stream，物理上没有修改既有 S3 object。
 
@@ -653,10 +654,10 @@ Marketpulse 用例新报告为最终证据，不能沿用第七阶段旧镜像�
   `setup-secret*.sh`，日志前缀为 `[sigbot-bootstrap]`，并恢复可执行权限。
 - Authguard 继续独占用户、Tenant、Membership、Role、Permission 与 IAM 存储；Sigbot
   Migration 不含本地 IAM 表。Sigbot 控制面 Postgres/Redis 只保存业务配置与缓存，API
-  不维护全局当前用户。现行 API/IAM/Logservice 文档已删除旧 `core/sys`、本地 IAM 和
+  不维护全局当前用户。现行 API/IAM/Logger 文档已删除旧 `core/sys`、本地 IAM 和
   API 内嵌 Controller 的描述。
-- Core 的 Logservice Repository 统一命名为 `LogservicePostgresRepository` 与
-  `LogserviceSQLiteRepository`；Strategy 补齐 `storage/sqlite.rs` 适配边界。九组件、
+- Core 的 Logger Repository 统一命名为 `LoggerPostgresRepository` 与
+  `LoggerSQLiteRepository`；Strategy 补齐 `storage/sqlite.rs` 适配边界。九组件、
   Exchange、Messager、Controller 与 API 的生产源码无直写 SQL，数据库语句只在 Core
   Repository。
 - Release 生成的 `dist/*.tgz` 不再作为源码提交；`dist/` 被忽略，合并发布任务仍会重新

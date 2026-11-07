@@ -29,25 +29,15 @@ spec:
         - name: api
           image: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.image) | quote }}
           imagePullPolicy: {{ .Values.sigbot.image.pullPolicy }}
-          command: ["sigbot", "api"]
+          command: ["sigbot", "api", "--config", "/etc/sigbot/sigbot.yaml"]
           securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           ports:
             - {name: http, containerPort: 9000}
             - {name: management, containerPort: 9001}
-            {{- if .Values.sigbot.api.protocols.mcp.enabled }}
-            - {name: mcp, containerPort: {{ .Values.sigbot.api.protocols.mcp.port }}}
-            {{- end }}
-            {{- if .Values.sigbot.api.protocols.a2a.enabled }}
-            - {name: a2a, containerPort: {{ .Values.sigbot.api.protocols.a2a.port }}}
-            {{- end }}
           env:
             {{- include "sigbot.configEnvironment" . | nindent 12 }}
             - {name: SIGBOT__MGMT__HOST, value: 0.0.0.0}
             - {name: SIGBOT__MGMT__PORT, value: "9001"}
-            - {name: SIGBOT__SERVICES__API__MCP__ENABLED, value: {{ .Values.sigbot.api.protocols.mcp.enabled | quote }}}
-            - {name: SIGBOT__SERVICES__API__MCP__BIND_ADDRESS, value: {{ printf "0.0.0.0:%v" .Values.sigbot.api.protocols.mcp.port | quote }}}
-            - {name: SIGBOT__SERVICES__API__A2A__ENABLED, value: {{ .Values.sigbot.api.protocols.a2a.enabled | quote }}}
-            - {name: SIGBOT__SERVICES__API__A2A__BIND_ADDRESS, value: {{ printf "0.0.0.0:%v" .Values.sigbot.api.protocols.a2a.port | quote }}}
             {{- include "sigbot.tenantMiddlewareEnvironment" . | nindent 12 }}
             {{- include "sigbot.secretEnvironment" . | nindent 12 }}
           resources:
@@ -57,6 +47,39 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/sigbot/sigbot.yaml, subPath: sigbot.yaml, readOnly: true}
             - {name: storage, mountPath: /var/lib/sigbot/storage}
+        {{- range $protocol, $settings := .Values.sigbot.api.protocols }}
+        {{- if and $settings.enabled (ne $protocol "http") }}
+        - name: {{ $protocol }}
+          image: {{ include "sigbot.image" (dict "root" $ "image" $.Values.sigbot.image) | quote }}
+          imagePullPolicy: {{ $.Values.sigbot.image.pullPolicy }}
+          command: ["sigbot", {{ $protocol | quote }}, "--config", "/etc/sigbot/sigbot.yaml"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          ports:
+            - {name: {{ $protocol }}, containerPort: {{ $settings.port }}}
+          env:
+            {{- include "sigbot.configEnvironment" $ | nindent 12 }}
+            - {name: SIGBOT__MGMT__HOST, value: "0.0.0.0"}
+            - {name: SIGBOT__MGMT__PORT, value: {{ if eq $protocol "mcp" }}"19092"{{ else }}"19093"{{ end }}}
+            - {name: {{ printf "SIGBOT__SERVICES__PLATFORM__API__%s__ENABLED" (upper $protocol) }}, value: "true"}
+            - {name: {{ printf "SIGBOT__SERVICES__PLATFORM__API__%s__BIND_ADDRESS" (upper $protocol) }}, value: {{ printf "0.0.0.0:%v" $settings.port | quote }}}
+            {{- $publicUrl := default "" $settings.publicUrl }}
+            {{- if and (not $publicUrl) $.Values.sigbot.api.gateway.enabled $.Values.sigbot.api.gateway.hostnames }}
+            {{- $publicUrl = printf "https://%s/%s" (first $.Values.sigbot.api.gateway.hostnames) $protocol }}
+            {{- end }}
+            {{- if $publicUrl }}
+            - {name: {{ printf "SIGBOT__SERVICES__PLATFORM__API__%s__PUBLIC_URL" (upper $protocol) }}, value: {{ $publicUrl | quote }}}
+            {{- end }}
+            {{- include "sigbot.tenantMiddlewareEnvironment" $ | nindent 12 }}
+            {{- include "sigbot.secretEnvironment" $ | nindent 12 }}
+          resources:
+            {{- toYaml $.Values.sigbot.api.resources | nindent 12 }}
+          readinessProbe: {httpGet: {path: /_/healthz, port: {{ if eq $protocol "mcp" }}19092{{ else }}19093{{ end }}}}
+          livenessProbe: {httpGet: {path: /_/livez, port: {{ if eq $protocol "mcp" }}19092{{ else }}19093{{ end }}}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/sigbot/sigbot.yaml, subPath: sigbot.yaml, readOnly: true}
+            - {name: storage, mountPath: /var/lib/sigbot/storage}
+        {{- end }}
+        {{- end }}
       volumes:
         - name: config
           configMap: {name: {{ include "sigbot.fullname" . }}-config}
