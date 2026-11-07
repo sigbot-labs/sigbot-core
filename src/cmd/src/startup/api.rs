@@ -55,11 +55,11 @@ impl SigbotAPIServer {
    \ \_\ \_\ \ ,__/\ \_\   \ `\____\ \____\\ \_\  \ \___/ \ \____\\ \_\ 
     \/_/\/_/\ \ \/  \/_/    \/_____/\/____/ \/_/   \/__/   \/____/ \/_/ 
              \ \_\                                                      
-              \/_/                                     (Sigbot API Server)
+              \/_/                                     (Sigbot API Service)
  "#;
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot platformization API Server.")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot Platformization API Server for Management.")
     }
 
     #[tokio::main]

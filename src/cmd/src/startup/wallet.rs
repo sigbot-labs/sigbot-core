@@ -49,12 +49,12 @@ impl SigbotWallet {
     '\/__//__/  \/__/\/_/\/____/\/____/\/____/ \/__/     \/_/ \/_/\/___L\ \/_/ 
                                                                     /\____/    
                                                                     \_/__/    
-                                                        (Sigbot Wallet Manager)
+                                                        (Sigbot Wallet Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Wallet Manager")
+            .about("Run Sigbot Tenantization Wallet Service for Assets Management.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

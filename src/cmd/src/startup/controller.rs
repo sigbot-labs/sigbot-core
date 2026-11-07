@@ -51,7 +51,7 @@ impl SigbotController {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run the central Controller for registered Docker and Kubernetes workers.")
+            .about("Run Sigbot Platformization Controller for Components Orchestration.")
     }
 
     #[tokio::main]

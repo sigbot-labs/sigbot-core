@@ -49,12 +49,12 @@ impl SigbotOrder {
     \/_____/\/_/ \/__,_ /\/____/ \/_/       \/_/ \/_/\/___L\ \/_/ 
                                                        /\____/    
                                                        \_/__/     
-                                             (Sigbot Order Manager)
+                                             (Sigbot Order Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Order Manager")
+            .about("Run Sigbot Tenantization Order Service for Position Execution.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

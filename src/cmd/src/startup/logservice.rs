@@ -48,12 +48,12 @@ impl SigbotLogservice {
     \/___/  \/___/  \/___L\ \   \/_/ \/_/\/__/\/_/\/_/\/_/\/__/\/_/\/___L\ \/____/ \/_/ 
                       /\____/                                        /\____/            
                       \_/__/                                         \_/__/             
-                                                                 (Sigbot Log Manager)
+                                                                 (Sigbot Logging Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Log Service Server.")
+            .about("Run Sigbot Tenantization Logging Service for Trading Audit.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

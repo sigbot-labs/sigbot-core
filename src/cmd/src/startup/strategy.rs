@@ -50,12 +50,12 @@ impl SigbotStrategy {
                                                /\____/   /\___/
                                                \_/__/    \/__/ 
 
-                                        (Sigbot Strategy Runner)
+                                        (Sigbot Strategy Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Strategy Runner.")
+            .about("Run Sigbot Tenantization Strategy Service for Code Execution.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

@@ -48,12 +48,12 @@ impl SigbotEvaluator {
    \ \____/\ \___/ \ \__/.\_\/\____\\ \____/\ \__/.\_\\ \__\ \____/\ \_\ 
     \/___/  \/__/   \/__/\/_/\/____/ \/___/  \/__/\/_/ \/__/\/___/  \/_/ 
 
-                                                (Sigbot Evaluator Runner)
+                                                (Sigbot Evaluator Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Evaluator Runner")
+            .about("Run Sigbot Tenantization Evaluator Service for AI-powered Evaluation.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

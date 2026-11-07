@@ -65,7 +65,7 @@ impl SigbotStandalone {
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot Components All in One with Standalone.")
+            .about("Run Sigbot Components All-in-One.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

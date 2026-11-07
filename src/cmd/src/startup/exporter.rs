@@ -49,12 +49,12 @@ impl SigbotExporter {
         \/___/ \//\/_/ \ \ \/  \/___/  \/_/   \/__/\/____/ \/_/ 
                         \ \_\                                   
                          \/_/                                    
-                                     (Sigbot Exporter Manager)
+                                     (Sigbot Exporter Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Exporter Manager")
+            .about("Run Sigbot Tenantization Exporter Service for Data Exportation.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

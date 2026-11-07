@@ -48,12 +48,12 @@ impl SigbotBacktest {
    \ \____/\ \__/.\_\ \____\\ \_\ \_\   \ \__\ \____\/\____/ \ \__\
     \/___/  \/__/\/_/\/____/ \/_/\/_/    \/__/\/____/\/___/   \/__/
 
-                                            (Sigbot Backtest Runner)
+                                            (Sigbot Backtest Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Backtest Runner.")
+            .about("Run Sigbot Tenantization Backtest Service for Strategies Performance.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")

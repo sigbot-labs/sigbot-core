@@ -48,12 +48,12 @@ impl SigbotDatafeed {
    \ \____/\ \__/.\_\\ \__\ \__/.\_\\ \_\ \____\ \____\ \___,_\
     \/___/  \/__/\/_/ \/__/\/__/\/_/ \/_/\/____/\/____/\/__,_ /
                                                                          
-                                        (Sigbot Datafeed Runner)
+                                        (Sigbot Datafeed Service)
  "#;
 
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME)
-            .about("Run Sigbot tenantization Datafeed Ingestor.")
+            .about("Run Sigbot Tenantization Datafeed Service for External Ingestion.")
             .arg_required_else_help(true) // When no args are provided, show help.
             .arg(
                 Arg::new("MESSAGER_PROVIDER")
