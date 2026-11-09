@@ -12,9 +12,6 @@ spec:
   ports:
     - {name: http, port: {{ .Values.sigbot.api.service.port }}, targetPort: http, protocol: TCP}
     - {name: management, port: 9001, targetPort: management, protocol: TCP}
-    {{- if .Values.sigbot.api.protocols.mcp.enabled }}
-    - {name: mcp, port: {{ .Values.sigbot.api.protocols.mcp.port }}, targetPort: mcp, protocol: TCP}
-    {{- end }}
     {{- if .Values.sigbot.api.protocols.a2a.enabled }}
     - {name: a2a, port: {{ .Values.sigbot.api.protocols.a2a.port }}, targetPort: a2a, protocol: TCP}
     {{- end }}

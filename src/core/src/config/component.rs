@@ -184,15 +184,13 @@ impl Default for BacktestProperties {
     }
 }
 
-// API Properties with MCP integration.
+// HTTP and A2A API properties. MCP exposure is generated externally from OpenAPI.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ApiProperties {
     #[serde(default = "HttpApiProperties::default")]
     pub http: HttpApiProperties,
-    #[serde(rename = "mcp", default = "ApiMcpProperties::default")]
-    pub mcp: ApiMcpProperties,
     #[serde(rename = "a2a", default = "A2AProperties::default")]
     pub a2a: A2AProperties,
 }
@@ -207,7 +205,6 @@ impl Default for ApiProperties {
     fn default() -> Self {
         Self {
             http: HttpApiProperties::default(),
-            mcp: ApiMcpProperties::default(),
             a2a: A2AProperties::default(),
         }
     }
@@ -218,45 +215,6 @@ impl Default for HttpApiProperties {
         Self {
             upload_temp_dir: "/tmp/sigbot/knowledge_upload".to_owned(),
         }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-pub struct ApiMcpProperties {
-    /// Enable MCP server for API exposure
-    #[serde(rename = "enabled")]
-    pub enabled: bool,
-    /// MCP server name
-    #[serde(rename = "name")]
-    pub name: String,
-    /// Protocol transport. This process supports authenticated streamable HTTP.
-    #[serde(rename = "transport")]
-    pub transport: String,
-    /// Bind address for SSE transport
-    pub bind_address: String,
-    #[serde(default = "ApiMcpProperties::default_public_url")]
-    pub public_url: String,
-    /// Authentication enabled
-    pub auth_enabled: bool,
-}
-
-impl Default for ApiMcpProperties {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            name: "sigbot-api-mcp-server".to_string(),
-            transport: "streamable_http".to_string(),
-            bind_address: "0.0.0.0:8080".to_string(),
-            public_url: Self::default_public_url(),
-            auth_enabled: true,
-        }
-    }
-}
-
-impl ApiMcpProperties {
-    fn default_public_url() -> String {
-        "http://127.0.0.1:8080/mcp".into()
     }
 }
 

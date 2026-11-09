@@ -1,5 +1,7 @@
 # 领域组件与 ApplicationContext 收敛重构
 
+> 2026-11-09 更新：内置 MCP server 与启动/配置/部署代码已移至 `.archived/20261109382032_builtin_mcp_server_replaced_by_mcpfather/`。本文保留前期实施记录；当前 MCP 采用 [mcpfather 生成方案](../../architecture/engine/mcp/overview_ZH.md)，旧 sigbot-mcp 编译命令和内置 MCP 路径不再适用。
+
 日期：2026-10-31 至 2026-11-01。状态：本文是该轮重构的历史实施记录，不是当前能力清单。
 当本文的阶段性结论与现行架构或最新验收边界冲突时，以
 [`HARDCOVER.md`](../HARDCOVER.md)、架构总览和领域 Overview 为准。本文记录本轮已确认

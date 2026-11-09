@@ -21,6 +21,8 @@ fn document_covers_current_scoped_api_and_security() {
         assert!(document["paths"][format!("{path}/{{id}}")]["put"].is_object());
     }
     assert!(document["components"]["schemas"]["ResourceCommand"].is_object());
+    assert!(document["components"]["schemas"]["Domain"].is_object());
+    assert!(document["components"]["schemas"]["ResourceOperation"].is_object());
     assert_eq!(
         document["components"]["securitySchemes"]["authguard_bearer"]["scheme"],
         "bearer"

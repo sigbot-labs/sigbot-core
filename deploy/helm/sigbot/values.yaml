@@ -27,13 +27,12 @@ sigbot:
     cache:
       provider: Redis
       redis: {nodes: [redis://sigbot-redis:6379], password: ''}
-    authguard: {provider: signed_header, oauth: null} # Set the real issuer/discovery_url before enabling MCP.
+    authguard: {provider: signed_header, oauth: null} # Optional OIDC authority for A2A discovery.
     services:
       platform:
         api:
           http: {}
           a2a: {enabled: true, bind_address: 0.0.0.0:9003, public_url: ''}
-          mcp: {enabled: true, bind_address: 0.0.0.0:9002, public_url: http://127.0.0.1:9002/mcp}
         controller:
           workers: {enabled: true, cpu_millis: 1000, memory_mb: 512, pids_limit: 64}
       component:
@@ -60,7 +59,6 @@ sigbot:
     service: {type: ClusterIP, port: 9000}
     protocols:
       http: {enabled: true, port: 9000}
-      mcp: {enabled: true, port: 9002, publicUrl: ''}
       a2a: {enabled: true, port: 9003, publicUrl: ''}
     resources:
       requests: {cpu: 250m, memory: 512Mi}

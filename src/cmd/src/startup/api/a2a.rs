@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+use crate::startup::internal::banner::print_banner;
 use crate::startup::internal::management::SigbotManagementStarter;
 use clap::Command;
 use common_context::ApplicationContext;
@@ -14,12 +15,26 @@ pub struct SigbotA2aStarter {
 impl SigbotA2aStarter {
     pub const COMMAND_NAME: &'static str = "a2a";
 
+    // http://patorjk.com/software/taag/#p=display&f=Larry+3D&t=A2A+Server&x=none&v=4&h=4&w=80&we=false
+    pub const ASCII_NAME: &'static str = r#"
+ ____                __              __        ______      ___    ______     
+/\  _`\   __        /\ \            /\ \__    /\  _  \   /'___`\ /\  _  \    
+\ \,\L\_\/\_\     __\ \ \____    ___\ \ ,_\   \ \ \L\ \ /\_\ /\ \\ \ \L\ \   
+ \/_\__ \\/\ \  /'_ `\ \ '__`\  / __`\ \ \/    \ \  __ \\/_/// /__\ \  __ \  
+   /\ \L\ \ \ \/\ \L\ \ \ \L\ \/\ \L\ \ \ \_    \ \ \/\ \  // /_\ \\ \ \/\ \ 
+   \ `\____\ \_\ \____ \ \_,__/\ \____/\ \__\    \ \_\ \_\/\______/ \ \_\ \_\
+    \/_____/\/_/\/___L\ \/___/  \/___/  \/__/     \/_/\/_/\/_____/   \/_/\/_/
+                  /\____/                                                    
+                  \_/__/                                  (Sigbot A2A Server)
+ "#;
+
     pub fn build() -> Command {
         Command::new(Self::COMMAND_NAME).about("Run Sigbot Platformization A2A API for Operations.")
     }
 
     #[tokio::main]
-    pub async fn run(_matches: &clap::ArgMatches, _verbose: bool) {
+    pub async fn run(_matches: &clap::ArgMatches, verbose: bool) {
+        print_banner(verbose, Self::ASCII_NAME, None);
         let service = Self::default();
         let management = service.management.start().await;
         Self::startup().await;

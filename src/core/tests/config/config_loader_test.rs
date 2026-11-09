@@ -38,6 +38,14 @@ fn unknown_keys_are_rejected_and_placeholder_defaults_are_explicit() {
 }
 
 #[test]
+fn builtin_mcp_configuration_is_retired_in_favor_of_external_openapi_generation() {
+    let mut value = serde_json::to_value(AppConfigProperties::default()).unwrap();
+    assert!(value["services"]["platform"]["api"].get("mcp").is_none());
+    value["services"]["platform"]["api"]["mcp"] = json!({"enabled":true});
+    assert!(serde_json::from_value::<AppConfigProperties>(value).is_err());
+}
+
+#[test]
 fn shipped_configuration_accepts_nested_environment_overrides() {
     let defaults = serde_json::to_string(&AppConfigProperties::default()).unwrap();
     let file = config::Config::builder()

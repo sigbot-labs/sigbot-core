@@ -1,20 +1,44 @@
-# MCP API
+# MCP exposure through mcpfather
 
-[中文](overview_ZH.md) · [Domain contracts](../../domain-model_ZH.md)
+[中文](overview_ZH.md) · [mcpfather](https://github.com/flowgent-labs/mcpfather)
 
-The official rust-mcp-sdk serves authenticated streamable HTTP. ResourceMcpRegistry advertises 50 tools: five CRUD operations for each of the ten domains.
+Sigbot maintains its HTTP/A2A APIs. MCP servers are generated and deployed independently with mcpfather from Sigbot's HTTP OpenAPI document. This is the real Sigbot integration case for mcpfather; the Rust workspace no longer includes an MCP server or a sigbot mcp command.
 
-The IMcpApi contract, HttpMcpApi lifecycle and protocol endpoint composition live in src/api/mcp/src/mcp.rs. It uses the SDK RemoteAuthProvider, AuthorizationServerMetadata and OauthProtectedResourceMetadata directly. The SDK owns discovery serialization, CORS, method validation and the 401 WWW-Authenticate challenge; Sigbot does not implement a second authorization server.
+The former implementation and its latest uncommitted Starter changes are preserved under .archived/20261109382032_builtin_mcp_server_replaced_by_mcpfather/, including protocol/authentication code, tests, documentation and integration snapshots. SHA256SUMS verifies the moved files. The archive follows the repository's existing .gitignore and is local unless deliberately versioned later.
 
-For public_url https://app.example/mcp, the anonymous discovery endpoints are:
+## Generate the external server
 
-- GET/HEAD/OPTIONS /.well-known/oauth-protected-resource/mcp (RFC 9728).
-- GET/HEAD/OPTIONS /.well-known/oauth-authorization-server (the SDK's copy of the configured authority's real discovery metadata).
+1. Start Sigbot HTTP with sigbot api --config etc/sigbot.yaml.
+2. Obtain its actual OpenAPI JSON through an authorized HTTP endpoint. The shipped YAML uses swagger.openapi_url=/swagger-ui/openapi.json; account for server.context_path and the Gateway route/policy. Save the document as sigbot.openapi.json. Do not maintain a second handwritten API schema.
+3. Use the adjacent project's installed generator (build it there first if needed):
 
-The resource document advertises the canonical public_url, authority issuer, supported scopes and Bearer header usage. The challenge points to that canonical metadata URL, never to the bind address or an untrusted Host header. A prefixed resource path produces the corresponding SDK path-scoped well-known URL.
+```sh
+MCPFATHER_ROOT=/Users/agent/Documents/mcpfather
+"${MCPFATHER_ROOT}/bin/mcpfather" \
+  --input /path/to/sigbot.openapi.json \
+  --output /path/to/generated/sigbot-mcp
 
-Configure services.platform.api.mcp.public_url and authguard.oauth with issuer, discovery_url and optional scopes. discovery_url must be the authority's real OIDC discovery document. Startup fetches it through the SDK with a bounded timeout and validates issuer, HTTPS and supported scopes before binding. Missing/invalid configuration fails startup. HTTP is allowed only for loopback development. Values are non-secret; credential material remains in Secrets.
+make -C /path/to/generated/sigbot-mcp
+export MCP__UPSTREAM__DEFAULT__ENDPOINT="${SIGBOT_HTTP_ORIGIN:?set the real Sigbot upstream origin}"
+/path/to/generated/sigbot-mcp/bin/sigbot-mcp --transport http --port 8080
 
-The authority owns authorize/token/registration/revocation and OIDC endpoints; their real URLs are preserved in discovery. Sigbot neither invents these addresses nor issues credentials. End-user OAuth/OIDC verification remains at the Authguard/Gateway boundary. The backend SDK token verifier in src/api/mcp/src/auth/authguard.rs accepts the trusted Authguard credential handed off by that boundary, preserving tenant and allow/deny grants. The shared Core bridge now maps signed-header and gRPC opaque scope-token modes to the appropriate official SDK headers. A gateway must hand the MCP credential callback the verified credential as Bearer; raw end-user JWTs are not treated as signed Authguard contexts.
+# Inspect the generated names before invoking a tool.
+/path/to/generated/sigbot-mcp/bin/sigbot-mcp --transport cli list
+```
 
-Helm exposes the discovery paths through a separate public HTTPRoute while /mcp remains protected. The configured external hostname or explicit protocols.mcp.publicUrl supplies the advertised URL. Real TCP tests cover anonymous discovery, 405, 401 discovery challenge, authenticated SDK initialization and issuer/URL rejection.
+The local generator's normal mode is used for this OpenAPI 3.1 case. Its optional --validation currently rejects the valid JSON Schema propertyNames keyword in ResourceCommand, so strict-validator compatibility is not claimed; the source schema is not rewritten to hide that keyword.
+
+All 50 ten-domain CRUD operations have unique operationId values in the maintained HTTP schema. mcpfather owns generated tool names, MCP transport, OAuth discovery, inbound authentication and deployment. Keep generated source in its independent project, outside the Sigbot Rust workspace.
+
+## Authentication and verification
+
+Configure mcpfather's inbound OIDC and its separate outbound upstream credentials using that project's configuration. The AI client's token is not blindly forwarded upstream. Send upstream calls through the Authguard/Gateway policy for the appropriate tenant and service principal; retain environment/domain grants and W3C trace context. Never put privileged credentials in the OpenAPI document or loosen Sigbot tenant checks for the generated server.
+
+The opt-in HTTP schema integration test exports the actual SwaggerHttpApi document to a temporary directory and invokes the local generator:
+
+```sh
+MCPFATHER_BIN=/Users/agent/Documents/mcpfather/bin/mcpfather \
+  cargo test -p sigbot-http --test swagger mcpfather_generates_from_sigbot_openapi -- --ignored
+```
+
+This verifies schema/generator interoperability, not a live OIDC login or trading execution. Datafeed's outbound MCP client and external-source fixtures have independent purposes and remain active.

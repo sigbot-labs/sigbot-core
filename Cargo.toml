@@ -17,7 +17,6 @@ members = [
     "src/controller",
     "src/api/a2a",
     "src/api/http",
-    "src/api/mcp",
     "src/component/backtest",
     "src/component/datafeed",
     "src/component/evaluator",
@@ -45,7 +44,7 @@ repository = "https://github.com/wl4g/sigbot"
 readme = "README.md"
 license = "GPL-3.0"
 description = "Sigbot - An Open Source Multi-Strategy, AI-driven Fast Trading Bot written in Rust."
-keywords = ["AI", "Modsecurity", "Security", "WAF"]
+keywords = ["AI", "Quantification", "Trading", "Strategy", "Security"]
 edition = "2021"
 
 [workspace.lints]
@@ -86,7 +85,6 @@ sigbot-exporter = { path = "src/component/exporter" }
 sigbot-evaluator = { path = "src/component/evaluator" }
 sigbot-a2a = { path = "src/api/a2a" }
 sigbot-http = { path = "src/api/http" }
-sigbot-mcp = { path = "src/api/mcp" }
 
 # Lang libs
 regex = "1.11.1"

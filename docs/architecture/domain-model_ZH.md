@@ -1,6 +1,6 @@
 # 十领域配置与 CRUD
 
-数据库基线的前半部分只定义十个领域主表，后半部分定义运行时执行、恢复和审计存储。HTTP、MCP、A2A 共用 Core 的 ResourceHandler 和 IGenericRepository；协议层不写 SQL。
+数据库基线的前半部分只定义十个领域主表，后半部分定义运行时执行、恢复和审计存储。HTTP、A2A 共用 Core 的 ResourceHandler 和 IGenericRepository；协议层不写 SQL。
 
 | 领域 | 主表 | 主要内容 |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ tenant_info 是业务资料，不负责登录、用户、角色、权限或 IAM 
 
 每个配置实体一行，configuration 保存对应 provider 的非敏感参数，secret_ref 保存 central Secret 引用。strategy_info 用 code 和 default_parameters 明确区分可执行代码与初始参数。订单的 UUIDv7 id 用于 CRUD，已有复合主键继续负责执行幂等。
 
-## 三种协议
+## 内置协议与外部 MCP
 
 HTTP 每个领域提供以下五种操作，集合名分别为 tenants、clusters、datasources、exchanges、strategies、orders、ledgers、notifiers、exporters、workflows：
 
@@ -31,7 +31,7 @@ HTTP 每个领域提供以下五种操作，集合名分别为 tenants、cluster
 
 POST/PUT body 是实体字段对象。id、tenant_id、env、审计字段、组合版本由服务端管理。创建返回 id，列表返回 data 数组，详情返回 data 对象。未知字段和无权限资源会被拒绝；limit 范围 1..200。
 
-MCP 有 50 个工具，命名为 <domain>_<list|get|create|update|delete>，参数为 env、按需提供的 id/fields 和列表分页参数。
+MCP 由独立的 [mcpfather](engine/mcp/overview_ZH.md) 直接从 HTTP OpenAPI 生成，tool 名称/参数以生成结果为准；Sigbot 不再维护第二份内置 MCP registry。
 
 A2A DataPart 或 JSON TextPart 使用同一命令，例如：
 
@@ -39,7 +39,7 @@ A2A DataPart 或 JSON TextPart 使用同一命令，例如：
 {"domain":"strategy","operation":"create","env":"dev","fields":{"name":"sample","code":"class Strategy: pass","default_parameters":{"window":20}}}
 ```
 
-三个协议均保留 Authguard 验证后的 principal、resource URN 和 allow/deny grants。调用者不能通过 body 覆盖它们。
+内置 HTTP/A2A 均保留 Authguard 验证后的 principal、resource URN 和 allow/deny grants；外部 MCP 的上游 HTTP 调用仍须经过这些鉴权规则。调用者不能通过 body 覆盖它们。
 
 ## 必要的内部存储
 

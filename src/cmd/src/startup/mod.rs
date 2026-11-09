@@ -156,13 +156,6 @@ pub fn register_subcommand_handles() -> &'static Vec<(&'static str, (SubcommandB
             ),
         ));
         vec.push((
-            api::mcp::SigbotMcpStarter::COMMAND_NAME,
-            (
-                api::mcp::SigbotMcpStarter::build as SubcommandBuildFn,
-                api::mcp::SigbotMcpStarter::run as SubcommandHandleFn,
-            ),
-        ));
-        vec.push((
             api::a2a::SigbotA2aStarter::COMMAND_NAME,
             (
                 api::a2a::SigbotA2aStarter::build as SubcommandBuildFn,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use sigbot_core::config::config::AppConfig;
-use sigbot_types::domain::{Domain, ResourceCommand};
+use sigbot_types::domain::{Domain, ResourceCommand, ResourceOperation};
 use utoipa::openapi::external_docs::ExternalDocsBuilder;
 use utoipa::openapi::info::{ContactBuilder, InfoBuilder, LicenseBuilder};
 use utoipa::openapi::path::{HttpMethod, Operation, OperationBuilder, ParameterBuilder, ParameterIn};
@@ -77,6 +77,8 @@ impl SwaggerHttpApi {
     fn components() -> utoipa::openapi::Components {
         ComponentsBuilder::new()
             .schema_from::<ResourceCommand>()
+            .schema_from::<Domain>()
+            .schema_from::<ResourceOperation>()
             .security_scheme(
                 "authguard_bearer",
                 SecurityScheme::Http(

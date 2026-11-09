@@ -1,5 +1,7 @@
 # Sigbot MCP & A2A 集成指南
 
+> 历史文档：2026-11-09 起内置 MCP server 已归档，当前请使用 [mcpfather 接入说明](../../architecture/engine/mcp/overview_ZH.md)。以下命令与路径仅代表当时实现。
+
 > **历史草案（2026-04-16）：** 本文中的部分目录、端点与能力已经过时，仅供
 > 追溯。当前边界请参考 [MCP](../../architecture/engine/mcp/overview_ZH.md) 和
 > [A2A](../../architecture/engine/a2a/overview_ZH.md)。

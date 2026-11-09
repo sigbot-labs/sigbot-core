@@ -120,24 +120,6 @@ services:
     cpus: '2'
     pids_limit: 256
     init: true
-  mcp:
-    profiles: [protocols]
-    image: ${SIGBOT_IMAGE:?select images using make docker-up}
-    command: [mcp, --config, /app/config/sigbot.yaml]
-    env_file: ${SIGBOT_ENV_FILE:-.env}
-    environment:
-      <<: *platform-environment
-      SIGBOT__SERVICES__PLATFORM__API__MCP__ENABLED: 'true'
-      SIGBOT__SERVICES__PLATFORM__API__MCP__BIND_ADDRESS: '0.0.0.0:9002'
-      SIGBOT__SERVICES__PLATFORM__API__MCP__PUBLIC_URL: ${SIGBOT_MCP_PUBLIC_URL:-http://127.0.0.1:9002/mcp}
-    ports: ['127.0.0.1:9002:9002']
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-      redis: {condition: service_healthy}
-    mem_limit: 1g
-    cpus: '1'
-    pids_limit: 256
-    init: true
   a2a:
     profiles: [protocols]
     image: ${SIGBOT_IMAGE:?select images using make docker-up}

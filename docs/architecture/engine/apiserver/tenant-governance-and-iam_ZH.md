@@ -30,7 +30,7 @@ Sigbot 只保存量化业务资源。`tenant_id` 是 Authguard 签发并由请�
 4. Repository 的查询和写入条件始终包含 Tenant；禁止使用全局用户上下文或隐式默认租户。
 5. Controller 只接受已经持久化并授权的 Workflow/Worker 配置，不能通过 Pod 环境变量扩权。
 
-HTTP、A2A 和 MCP 共用同一 Handler 与授权规则。A2A/MCP 只暴露实际需要的能力，不复制
+HTTP、A2A 共用同一 Handler 与授权规则；mcpfather 生成的外部 MCP 通过同一 HTTP 鉴权边界接入。A2A 只暴露实际需要的能力，不复制
 HTTP 的全部 CRUD 面，也不得绕过 Authguard。
 
 ## 数据与部署隔离
@@ -56,7 +56,7 @@ HTTP 的全部 CRUD 面，也不得绕过 Authguard。
 
 - Authguard 适配与请求身份：`src/core/src/context/`
 - HTTP API：`src/api/http/`
-- A2A 与 MCP API：`src/api/a2a/`、`src/api/mcp/`
+- A2A API：`src/api/a2a/`；外部 MCP：[mcpfather 接入](../mcp/overview_ZH.md)
 - 业务 Handler/Repository：`src/core/src/modules/`
 - Worker 与租户组件编排：`src/controller/`
 - Helm 集成：`deploy/helm/sigbot/charts/middleware/`

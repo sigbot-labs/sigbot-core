@@ -53,7 +53,7 @@ impl SigbotStandaloneStarter {
  "#;
 
     pub fn build() -> Command {
-        Command::new(Self::COMMAND_NAME).about("Run Sigbot standalone service")
+        Command::new(Self::COMMAND_NAME).about("Run Sigbot All-in-One Standalone service")
     }
 
     #[tokio::main]
@@ -81,9 +81,6 @@ impl SigbotStandaloneStarter {
         LlmApplication::register_default()
             .await
             .expect("default LLM provider initialization failed");
-        if get_config().services.platform.api.mcp.enabled {
-            crate::startup::api::mcp::SigbotMcpStarter::startup().await;
-        }
         if get_config().services.platform.api.a2a.enabled {
             crate::startup::api::a2a::SigbotA2aStarter::startup().await;
         }

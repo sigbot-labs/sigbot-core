@@ -48,7 +48,6 @@ fn official_starters_expose_the_expected_descriptions() {
     let expected = [
         ("api", "Run Sigbot Platformization HTTP API for Operations."),
         ("a2a", "Run Sigbot Platformization A2A API for Operations."),
-        ("mcp", "Run Sigbot Platformization MCP API for Operations."),
         (
             "controller",
             "Run Sigbot Platformization Controller for Components Orchestration.",
@@ -104,7 +103,6 @@ fn official_starters_expose_the_expected_descriptions() {
 fn every_starter_requires_only_a_yaml_path() {
     let modules = [
         "api",
-        "mcp",
         "a2a",
         "controller",
         "datafeed",
@@ -147,4 +145,8 @@ fn every_starter_requires_only_a_yaml_path() {
             .is_err());
     }
     assert!(!registry.iter().any(|(name, _)| *name == "logservice"));
+    assert!(!registry.iter().any(|(name, _)| *name == "mcp"));
+    assert!(crate::startup::SigbotCli::build()
+        .try_get_matches_from(["sigbot", "mcp", "-c", "runtime.yaml"])
+        .is_err());
 }

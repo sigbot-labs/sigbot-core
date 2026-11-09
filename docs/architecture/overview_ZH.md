@@ -44,7 +44,7 @@ flowchart LR
     Backtest -. 模拟 Adapter .-> Exchange
 ```
 
-平台面核心服务是 API、Controller 与 Web：三种 API 负责租户绑定、Workflow、Worker
+平台面核心服务是 API、Controller 与 Web：HTTP/A2A API 负责租户绑定、Workflow、Worker
 连接等配置的 CRUD；Controller 负责租户级九个组件的启动、更新、停止与健康恢复。
 认证、用户、权限和成员关系统一由 Authguard 管理，Sigbot 不复制平台 IAM 表。
 
@@ -94,7 +94,7 @@ Workflow 图可配置，但不是任意代码图。Node 只能选择九种已注
 
 | 服务 | 运行作用域 | 规范职责 | 设计 |
 |---|---|---|---|
-| API | 平台共享服务 | 暴露 HTTP、MCP、A2A，负责租户业务绑定、Workflow、Worker 和连接配置 CRUD | [APIServer](engine/apiserver/overview_ZH.md) |
+| API | 平台共享服务 | 暴露 HTTP、A2A，负责租户业务绑定、Workflow、Worker 和连接配置 CRUD | [APIServer](engine/apiserver/overview_ZH.md) |
 | Controller | 平台共享服务 | 为远程 Docker/Kubernetes Worker 调度并管理九个租户数据面组件生命周期 | [Controller](engine/controller/overview_ZH.md) |
 | Web | 平台共享服务 | 以 Authguard 身份访问 API，配置和观察租户 Workflow | [APIServer](engine/apiserver/overview_ZH.md) |
 | Datafeed | 租户/Workflow 动态组件 | 规范化行情与新闻，发布带事件/可得时间的数据 | [Datafeed](engine/datafeed/overview_ZH.md) |
@@ -119,7 +119,7 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 | Exchange | 统一异步交易、账户、市场数据与 Stream 能力，当前目录覆盖 Binance、Hyperliquid、IBKR、Polymarket、Kalshi、Paper 与 Backtest | [Exchange](engine/exchange/overview_ZH.md) |
 | Messager | 与传输无关的异步事件 SDK：All-in-one 模式使用 Local Queue，分布式模式使用 MQTT/EMQX | [Messager](engine/messager/overview_ZH.md) |
 | A2A | 可选的外部 Agent 互操作协议；不能绕过 Pipeline Policy 或直接下单 | [A2A](engine/a2a/overview_ZH.md) |
-| MCP | 可选的 API 暴露和 Evaluator 辅助上下文工具协议；不是规范实时行情源 | [MCP](engine/mcp/overview_ZH.md) |
+| MCP | 由 mcpfather 从 HTTP OpenAPI 独立生成的 API 暴露方式；外部源 MCP 客户端单独保留 | [MCP](engine/mcp/overview_ZH.md) |
 
 ## 命名与扩展规则
 
@@ -133,7 +133,7 @@ Tenant、User、Identity、Membership、Role、Permission、Policy 与逻辑 Nam
 
 | 模块 | Service Root | 主要扩展 Port |
 |---|---|---|
-| APIServer | `SigbotHttpStarter` | 通过 HTTP/A2A/MCP Adapter 暴露 Core Handler/Repository |
+| APIServer | `SigbotHttpStarter` | 通过 HTTP/A2A Adapter 暴露 Core Handler/Repository；MCP 由 mcpfather 独立生成 |
 | Controller | `SigbotControllerStarter` | `WorkerProvider` |
 | Datafeed | `SigbotDatafeedIngestor` | `IDatafeed` |
 | Backtest | `SigbotBacktestServer` | `ReplaySource`、`ReplayDecision`、`IExchange` |

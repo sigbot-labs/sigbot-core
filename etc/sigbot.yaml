@@ -74,7 +74,7 @@ authguard:
   region: global
   read_action: sigbot:read
   write_action: sigbot:write
-  # Required when enabling MCP. Supply the real external authority; no local token issuer is created.
+  # Optional OIDC authority advertised by the A2A Agent Card; no local token issuer is created.
   # oauth: { issuer: "https://your-authority.example", discovery_url: "https://your-authority.example/.well-known/openid-configuration", scopes: [] }
   oauth: null
 
@@ -171,13 +171,6 @@ services:
         public_url: http://127.0.0.1:9003/a2a
         auth_enabled: true
         agents: []
-      mcp:
-        enabled: false
-        name: sigbot-api
-        transport: streamable_http
-        bind_address: 0.0.0.0:9002
-        public_url: http://127.0.0.1:9002/mcp
-        auth_enabled: true
     controller:
       # e.g: export SIGBOT__SERVICES__PLATFORM__CONTROLLER__CRON="0 * * * * *"
       cron: "0 * * * * *"

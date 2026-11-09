@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform plane is the **HTTP/A2A/MCP APIs**, **controller**, and **Web application**. The controller places isolated **backtest**, **datafeed**, **evaluator**, **exporter**, **logger**, **notifier**, **order**, **strategy**, and **wallet** components for each tenant and Workflow on Docker or Kubernetes workers. Exchange and Messager are embedded shared libraries rather than independently deployed services.
+Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform plane is the **HTTP/A2A APIs**, **controller**, and **Web application**. The controller places isolated **backtest**, **datafeed**, **evaluator**, **exporter**, **logger**, **notifier**, **order**, **strategy**, and **wallet** components for each tenant and Workflow on Docker or Kubernetes workers. Exchange and Messager are embedded shared libraries rather than independently deployed services.
 
 ## Features
 
@@ -15,6 +15,8 @@ Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform plane 
 - **Three execution modes**: `live` uses real exchange APIs, `paper` uses a simulated exchange API, and `backtest` uses the isolated historical matching service.
 - **Authoritative financial state**: Order prechecks, Wallet reservations, immutable double-entry journals, rebuildable balances and positions, and venue reconciliation are separated by write ownership.
 - **Traceable evaluation and delivery**: LLM assessments separate facts from inference; logs archive to immutable S3 chunks; Email, Telegram, and in-app notifications retain idempotent delivery state.
+
+MCP exposure is generated from the HTTP OpenAPI schema by [mcpfather](https://github.com/flowgent-labs/mcpfather), deployed independently. Sigbot is a real integration case; see the [generation guide](docs/architecture/engine/mcp/overview.md). The built-in MCP server has been archived.
 
 ## Development
 

@@ -23,7 +23,6 @@ sigbot-core.workspace = true
 sigbot-controller.workspace = true
 sigbot-a2a.workspace = true
 sigbot-http.workspace = true
-sigbot-mcp.workspace = true
 sigbot-messager.workspace = true
 sigbot-datafeed.workspace = true
 sigbot-strategy-runner.workspace = true

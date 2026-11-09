@@ -6,22 +6,20 @@
 > 本文用途：新机器或新编码代理接手时的事实入口。规范设计仍以
 > [`docs/architecture/overview.md`](../architecture/overview.md) 及各领域 Overview 为准。
 
-## 启动配置变更（2026-11-07）
+## 当前入口与 MCP 归档（2026-11-09）
 
-协议发现补充：MCP 在 `src/api/mcp/src/mcp.rs` 复用 SDK RemoteAuthProvider 提供 RFC 9728/RFC 8414 元数据与 401 challenge，启用前必须配置真实 `authguard.oauth` 和 MCP `public_url`。A2A 的协议、Agent Card、Extended Agent Card 和监听已统一到 `src/api/a2a/src/a2a.rs`，`domain/resource.rs` 仅汇聚/分发资源；客户端使用 Card 公布的 A2A-Version。Helm/Compose 的协议环境变量路径已对齐 `services.platform.api`，公共发现 HTTPRoute 与受保护业务路径分离。
+内置 MCP server 已归档到 `.archived/20261109382032_builtin_mcp_server_replaced_by_mcpfather/`，包括最新未提交的 Starter 修改、crate、测试、旧文档以及 manifest/config/deploy 快照；SHA256SUMS 已核验搬移内容。沿用现有 .gitignore，归档仅在本地保存，不会自动入库。活动 workspace 不再构建 sigbot-mcp，CLI/standalone、YAML、Helm/Compose 中均无内置 MCP 服务入口。
 
-2026-11-08 补充：启动目录现为 `startup/api/{http.rs,mcp.rs,a2a.rs}`、根 `standalone.rs` 和 `controller.rs`。数据库收敛为十个 `*_info` 领域主表；HTTP/MCP/A2A 共享同一 CRUD 与 Authguard grants。旧 `connections/workers` 等聚合接口已移除，Workflow DAG 列改为 `dag_config`。详见 [十领域配置与 CRUD](../architecture/domain-model_ZH.md)。旧库的基线 checksum 不能绕过，需要独立升级/导入方案。
+MCP 改由 [mcpfather](../architecture/engine/mcp/overview_ZH.md) 从真实 HTTP OpenAPI 生成并独立部署，这是该项目的 Sigbot 接入案例。当前内置 API 只有 HTTP/A2A，启动目录为 startup/api/{http.rs,a2a.rs}，另有根 standalone.rs/controller.rs；12 个正式模块统一使用 --config/-c。Datafeed 的外部 MCP 客户端和相关 fixture 保留。
 
-所有 13 个模块入口统一为 `SigbotXxxStarter`，启动方式为 `sigbot <module> --config <path>`（简写 `-c`）。REST `api`、`mcp`、`a2a` 独立启动；`logger` 替代 `logservice`，部署前需更新已有 Workflow 节点模块名。平台配置收敛到 `services.platform`，九个租户组件及其共享 Messager/Exchange 基础配置收敛到 `services.component`，旧 base64、组件 Argument 类型及 Provider CLI 参数已移除。Controller 按节点生成配置并通过 K8s ConfigMap / Docker 配置卷交付，规格哈希包含配置内容。具体结构见 [构建与启动说明](../runbooks/build-and-test.md)。本节描述改动，不代表真实远端生命周期已验收。
-
-本次 `make build-rust lint-rust`、Rust 格式检查和 `git diff --check` 均通过（Clippy 保留既有警告）。定向验证：启动 CLI、配置加载、Controller 规划/清单、类型兼容性和 Polymarket 合成 RPC 测试共 28 PASS，真实 K3s 测试 1 ignored。Helm lint 与 API 三进程配置/端口渲染检查通过。统一 runner 的 `structure,deployment` 场景在 Python 依赖安装阶段因 PyPI `httpcore` 下载超时而未执行，不能算作通过。Docker 配置卷上传与 K8s ConfigMap 的真实远端生命周期仍需环境验收。
+A2A 的 Agent Card、Extended Agent Card、协议路由和监听统一在 src/api/a2a/src/a2a.rs；domain/resource.rs 仅聚合/分发资源。Authguard、管理端、Provider 生命周期与九组件编排继续复用已有实现。十领域模型见 [设计说明](../architecture/domain-model_ZH.md)。真实远端生命周期、OIDC 登录和交易 E2E 的历史证据与本轮归档/生成验证分别记录，不混算验收。
 
 ## 1. 先读结论
 
 Sigbot 已经完成从单体/共享守护进程思路向“平台控制面 + 九个租户数据面组件”的主体
 重构。当前正确架构是：
 
-- 平台面：HTTP/A2A/MCP API、独立 Controller、Web。
+- 平台面：HTTP/A2A API（MCP 由 mcpfather 独立生成）、独立 Controller、Web。
 - 数据面：Backtest、Datafeed、Evaluator、Exporter、Logger、Notifier、Order、
   Strategy、Wallet 九个动态组件。
 - 进程内共享库：Messager、Exchange、Core Handler/Repository、Types、Config、Telemetry。
@@ -44,7 +42,7 @@ Browser / external agents
 Authguard Gateway + IAM
         │ verified RequestIdentity
         ▼
-HTTP / A2A / MCP API ──► Core Handler ──► Core Repository ──► control-plane PG
+HTTP / A2A API ──► Core Handler ──► Core Repository ──► control-plane PG
         │                       │
         │ create immutable Run │
         ▼                       ▼
@@ -72,7 +70,7 @@ Deployment。Logger 是九组件之一，不是平台共享守护进程。
 | --- | --- |
 | `src/api/http` | Axum API、Authguard identity、Swagger、DTO 转换 |
 | `src/api/a2a` | A2A 协议 Adapter，不承载领域数据库逻辑 |
-| `src/api/mcp` | MCP 协议 Adapter，不返回硬编码业务成功 |
+| `docs/architecture/engine/mcp` | mcpfather 外部生成接入；旧内置 MCP 实现已归档 |
 | `src/cmd/src/startup` | 进程入口；每个主结构体持有 `SigbotManagementStarter` |
 | `src/cmd/src/startup/internal/management.rs` | 统一 panic hook、Provider context 初始化、APM、管理监听与退出清理；关闭管理端也保留基础初始化 |
 | `src/controller` | 独立 Controller；WorkerPlan、Docker/Kubernetes Provider、中间件调和 |

@@ -42,16 +42,17 @@ impl SigbotHttpStarter {
     pub const COMMAND_NAME: &'static str = "api";
 
     // http://www.network-science.de/ascii/#larry3d,graffiti,doom,basic,drpepper,rounded,roman
+    // http://patorjk.com/software/taag/#p=display&f=Larry+3D&t=API+Server&x=none&v=4&h=4&w=80&we=false
     pub const ASCII_NAME: &'static str = r#"
- ______                  ____
-/\  _  \          __    /\  _`\
-\ \ \L\ \  _____ /\_\   \ \,\L\_\     __   _ __   __  __     __   _ __
- \ \  __ \/\ '__`\/\ \   \/_\__ \   /'__`\/\`'__\/\ \/\ \  /'__`\/\`'__\
-  \ \ \/\ \ \ \L\ \ \ \    /\ \L\ \/\  __/\ \ \/ \ \ \_/ |/\  __/\ \ \/
-   \ \_\ \_\ \ ,__/\ \_\   \ `\____\ \____\\ \_\  \ \___/ \ \____\\ \_\
-    \/_/\/_/\ \ \/  \/_/    \/_____/\/____/ \/_/   \/__/   \/____/ \/_/
-             \ \_\
-              \/_/                                     (Sigbot API Service)
+ ____                __              __        ______  ____    ______     
+/\  _`\   __        /\ \            /\ \__    /\  _  \/\  _`\ /\__  _\    
+\ \,\L\_\/\_\     __\ \ \____    ___\ \ ,_\   \ \ \L\ \ \ \L\ \/_/\ \/    
+ \/_\__ \\/\ \  /'_ `\ \ '__`\  / __`\ \ \/    \ \  __ \ \ ,__/  \ \ \    
+   /\ \L\ \ \ \/\ \L\ \ \ \L\ \/\ \L\ \ \ \_    \ \ \/\ \ \ \/    \_\ \__ 
+   \ `\____\ \_\ \____ \ \_,__/\ \____/\ \__\    \ \_\ \_\ \_\    /\_____\
+    \/_____/\/_/\/___L\ \/___/  \/___/  \/__/     \/_/\/_/\/_/    \/_____/
+                  /\____/                                                 
+                  \_/__/                              (Sigbot API Server)
  "#;
 
     pub fn build() -> Command {
@@ -60,12 +61,10 @@ impl SigbotHttpStarter {
 
     #[tokio::main]
     pub async fn run(matches: &clap::ArgMatches, verbose: bool) {
+        print_banner(verbose, Self::ASCII_NAME, None);
         let service = Self::default();
         let signal_handle = service.management.start().await;
-        print_banner(verbose, Self::ASCII_NAME, None);
-
         Self::startup(matches, verbose, None, None).await;
-
         service
             .management
             .wait(signal_handle)
