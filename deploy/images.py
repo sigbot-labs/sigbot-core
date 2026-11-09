@@ -10,10 +10,10 @@ class ImageCatalog:
     mirror_registry = "registry.cn-shenzhen.aliyuncs.com/wl4g"
     external_images = {
         "RUST_BUILDER_IMAGE": (
-            "docker.io/library/rust:1.94.0-bookworm",
-            "authguard-rust-builder:1.94-bookworm",
+            "docker.io/library/rust:1.99.1-slim",
+            "rust:1.99.1-slim",
         ),
-        "RUNTIME_IMAGE": ("docker.io/library/debian:bookworm-slim", "debian:bookworm"),
+        "RUNTIME_IMAGE": ("docker.io/library/debian:trixie-slim", "debian:trixie-slim"),
         "WEB_NODE_IMAGE": ("docker.io/library/node:22-alpine", "node:22-alpine"),
         "WEB_RUNTIME_IMAGE": (
             "docker.io/nginxinc/nginx-unprivileged:1.27-alpine",

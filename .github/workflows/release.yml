@@ -60,6 +60,7 @@ jobs:
           file: deploy/docker/Dockerfile
           platforms: ${{ matrix.platform }}
           build-args: |
+            RUST_BUILDER_IMAGE=docker.io/library/rust:1.99.1-slim
             BUILD_COMMIT_ID=${{ github.event.pull_request.merge_commit_sha }}
             BUILD_TAG=${{ needs.prepare.outputs.version }}
             SOURCE_DATE_EPOCH=${{ needs.prepare.outputs.epoch }}

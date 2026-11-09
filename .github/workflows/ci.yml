@@ -118,6 +118,7 @@ jobs:
           context: .
           file: deploy/docker/Dockerfile
           build-args: |
+            RUST_BUILDER_IMAGE=docker.io/library/rust:1.99.1-slim
             BUILD_COMMIT_ID=${{ github.event.pull_request.head.sha }}
             BUILD_TAG=${{ steps.tag.outputs.value }}
             SOURCE_DATE_EPOCH=${{ steps.tag.outputs.epoch }}

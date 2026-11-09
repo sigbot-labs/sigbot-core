@@ -1,6 +1,6 @@
 # Rust Coding Specification
 
-[中文](coding_specification_ZH.md) · [Documentation index](../../index.md)
+[中文](coding_specification_CN.md) · [Documentation index](../../index.md)
 
 **Status:** Normative engineering specification.
 
@@ -173,13 +173,13 @@ impl Wallet {
 }
 ```
 
-| Scenario | Preferred mechanism | Required reasoning |
-|---|---|---|
-| Shared immutable data | `Arc<T>` | `T` still satisfies thread-safety bounds |
-| Small shared mutable state | `Arc<Mutex<T>>` | One critical section covers the invariant |
-| Read-heavy shared state | `Arc<RwLock<T>>` | Writer starvation and guard duration are evaluated |
-| Independent counter or flag | `Atomic*` | Memory ordering and compound operations are explicit |
-| Ownership transfer between tasks | Channel | One task owns mutation and handles closure/backpressure |
+| Scenario                            | Preferred mechanism                    | Required reasoning                                              |
+| ----------------------------------- | -------------------------------------- | --------------------------------------------------------------- |
+| Shared immutable data               | `Arc<T>`                               | `T` still satisfies thread-safety bounds                        |
+| Small shared mutable state          | `Arc<Mutex<T>>`                        | One critical section covers the invariant                       |
+| Read-heavy shared state             | `Arc<RwLock<T>>`                       | Writer starvation and guard duration are evaluated              |
+| Independent counter or flag         | `Atomic*`                              | Memory ordering and compound operations are explicit            |
+| Ownership transfer between tasks    | Channel                                | One task owns mutation and handles closure/backpressure         |
 | Cross-instance business consistency | Database transaction + idempotency key | Process-local locks are not treated as distributed transactions |
 
 ### What the Compiler Cannot Prove

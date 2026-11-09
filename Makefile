@@ -35,16 +35,6 @@ export CARGO_BUILD_JOBS := $(BUILD_JOBS)
 export CARGO_INCREMENTAL ?= 0
 export CARGO_PROFILE_DEV_DEBUG ?= 0
 export CARGO_PROFILE_TEST_DEBUG ?= 0
-# Keep the SDK paired with the selected Xcode toolchain; xcrun can otherwise
-# resolve a newer Command Line Tools SDK that the selected linker cannot read.
-ifeq ($(shell uname -s),Darwin)
-ifeq ($(origin SDKROOT),undefined)
-XCODE_SDK := $(shell developer_dir=$$(xcode-select -p 2>/dev/null); sdk="$$developer_dir/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"; if [ -d "$$sdk" ]; then printf '%s' "$$sdk"; fi)
-ifneq ($(XCODE_SDK),)
-export SDKROOT := $(XCODE_SDK)
-endif
-endif
-endif
 BUILD_PROXY := $(or $(HTTPS_PROXY),$(https_proxy),$(HTTP_PROXY),$(http_proxy))
 PROXY_ARGS = $(if $(BUILD_PROXY),--network=host --build-arg HTTPS_PROXY='$(BUILD_PROXY)' --build-arg HTTP_PROXY='$(BUILD_PROXY)',)
 IMAGE_SETUP = eval "$$($(PYTHON) deploy/images.py --source '$(IMAGE_SOURCE)' --version '$(VERSION)')"

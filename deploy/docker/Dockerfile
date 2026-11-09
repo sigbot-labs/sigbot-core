@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 #
-# Copyleft (c) 2024 James Wong. This file is part of James Wong.
+# Copyright (c) 2027 James Wong. This file is part of James Wong.
 # is free software: you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the
 # Free Software Foundation, either version 3 of the License, or
@@ -22,8 +22,8 @@
 #####################################################
 ### STAGE 1: Build Base with System Dependencies  ###
 #####################################################
-ARG RUST_BUILDER_IMAGE=docker.io/library/rust:1.94.0-bookworm
-ARG RUNTIME_IMAGE=docker.io/library/debian:bookworm-slim
+ARG RUST_BUILDER_IMAGE=registry.cn-shenzhen.aliyuncs.com/wl4g/rust:1.99.1-slim
+ARG RUNTIME_IMAGE=debian:trixie-slim
 FROM ${RUST_BUILDER_IMAGE} AS base
 
 ARG BUILD_MIRROR_URL=http://deb.debian.org
@@ -36,12 +36,14 @@ ENV CARGO_BUILD_JOBS=${BUILD_JOBS} CARGO_INCREMENTAL=0
 #   Alibaba Cloud Internal: http://mirrors.cloud.aliyuncs.com
 #   Alibaba Cloud External: http://mirrors.aliyun.com
 #
-RUN rm -f /etc/apt/sources.list.d/debian.sources && \
-    echo "deb ${BUILD_MIRROR_URL}/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
-    echo "deb ${BUILD_MIRROR_URL}/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
-    echo "deb ${BUILD_MIRROR_URL}/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+RUN . /etc/os-release && \
+    rm -f /etc/apt/sources.list.d/debian.sources && \
+    echo "deb ${BUILD_MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb ${BUILD_MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb ${BUILD_MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
+        build-essential \
         pkg-config \
         cmake \
         libssl-dev \
@@ -160,19 +162,20 @@ LABEL maintainer="${PROJECT_MAINTAINER}" \
       build.deps.mirror.url=${BUILD_MIRROR_URL}
 
 # Install runtime dependencies
-RUN rm -f /etc/apt/sources.list.d/debian.sources && \
-    echo "deb ${BUILD_MIRROR_URL}/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
-    echo "deb ${BUILD_MIRROR_URL}/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
-    echo "deb ${BUILD_MIRROR_URL}/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+RUN . /etc/os-release && \
+    rm -f /etc/apt/sources.list.d/debian.sources && \
+    echo "deb ${BUILD_MIRROR_URL}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb ${BUILD_MIRROR_URL}/debian-security ${VERSION_CODENAME}-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb ${BUILD_MIRROR_URL}/debian ${VERSION_CODENAME}-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         tini \
-        libssl3 \
+        libssl3t64 \
         ca-certificates \
         postgresql-client \
         python3 \
         python3-pip \
-        libpython3.11 \
+        libpython3.13 \
         && \
     pip3 install --no-cache-dir --break-system-packages \
         polars \
