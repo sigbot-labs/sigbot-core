@@ -1,0 +1,162 @@
+name: Pull Request
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+concurrency:
+  group: sigbot-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  CARGO_BUILD_JOBS: 2
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_INCREMENTAL: 0
+  IN_CN_GFW: 'false'
+  IMAGE_SOURCE: global
+jobs:
+  verify:
+    name: Build and test all modules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config cmake libssl-dev libcurl4-openssl-dev python3-dev
+      - name: Build every module
+        id: build
+        run: make build
+      - name: Report build result
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGBOT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIGBOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SIGBOT_COMMENT_PHASE: build
+          SIGBOT_RESULTS: ${{ toJSON(steps) }}
+          SIGBOT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .github/scripts/upsert-pr-status-comment.mjs
+      - name: Check format and lint
+        id: quality
+        run: make fmt lint
+      - name: Install Chromium
+        run: cd web && npx playwright install --with-deps chromium
+      - name: Run all module unit tests and real UI screenshots
+        id: test
+        run: make test
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-evidence
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+      - name: Report test result
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGBOT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIGBOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SIGBOT_COMMENT_PHASE: test
+          SIGBOT_RESULTS: ${{ toJSON(steps) }}
+          SIGBOT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .github/scripts/upsert-pr-status-comment.mjs
+  dirty-images:
+    name: Build PR dirty images
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Derive dirty tag
+        id: tag
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "value=dirty-${HEAD_SHA:0:8}" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build dirty runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: |
+            RUST_BUILDER_IMAGE=docker.io/library/rust:1.99.1-slim
+            BUILD_COMMIT_ID=${{ github.event.pull_request.head.sha }}
+            BUILD_TAG=${{ steps.tag.outputs.value }}
+            SOURCE_DATE_EPOCH=${{ steps.tag.outputs.epoch }}
+          push: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          tags: ghcr.io/${{ github.repository_owner }}/sigbot:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=sigbot-runtime-amd64
+          cache-to: type=gha,mode=max,scope=sigbot-runtime-amd64,ignore-error=true
+      - name: Build dirty web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/deploy/Dockerfile
+          push: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          tags: ghcr.io/${{ github.repository_owner }}/sigbot-web:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=sigbot-web-amd64
+          cache-to: type=gha,mode=max,scope=sigbot-web-amd64,ignore-error=true
+  report:
+    name: Report all PR stages
+    needs: [verify, dirty-images]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Update the persistent PR comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGBOT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIGBOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SIGBOT_COMMENT_PHASE: completed
+          SIGBOT_RESULTS: ${{ toJSON(needs) }}
+          SIGBOT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .github/scripts/upsert-pr-status-comment.mjs

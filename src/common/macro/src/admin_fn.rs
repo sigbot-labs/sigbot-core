@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -20,12 +20,23 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse_macro_input;
 use syn::spanned::Spanned;
-use syn::{
-    parse_macro_input, Attribute, AttributeArgs, Ident, ItemFn, Signature, Type, TypePath, TypeReference, Visibility,
-};
+use syn::Attribute;
+use syn::AttributeArgs;
+use syn::Ident;
+use syn::ItemFn;
+use syn::Signature;
+use syn::Type;
+use syn::TypePath;
+use syn::TypeReference;
+use syn::Visibility;
 
-use crate::utils::{extract_arg_map, extract_input_types, get_ident};
+use crate::utils::extract_arg_map;
+
+use crate::utils::extract_input_types;
+
+use crate::utils::get_ident;
 
 /// Internal util macro to early return on error.
 macro_rules! ok {

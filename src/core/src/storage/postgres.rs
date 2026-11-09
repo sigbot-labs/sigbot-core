@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
+//
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
+// is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// James Wong is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
+//
+// IMPORTANT: Any software that fully or partially contains or uses materials
+// covered by this license must also be released under the GNU GPL license.
+// This includes modifications and derived works.
+
+use crate::config::config::PostgresStorageProperties;
+use anyhow::Error;
+use common_telemetry::info;
+use sqlx::postgres::PgConnectOptions;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::PgSslMode;
+use sqlx::PgPool;
+use std::any::Any;
+use std::marker::PhantomData;
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+struct PostgresPoolManager {
+    pool: Arc<PgPool>,
+}
+
+static POOL_MANAGER: OnceCell<Arc<PostgresPoolManager>> = OnceCell::const_new();
+
+impl PostgresPoolManager {
+    async fn init(config: &PostgresStorageProperties) -> Result<Arc<Self>, Error> {
+        let min = config.min_connections.unwrap_or(1);
+        let max = config.max_connections.unwrap_or(10);
+        anyhow::ensure!(max > 0 && min <= max, "invalid PostgreSQL pool bounds");
+        let options = if config.url.as_deref().is_some_and(|url| !url.trim().is_empty()) {
+            PgConnectOptions::from_str(&config.connection_url()?)?
+        } else {
+            PgConnectOptions::new()
+                .host(&config.host)
+                .port(config.port)
+                .username(&config.username)
+                .password(config.password.as_deref().unwrap_or(""))
+                .database(&config.database)
+        }
+        .options([("search_path", config.schema.as_str())])
+        .ssl_mode(if config.use_ssl {
+            PgSslMode::Require
+        } else {
+            PgSslMode::Disable
+        });
+        let pool = PgPoolOptions::new()
+            .min_connections(min)
+            .max_connections(max)
+            .connect_with(options)
+            .await
+            .map_err(|_| Error::msg("configured PostgreSQL connection failed"))?;
+        // DDL has one owner: migration/migrate.py. Application
+        // credentials need DML only and must never create a database or schema.
+        let ready: bool = sqlx::query_scalar("SELECT to_regclass('mig_version') IS NOT NULL AND to_regclass('workflow_info') IS NOT NULL AND to_regclass('wf_run') IS NOT NULL")
+            .fetch_one(&pool).await?;
+        anyhow::ensure!(
+            ready,
+            "PostgreSQL schema is not migrated; run migration/migrate.py before startup"
+        );
+        info!("Connected to the migrated PostgreSQL schema");
+        Ok(Arc::new(PostgresPoolManager { pool: Arc::new(pool) }))
+    }
+}
+
+pub struct PostgresRepository<T: Any + Send + Sync> {
+    phantom: PhantomData<T>,
+    pool: Arc<PgPool>,
+}
+
+impl<T: Any + Send + Sync> PostgresRepository<T> {
+    /// Reuse an already configured pool for a transactional domain repository.
+    pub fn from_pool(pool: PgPool) -> Self {
+        Self {
+            phantom: PhantomData,
+            pool: Arc::new(pool),
+        }
+    }
+
+    pub async fn get_or_init(config: &PostgresStorageProperties) -> Result<Self, Error> {
+        let config = config.clone();
+        let manager = POOL_MANAGER
+            .get_or_try_init(|| async move { PostgresPoolManager::init(&config).await })
+            .await?;
+        Ok(PostgresRepository {
+            phantom: PhantomData,
+            pool: manager.pool.clone(),
+        })
+    }
+
+    pub fn get_pool(&self) -> &PgPool {
+        &self.pool
+    }
+}
+
+#[macro_export]
+macro_rules! dynamic_postgres_query {
+    ($bean:expr, $table:expr, $pool:expr, $order_by:expr, $page:expr, $($t:ty),+) => {
+        {
+            use chrono::DateTime;
+            use chrono::Utc;
+            use sigbot_utils::types::GenericValue;
+            // Notice:
+            // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+            // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+            // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+            let serialized = serde_json::to_value(&$bean).unwrap();
+            let obj = serialized.as_object().unwrap();
+            let mut fields = Vec::new();
+            let mut params = Vec::new();
+            for (key, value) in obj {
+                let param = match value {
+                    serde_json::Value::String(value) if !value.is_empty() => {
+                        if key == "created_at" || key == "updated_at" {
+                            GenericValue::DateTime(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+                        } else { GenericValue::String(value.clone()) }
+                    }
+                    serde_json::Value::Number(value) => {
+                        if let Some(value) = value.as_i64() { GenericValue::Int64(value) }
+                        else if let Some(value) = value.as_f64() { GenericValue::Float64(value) }
+                        else { continue; }
+                    }
+                    serde_json::Value::Bool(value) => GenericValue::Bool(*value),
+                    _ => continue,
+                };
+                fields.push(format!("{} = ${}", key, params.len() + 1));
+                params.push(param);
+            }
+            let where_clause = if fields.is_empty() {
+                "1=1".to_string()
+            } else {
+                fields.join(" AND ")
+            };
+            // Queries to get total count.
+            let total_query = format!("SELECT COUNT(1) FROM {} WHERE {} AND del_flag = 0", $table, where_clause);
+            use sqlx::Row;
+            let mut total_operator = sqlx::query(&total_query);
+            for param in params.iter() {
+                if let GenericValue::Bool(v) = param {
+                    total_operator = total_operator.bind(v);
+                } else if let GenericValue::Int64(v) = param {
+                    total_operator = total_operator.bind(v);
+                } else if let GenericValue::Float64(v) = param {
+                    total_operator = total_operator.bind(v);
+                } else if let GenericValue::String(v) = param {
+                    total_operator = total_operator.bind(v);
+                } else if let GenericValue::DateTime(v) = param {
+                    total_operator = total_operator.bind(v);
+                }
+            }
+            let total_count = total_operator.fetch_one($pool).await?.get::<i64, _>(0);
+
+            // Queries to get data.
+            let query = format!("SELECT * FROM {} WHERE {} AND del_flag = 0 ORDER BY {} LIMIT {} OFFSET {}",
+                  $table, where_clause, $order_by, $page.get_limit(), $page.get_offset());
+            let mut operator = sqlx::query_as::<_, $($t),+>(&query);
+            for param in params.iter() {
+                if let GenericValue::Bool(v) = param {
+                    operator = operator.bind(v);
+                } else if let GenericValue::Int64(v) = param {
+                    operator = operator.bind(v);
+                } else if let GenericValue::Float64(v) = param {
+                    operator = operator.bind(v);
+                } else if let GenericValue::String(v) = param {
+                    operator = operator.bind(v);
+                } else if let GenericValue::DateTime(v) = param {
+                    operator = operator.bind(v);
+                }
+            }
+            match operator.fetch_all($pool).await {
+                std::result::Result::Ok(result) => {
+                    let p = PageResponse::new(
+                      Some(total_count),
+                      Some($page.get_offset()),
+                      Some($page.get_limit()));
+                    Ok((p, result))
+                },
+                Err(error) => {
+                    Err(error.into())
+                }
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! dynamic_postgres_upsert {
+    ($bean:expr, $table:expr, $pool:expr) => {{
+        use chrono::DateTime;
+        use chrono::Utc;
+        use sigbot_utils::types::GenericValue;
+
+        let insert_by = $bean.base.created_by.clone();
+
+        // Notice:
+        // 1. (SQLite/Postgres) Because the ORM library is not used for the time being, the fields are dynamically
+        // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+        // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+        let supplied_id = $bean.base.id;
+        $bean.base.pre_insert(insert_by).await;
+        if supplied_id.is_some() {
+            $bean.base.id = supplied_id;
+        }
+
+        let serialized = serde_json::to_value($bean).unwrap();
+        let obj = serialized.as_object().unwrap();
+
+        let mut fields = Vec::new();
+        let mut values = Vec::new();
+        let mut params = Vec::new();
+        for (key, value) in obj {
+            if !value.is_null() {
+                if value.is_boolean() {
+                    let v = value.as_bool().unwrap();
+                    fields.push(key.as_str());
+                    values.push("?");
+                    params.push(GenericValue::Bool(v));
+                } else if value.is_number() {
+                    if value.is_i64() {
+                        let v = value.as_i64().unwrap();
+                        fields.push(key.as_str());
+                        values.push("?");
+                        params.push(GenericValue::Int64(v));
+                    } else if value.is_f64() {
+                        let v = value.as_f64().unwrap();
+                        fields.push(key.as_str());
+                        values.push("?");
+                        params.push(GenericValue::Float64(v));
+                    }
+                } else if value.is_string() {
+                    let v = value.as_str().unwrap_or("");
+                    if !v.is_empty() {
+                        fields.push(key.as_str());
+                        values.push("?");
+                        if key == "created_at" || key == "updated_at" {
+                            let dt = DateTime::parse_from_rfc3339(v)?;
+                            params.push(GenericValue::DateTime(dt.with_timezone(&Utc)));
+                        } else {
+                            params.push(GenericValue::String(v.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+        if fields.is_empty() {
+            return Ok(-1);
+        }
+
+        // e.g. INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING id.
+        let query = format!(
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {} RETURNING id",
+            $table,
+            fields.join(","),
+            values.join(","),
+            "updated_at = CURRENT_TIMESTAMP(13)"
+        );
+
+        let mut operator = sqlx::query(&query);
+        for param in params.iter() {
+            if let GenericValue::Bool(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Int64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Float64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::String(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::DateTime(v) = param {
+                operator = operator.bind(v);
+            }
+        }
+
+        match operator.fetch_one($pool).await {
+            std::result::Result::Ok(row) => {
+                use sqlx::Row;
+                let upserted_id: i64 = row.get("id");
+                Ok(upserted_id)
+            }
+            Err(e) => Err(Error::from(e)),
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! dynamic_postgres_update {
+    ($bean:expr, $table:expr, $pool:expr) => {{
+        use sigbot_utils::types::GenericValue;
+
+        let updated_by = $bean.base.updated_by.clone();
+        $bean.base.pre_update(updated_by).await;
+
+        // Notice:
+        // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+        // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+        // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+        let id = $bean.base.id.unwrap();
+        let serialized = serde_json::to_value($bean).unwrap();
+        let obj = serialized.as_object().unwrap();
+
+        let mut fields = Vec::new();
+        let mut params = Vec::new();
+        for (key, value) in obj {
+            if !value.is_null() {
+                if value.is_boolean() {
+                    let v = value.as_bool().unwrap();
+                    fields.push(format!("{} = ?", key));
+                    params.push(GenericValue::Bool(v));
+                } else if value.is_number() {
+                    let v = value.as_i64().unwrap();
+                    fields.push(format!("{} = ?", key));
+                    params.push(GenericValue::Int64(v));
+                } else if value.is_string() {
+                    let v = value.as_str().unwrap_or("");
+                    if !v.is_empty() {
+                        fields.push(format!("{} = ?", key));
+                        params.push(GenericValue::String(v.to_string()));
+                    }
+                }
+            }
+        }
+        if fields.is_empty() {
+            return Ok(0);
+        }
+
+        let query = format!("UPDATE {} SET {} WHERE id = ?", $table, fields.join(", "));
+        let mut operator = sqlx::query(&query);
+        for param in params.iter() {
+            if let GenericValue::Bool(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Int64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::String(v) = param {
+                operator = operator.bind(v);
+            }
+        }
+        operator = operator.bind(id);
+
+        match operator.execute($pool).await {
+            std::result::Result::Ok(result) => {
+                if result.rows_affected() > 0 {
+                    return Ok(id);
+                } else {
+                    return Ok(-1);
+                }
+            }
+            Err(e) => Err(Error::from(e)),
+        }
+    }};
+}

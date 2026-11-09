@@ -1,0 +1,22 @@
+{{- if and .Values.sigbot.monitoring.enabled .Values.sigbot.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sigbot.fullname" . }}
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    {{- with .Values.sigbot.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames: [{{ .Release.Namespace }}]
+  selector:
+    matchLabels:
+      sigbot.io/metrics: "true"
+  endpoints:
+    - port: management
+      path: /metrics
+      interval: {{ .Values.sigbot.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.sigbot.monitoring.serviceMonitor.scrapeTimeout }}
+{{- end }}

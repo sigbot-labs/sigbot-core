@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,17 +19,20 @@
 // This includes modifications and derived works.
 
 use proc_macro::TokenStream;
-use quote::{ quote, quote_spanned };
+use quote::quote;
+use quote::quote_spanned;
 use syn::parse::Parser;
+use syn::parse_macro_input;
 use syn::spanned::Spanned;
-use syn::{ parse_macro_input, DeriveInput, ItemStruct };
+use syn::DeriveInput;
+use syn::ItemStruct;
 
 pub(crate) fn impl_aggr_func_type_store(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let gen =
-        quote! {
+    let gen = quote! {
         use common_query::logical_plan::accumulator::AggrFuncTypeStore;
-        use common_query::error::{InvalidInputStateSnafu, Error as QueryError};
+        use common_query::error::InvalidInputStateSnafu;
+        use common_query::error::Error as QueryError;
         use datatypes::prelude::ConcreteDataType;
 
         impl AggrFuncTypeStore for #name {
@@ -57,11 +60,9 @@ pub(crate) fn impl_aggr_func_type_store(ast: &DeriveInput) -> TokenStream {
 pub(crate) fn impl_as_aggr_func_creator(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_struct = parse_macro_input!(input as ItemStruct);
     if let syn::Fields::Named(ref mut fields) = item_struct.fields {
-        let result = syn::Field::parse_named.parse2(
-            quote! {
+        let result = syn::Field::parse_named.parse2(quote! {
             input_types: arc_swap::ArcSwapOption<Vec<ConcreteDataType>>
-        }
-        );
+        });
         match result {
             Ok(field) => fields.named.push(field),
             Err(e) => {
@@ -73,9 +74,11 @@ pub(crate) fn impl_as_aggr_func_creator(_args: TokenStream, input: TokenStream) 
             item_struct.fields.span() => compile_error!(
                 "This attribute macro needs to add fields to the its annotated struct, \
                 so the struct must have \"{}\".")
-        ).into();
+        )
+        .into();
     }
     (quote! {
         #item_struct
-    }).into()
+    })
+    .into()
 }

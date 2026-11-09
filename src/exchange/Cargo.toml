@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+common-context.workspace = true
 # Other modules dependencies.
 common-telemetry.workspace = true
 common-makestruct.workspace = true
@@ -27,7 +28,36 @@ rust_decimal.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 chrono.workspace = true
 base64.workspace = true
+sha2.workspace = true
+hex.workspace = true
+futures.workspace = true
+openssl.workspace = true
+time = { version = "0.3.47", features = ["parsing", "macros"] }
+time-tz = "2.0.0"
+# Official Polymarket SDK and mature IBKR TWS/Gateway SDK; fixed releases.
+polymarket_client_sdk_v2 = { version = "=0.8.0", default-features = false, features = ["clob"] }
+ibapi = { version = "=5.4.0", default-features = false, features = ["async"] }
+alloy = { version = "=1.6.3", default-features = false, features = ["sol-types", "signer-local", "provider-http", "rpc-types", "reqwest-rustls-tls"] }
 # see:https://crates.io/crates/binance-sdk
 binance-sdk = { version = "33.0.0", features = ["derivatives_trading_usds_futures", "spot"] }
 # see:https://crates.io/crates/hyperliquid_rust_sdk
 hyperliquid_rust_sdk = "0.6.0"
+
+[[test]]
+name = "prepared_payload"
+path = "tests/execution/prepared_test.rs"
+
+[[test]]
+name = "live_sdk"
+path = "tests/execution/live_sdk_test.rs"
+
+[[test]]
+name = "polymarket_settlement"
+path = "tests/polymarket/settlement_test.rs"
+
+[[test]]
+name = "public_market"
+path = "tests/market/market_test.rs"
+
+[dev-dependencies]
+axum.workspace = true

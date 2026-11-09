@@ -1,0 +1,25 @@
+endpoints:
+  twitter: http://127.0.0.1:18481
+  truthsocial: http://127.0.0.1:18482
+  openai: http://127.0.0.1:18483
+  api: http://127.0.0.1:19480
+  web: http://127.0.0.1:15173
+  kafka: 127.0.0.1:19092
+scope: {env: e2e, tenant_id: 0192f7b2-5c00-7000-8000-000000000001}
+workflow_id: 0192f7b2-5c00-7000-8000-000000000002
+account_id: 0192f7b2-5c00-7000-8000-000000000003
+wallet_id: 0192f7b2-5c00-7000-8000-000000000004
+token_env: MARKETPULSE_MOCK_TOKEN
+database_url_env: MARKETPULSE_DATABASE_URL
+mqtt: {host: 127.0.0.1, port: 18883, username_env: MARKETPULSE_MQTT_USERNAME, password_env: MARKETPULSE_MQTT_PASSWORD, signing_key_env: MARKETPULSE_MQTT_SIGNING_KEY}
+log_archive:
+  endpoint: http://127.0.0.1:19000
+  bucket: sigbot-marketpulse-logs
+  region: us-east-1
+  access_key_env: MARKETPULSE_MINIO_ACCESS_KEY
+  secret_key_env: MARKETPULSE_MINIO_SECRET_KEY
+workflow:
+  run_id_env: MARKETPULSE_WORKFLOW_RUN_ID
+  # Runtime launches the existing product CLI against the isolated case database.
+  # Pipeline injects only external mock news and reads broker/database evidence.
+  minimum_posts: 1

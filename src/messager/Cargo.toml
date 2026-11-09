@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "sigbot-messager"
 version.workspace = true
 edition.workspace = true
@@ -8,10 +9,9 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+common-context.workspace = true
 # Other modules dependencies.
 common-telemetry.workspace = true
-common-makestruct.workspace = true
-sigbot-utils.workspace = true
 sigbot-types.workspace = true
 sigbot-core.workspace = true
 
@@ -24,3 +24,19 @@ clap.workspace = true
 # see:https://crates.io/crates/mqtt-endpoint-tokio
 #mqtt-endpoint-tokio = "0.6"
 rumqttc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }
+
+[[test]]
+name = "postgres_replay"
+path = "tests/messager_test.rs"
+
+[[test]]
+name = "reply_pairing"
+path = "tests/reply_pairing_test.rs"
+
+[[test]]
+name = "subscription_lifecycle"
+path = "tests/subscription_lifecycle_test.rs"

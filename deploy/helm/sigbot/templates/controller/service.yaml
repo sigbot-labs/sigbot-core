@@ -1,0 +1,15 @@
+{{- if .Values.sigbot.controller.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-controller
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: controller
+    sigbot.io/metrics: "true"
+spec:
+  ports: [{name: management, port: 9001, targetPort: management}]
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    sigbot.io/component: controller
+{{- end }}

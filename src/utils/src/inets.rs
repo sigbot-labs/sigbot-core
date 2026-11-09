@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,7 +19,8 @@
 // This includes modifications and derived works.
 
 use local_ip_address::local_ip;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
 
 pub fn get_local_non_loopback_ip_str() -> String {
     get_local_non_loopback_ip().map(|ip| ip.to_string()).unwrap_or_default()

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,9 +19,11 @@
 // This includes modifications and derived works.
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use sqlx::types::Uuid;
-use std::{collections::HashMap, sync::Arc};
+use serde::Deserialize;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 pub struct HttpThreatSampleRecord {
@@ -70,7 +72,7 @@ impl KnowledgeUploadInfo {
         created_by: Option<String>,
     ) -> Arc<Self> {
         Arc::new(KnowledgeUploadInfo {
-            id: Uuid::new_v4().to_string().replace("-", ""),
+            id: Uuid::now_v7().simple().to_string(),
             name,
             labels,
             extension,

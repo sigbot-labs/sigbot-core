@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,9 @@ use tokio::sync::RwLock;
 ///
 /// # Example
 /// ```rust
-/// use sigbot_utils::maps::ConcurrentHashMap;
+/// # #[tokio::main]
+/// # async fn main() {
+/// use sigbot_utils::rwlock_maps::ConcurrentHashMap;
 ///
 /// let map = ConcurrentHashMap::<String, String>::new();
 ///
@@ -41,6 +43,7 @@ use tokio::sync::RwLock;
 ///         None => Some("new_value".to_string()),
 ///     }
 /// }).await;
+/// # }
 /// ```
 pub struct ConcurrentHashMap<K, V> {
     inner: Arc<RwLock<HashMap<K, V>>>,
@@ -70,11 +73,15 @@ where
     ///
     /// # Example
     /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// # let map = sigbot_utils::rwlock_maps::ConcurrentHashMap::<String, String>::new();
     /// // Similar to: map.computeIfPresent(key, (k, v) -> { ... insert into ... on conflict ... })
     /// map.compute_if_present("key".to_string(), |old_value| async move {
     ///     // Perform database-like INSERT ... ON CONFLICT logic
     ///     Some(format!("updated_{}", old_value))
     /// }).await;
+    /// # }
     /// ```
     pub async fn compute_if_present<F, Fut>(&self, key: K, creating_fn: F) -> Option<V>
     where
@@ -111,12 +118,16 @@ where
     ///
     /// # Example
     /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// # let map = sigbot_utils::rwlock_maps::ConcurrentHashMap::<String, String>::new();
     /// map.compute("key".to_string(), |old_value| async move {
     ///     match old_value {
     ///         Some(v) => Some(format!("updated_{}", v)),
     ///         None => Some("new_value".to_string()),
     ///     }
     /// }).await;
+    /// # }
     /// ```
     pub async fn compute<F, Fut>(&self, key: K, creating_fn: F) -> Option<V>
     where
@@ -208,11 +219,11 @@ pub mod tests {
         assert_eq!(map.get(&"key".to_string()).await.unwrap(), "value".to_string());
         assert_eq!(map.remove(&"key".to_string()).await.unwrap(), "value".to_string());
         assert_eq!(map.get(&"key".to_string()).await, None);
-        assert_eq!(map.contains_key(&"key".to_string()).await, false);
+        assert!(!map.contains_key(&"key".to_string()).await);
         assert_eq!(map.len().await, 0);
-        assert_eq!(map.is_empty().await, true);
+        assert!(map.is_empty().await);
         map.clear().await;
         assert_eq!(map.len().await, 0);
-        assert_eq!(map.is_empty().await, true);
+        assert!(map.is_empty().await);
     }
 }

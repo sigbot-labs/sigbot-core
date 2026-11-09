@@ -1,0 +1,131 @@
+services:
+  web:
+    image: ${SIGBOT_WEB_IMAGE:?select the image catalog}
+    build:
+      context: ../../../..
+      dockerfile: web/deploy/Dockerfile
+      network: host
+      args:
+        NODE_IMAGE: ${WEB_NODE_IMAGE:?select the image catalog}
+        WEB_IMAGE: ${WEB_RUNTIME_IMAGE:?select the image catalog}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+    ports: [127.0.0.1:15173:8080]
+    mem_limit: 128m
+    cpus: '0.5'
+    healthcheck:
+      test: [CMD, wget, -q, -O-, http://127.0.0.1:8080/healthz]
+      interval: 5s
+      retries: 15
+  minio:
+    image: ${MARKETPULSE_MINIO_IMAGE:?select the image catalog}
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MARKETPULSE_MINIO_ACCESS_KEY:?required}
+      MINIO_ROOT_PASSWORD: ${MARKETPULSE_MINIO_SECRET_KEY:?required}
+    ports:
+    - 127.0.0.1:19000:9000
+    volumes:
+    - minio-data:/data
+    mem_limit: 512m
+    cpus: '0.5'
+  mock-twitter:
+    extends:
+      file: mock-twitter-service/docker-compose.yaml
+      service: mock-twitter
+    build:
+      context: ..
+      dockerfile: deploy/mock-twitter-service/Dockerfile
+      network: host
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?select the image catalog}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+  mock-truthsocial:
+    extends:
+      file: mock-truthsocial-service/docker-compose.yaml
+      service: mock-truthsocial
+    build:
+      context: ..
+      dockerfile: deploy/mock-truthsocial-service/Dockerfile
+      network: host
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?select the image catalog}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+  mock-openai:
+    extends:
+      file: mock-openai-service/docker-compose.yaml
+      service: mock-openai
+    build:
+      context: ..
+      dockerfile: deploy/mock-openai-service/Dockerfile
+      network: host
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?select the image catalog}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+  postgres:
+    image: ${MARKETPULSE_POSTGRES_IMAGE:?select the image catalog}
+    environment:
+      POSTGRES_USER: sigbot
+      POSTGRES_DB: sigbot
+      POSTGRES_PASSWORD: ${MARKETPULSE_POSTGRES_PASSWORD:?required}
+      PGDATA: /home/postgres/pgdata/data/pgdata
+      TIMESCALEDB_TELEMETRY: 'off'
+      TS_TUNE_MEMORY: 1GB
+      TS_TUNE_NUM_CPUS: '1'
+      # One real workflow starts independent pools for every isolated component.
+      # Keep enough server slots for restart/replay verification and verifier probes.
+      TS_TUNE_MAX_CONNS: '120'
+    ports:
+    - 127.0.0.1:${MARKETPULSE_POSTGRES_PORT:-15439}:5432
+    volumes:
+    # A new volume is intentional; never repoint the old plain-PG volume at this image.
+    - postgres-extensions-data:/home/postgres/pgdata/data
+    - ../../../../deploy/helm/sigbot/bootstrap/postgres-extensions.sql:/docker-entrypoint-initdb.d/20-sigbot-extensions.sql:ro
+    mem_limit: 1g
+    cpus: '1'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U sigbot -d sigbot
+      interval: 5s
+      retries: 20
+  kafka:
+    extends:
+      file: kafka/docker-compose.yaml
+      service: kafka
+  emqx:
+    image: ${MARKETPULSE_EMQX_IMAGE:?select the image catalog}
+    environment:
+      EMQX_NODE__NAME: emqx@127.0.0.1
+      EMQX_DURABLE_SESSIONS__ENABLE: 'true'
+      EMQX_DURABLE_SESSIONS__MESSAGE_RETENTION_PERIOD: 7d
+      EMQX_MQTT__SESSION_EXPIRY_INTERVAL: 7d
+      EMQX_AUTHENTICATION__1__MECHANISM: jwt
+      EMQX_AUTHENTICATION__1__USE_JWKS: 'false'
+      EMQX_AUTHENTICATION__1__ALGORITHM: hmac-based
+      EMQX_AUTHENTICATION__1__FROM: password
+      EMQX_AUTHENTICATION__1__SECRET: ${MARKETPULSE_MQTT_SIGNING_KEY:?required}
+      EMQX_AUTHENTICATION__1__VERIFY_CLAIMS: '{"username":"$${username}"}'
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+    ports:
+    - 127.0.0.1:18883:1883
+    volumes:
+    - emqx-data:/opt/emqx/data
+    mem_limit: 512m
+    cpus: '1'
+    healthcheck:
+      test:
+      - CMD
+      - emqx
+      - ctl
+      - status
+      interval: 10s
+      retries: 15
+volumes:
+  minio-data: {}
+  postgres-extensions-data:
+    name: sigbot-marketpulse-postgres-ha-pg16-v1
+  emqx-data: {}

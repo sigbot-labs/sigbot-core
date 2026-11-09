@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,9 +19,11 @@
 // This includes modifications and derived works.
 
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::IntoResponse;
+use axum::response::Response;
+use common_telemetry::info;
 use common_telemetry::tracing_subscriber::filter;
-use common_telemetry::{info, RELOAD_HANDLE};
+use common_telemetry::RELOAD_HANDLE;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

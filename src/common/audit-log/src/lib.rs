@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -25,10 +25,13 @@
 //! 2. Use `audit_info!()`, `audit_warn!()`, `audit_error!()`, `audit_debug!()` macros
 //! 3. Or use `AuditLogger::log()` for manual logging
 
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
+
+use chrono::Utc;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use std::fmt;
 use std::sync::Arc;
 
@@ -73,12 +76,7 @@ pub struct AuditLogEntry {
 }
 
 impl AuditLogEntry {
-    pub fn new(
-        service_name: String,
-        level: AuditLogLevel,
-        message: String,
-        metadata: Option<String>,
-    ) -> Self {
+    pub fn new(service_name: String, level: AuditLogLevel, message: String, metadata: Option<String>) -> Self {
         Self {
             timestamp: Utc::now(),
             service_name,
@@ -202,11 +200,10 @@ pub struct MqttProviderConfig {
 /// Global audit logger instance
 static AUDIT_LOGGER: OnceCell<Arc<RwLock<AuditLogger>>> = OnceCell::new();
 
-/// Get the default service name from environment or fallback
+/// Return the neutral fallback used when the application did not inject its
+/// centrally configured service name.
 pub fn get_default_service_name() -> String {
-    std::env::var("SIGBOT_SERVICE_NAME")
-        .or_else(|_| std::env::var("SERVICE_NAME"))
-        .unwrap_or_else(|_| "unknown-service".to_string())
+    "unknown-service".to_owned()
 }
 
 /// Audit logger that holds the provider
@@ -245,16 +242,8 @@ impl AuditLogger {
     }
 
     /// Log an audit entry
-    pub async fn log(
-        &self,
-        level: AuditLogLevel,
-        message: String,
-        metadata: Option<String>,
-    ) -> AuditLogResult<()> {
-        let provider = self
-            .provider
-            .as_ref()
-            .ok_or(AuditLogError::ProviderNotInitialized)?;
+    pub async fn log(&self, level: AuditLogLevel, message: String, metadata: Option<String>) -> AuditLogResult<()> {
+        let provider = self.provider.as_ref().ok_or(AuditLogError::ProviderNotInitialized)?;
 
         let service_name = self.service_name();
         let mut entry = AuditLogEntry::new(service_name, level, message, metadata);
@@ -282,10 +271,7 @@ impl AuditLogger {
 }
 
 /// Initialize the global audit logger with a provider
-pub fn init_audit_logger<P: AuditLogProvider + 'static>(
-    mut provider: P,
-    config: AuditLogConfig,
-) -> AuditLogResult<()> {
+pub fn init_audit_logger<P: AuditLogProvider + 'static>(mut provider: P, config: AuditLogConfig) -> AuditLogResult<()> {
     let service_name = if config.service_name.is_empty() {
         get_default_service_name()
     } else {
@@ -353,11 +339,7 @@ pub async fn audit_log(
 }
 
 /// Macro-friendly audit log function using default service from config/env
-pub async fn audit_log_default(
-    level: AuditLogLevel,
-    message: &str,
-    metadata: Option<&str>,
-) -> AuditLogResult<()> {
+pub async fn audit_log_default(level: AuditLogLevel, message: &str, metadata: Option<&str>) -> AuditLogResult<()> {
     let service_name = get_default_service_name();
 
     if let Some(logger) = get_audit_logger() {
@@ -561,13 +543,10 @@ pub mod providers {
         }
 
         async fn log(&self, entry: AuditLogEntry) -> AuditLogResult<()> {
-            let config = self
-                .config
-                .as_ref()
-                .ok_or(AuditLogError::ProviderNotInitialized)?;
+            let config = self.config.as_ref().ok_or(AuditLogError::ProviderNotInitialized)?;
 
-            let log_file = Path::new(&config.log_dir)
-                .join(format!("audit-{}.log", chrono::Utc::now().format("%Y-%m-%d")));
+            let log_file =
+                Path::new(&config.log_dir).join(format!("audit-{}.log", chrono::Utc::now().format("%Y-%m-%d")));
 
             let log_line = format!(
                 "{} [{}] [{}] {}{}\n",
@@ -575,11 +554,7 @@ pub mod providers {
                 entry.level,
                 entry.service_name,
                 entry.message,
-                entry
-                    .metadata
-                    .as_ref()
-                    .map(|m| format!(" | {}", m))
-                    .unwrap_or_default()
+                entry.metadata.as_ref().map(|m| format!(" | {}", m)).unwrap_or_default()
             );
 
             let mut file = OpenOptions::new()
@@ -636,7 +611,9 @@ pub mod providers {
                 let client_cell = self.client.clone();
 
                 tokio::spawn(async move {
-                    use rumqttc::{AsyncClient, MqttOptions, QoS};
+                    use rumqttc::AsyncClient;
+                    use rumqttc::MqttOptions;
+                    use rumqttc::QoS;
 
                     let mut mqtt_options = MqttOptions::new(
                         &mqtt_config_clone.client_id,
@@ -645,9 +622,7 @@ pub mod providers {
                     );
                     mqtt_options.set_keep_alive(std::time::Duration::from_secs(30));
 
-                    if let (Some(username), Some(password)) =
-                        (mqtt_config_clone.username, mqtt_config_clone.password)
-                    {
+                    if let (Some(username), Some(password)) = (mqtt_config_clone.username, mqtt_config_clone.password) {
                         mqtt_options.set_credentials(username, password);
                     }
 
@@ -677,15 +652,9 @@ pub mod providers {
         }
 
         async fn log(&self, entry: AuditLogEntry) -> AuditLogResult<()> {
-            let config = self
-                .config
-                .as_ref()
-                .ok_or(AuditLogError::ProviderNotInitialized)?;
+            let config = self.config.as_ref().ok_or(AuditLogError::ProviderNotInitialized)?;
 
-            let client = self
-                .client
-                .get()
-                .ok_or(AuditLogError::ProviderNotInitialized)?;
+            let client = self.client.get().ok_or(AuditLogError::ProviderNotInitialized)?;
 
             // Build topic: /internal/v1/{tenant_id}/{workflow_id}/audit/log
             let topic = match &config.topic_prefix {
@@ -693,8 +662,7 @@ pub mod providers {
                 None => format!("/internal/v1/{}/audit/log", config.tenant_id),
             };
 
-            let payload = serde_json::to_string(&entry)
-                .map_err(|e| AuditLogError::PublishFailed(e.to_string()))?;
+            let payload = serde_json::to_string(&entry).map_err(|e| AuditLogError::PublishFailed(e.to_string()))?;
 
             client
                 .publish(&topic, rumqttc::QoS::AtLeastOnce, false, payload.as_bytes())
@@ -765,3 +733,7 @@ pub use providers::FileAuditLogProvider;
 
 #[cfg(feature = "mqtt-provider")]
 pub use providers::MqttAuditLogProvider;
+
+// Re-export audit_log attribute macro for convenience
+// This allows users to import audit_log from common_audit_log directly
+pub use common_macro::audit_log;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,10 +19,17 @@
 // This includes modifications and derived works.
 
 pub mod backtest;
+pub mod controller;
 pub mod datafeed;
-pub mod exchange;
-pub mod notification;
+pub mod domain;
+pub mod evaluator;
+pub mod exporter;
+pub mod notifier;
 pub mod order;
 pub mod strategy;
 pub mod wallet;
 pub mod workflow;
+
+pub mod logger;
+
+pub mod messager;

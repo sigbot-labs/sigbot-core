@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,9 +19,11 @@
 // This includes modifications and derived works.
 
 use crate::config::config::AppConfig;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::new_exporter;
+use opentelemetry_otlp::ExportConfig;
+use opentelemetry_otlp::Protocol;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_otlp::{new_exporter, ExportConfig, Protocol};
 use opentelemetry_sdk::runtime::Tokio;
 use opentelemetry_sdk::trace::Config;
 use opentelemetry_sdk::trace::Tracer;
@@ -36,7 +38,7 @@ pub async fn create_otel_tracer(config: &Arc<AppConfig>) -> Option<Tracer> {
         let _tracer = opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_exporter(new_exporter().tonic().with_export_config(ExportConfig {
-                endpoint: config.mgmt.otel.endpoint.to_string(),
+                endpoint: config.mgmt.otel.endpoint.clone(),
                 protocol: match config.mgmt.otel.protocol.to_lowercase().as_str() {
                     "http/protobuf" => Protocol::HttpBinary,
                     "grpc" => Protocol::Grpc,
@@ -49,7 +51,7 @@ pub async fn create_otel_tracer(config: &Arc<AppConfig>) -> Option<Tracer> {
                 // Notice: More OTEL custom configuration use to environment: OTEL_SPAN_xxx, see to: opentelemetry_sdk::trace::config::default()
                 Config::default().with_resource(Resource::new(vec![KeyValue::new(
                     "service.name",
-                    config.service_name.to_string(),
+                    config.service_name.clone(),
                 )])),
             )
             .install_batch(Tokio)
@@ -59,8 +61,7 @@ pub async fn create_otel_tracer(config: &Arc<AppConfig>) -> Option<Tracer> {
         tracer = Some(_tracer);
         //tracer = Some(TracerProvider::tracer(&tracer_provider, "default_tracer"));
 
-        // Make sure all trace data is refreshed.
-        global::shutdown_tracer_provider();
+        // The provider stays alive until application shutdown.
     }
 
     tracer

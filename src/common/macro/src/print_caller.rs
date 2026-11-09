@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,8 +19,14 @@
 // This includes modifications and derived works.
 
 use proc_macro::TokenStream;
-use quote::{ quote, ToTokens };
-use syn::{ parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta };
+use quote::quote;
+use quote::ToTokens;
+use syn::parse_macro_input;
+use syn::AttributeArgs;
+use syn::ItemFn;
+use syn::Lit;
+use syn::Meta;
+use syn::NestedMeta;
 
 pub(crate) fn process_print_caller(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut depth = 1;
@@ -39,8 +45,7 @@ pub(crate) fn process_print_caller(args: TokenStream, input: TokenStream) -> Tok
         }
     }
 
-    let tokens: TokenStream = (
-        quote! {
+    let tokens: TokenStream = (quote! {
         {
             let curr_file = file!();
 
@@ -96,8 +101,8 @@ pub(crate) fn process_print_caller(args: TokenStream, input: TokenStream) -> Tok
                 }
             }
         }
-    }
-    ).into();
+    })
+    .into();
 
     let stmt = match syn::parse(tokens) {
         Ok(stmt) => stmt,

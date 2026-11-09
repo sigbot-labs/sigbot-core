@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -19,7 +19,10 @@
 // This includes modifications and derived works.
 
 use std::fmt;
-use strum::{AsRefStr, EnumIter, EnumString, FromRepr};
+use strum::AsRefStr;
+use strum::EnumIter;
+use strum::EnumString;
+use strum::FromRepr;
 
 /// Common status code for public API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsRefStr, EnumIter, FromRepr)]

@@ -1,0 +1,31 @@
+[package]
+name = "sigbot-evaluator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+common-context.workspace = true
+# Other modules dependencies.
+common-telemetry.workspace = true
+sigbot-types.workspace = true
+sigbot-utils.workspace = true
+sigbot-core.workspace = true
+sigbot-messager.workspace = true
+
+# Thirdparty dependencies.
+clap.workspace = true
+serde.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+anyhow.workspace = true
+serde_json.workspace = true
+url.workspace = true
+
+[build-dependencies]
+chrono.workspace = true

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -175,8 +175,8 @@ fn setup_linux_python_rpath() -> std::io::Result<()> {
 
     for path_str in common_paths {
         let path = std::path::PathBuf::from(path_str);
-        if path.exists() {
-            if path
+        if path.exists()
+            && path
                 .read_dir()
                 .map(|mut entries| {
                     entries.any(|e| {
@@ -185,9 +185,8 @@ fn setup_linux_python_rpath() -> std::io::Result<()> {
                     })
                 })
                 .unwrap_or(false)
-            {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
-            }
+        {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path.display());
         }
     }
 

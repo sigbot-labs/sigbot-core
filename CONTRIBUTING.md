@@ -4,7 +4,7 @@ Thanks a lot for considering contributing to SigBot. We believe people like you 
 
 Please read the guidelines, and they can help you get started. Communicate with respect to developers maintaining and developing the project. In return, they should reciprocate that respect by addressing your issue, reviewing changes, as well as helping finalize and merge your pull requests.
 
-Follow our [README](https://github.com/wl4g/sigbot#readme) to get the whole picture of the project. To learn about the design of SigBot, please refer to the [design docs](https://github.com/wl4g/docs).
+Follow our [README](README.md) to get the whole picture of the project. To learn about the design of SigBot, start from the [documentation index](docs/index.md).
 
 ## Your First Contribution
 
@@ -19,7 +19,7 @@ It can feel intimidating to contribute to a complex project, but it can also be 
 Pull requests are great, but we accept all kinds of other help if you like. Such as
 
 - Write tutorials or blog posts. Blog, speak about, or create tutorials about one of SigBot's many features. Mention [@sigbot](https://twitter.com/sigbot) on Twitter and email <sigbot@gmail.com> so we can give pointers and tips and help you spread the word by promoting your content on SigBot communication channels.
-- Improve the documentation. [Submit documentation](https://github.com/wl4g/sigbot/docs/) updates, enhancements, designs, or bug fixes, and fixing any spelling or grammar errors will be very much appreciated.
+- Improve the documentation. Updates, enhancements, designs, bug fixes, and spelling or grammar corrections under [docs/](docs/index.md) are very much appreciated.
 - Present at meetups and conferences about your SigBot projects. Your unique challenges and successes in building things with SigBot can provide great speaking material. We'd love to review your talk abstract, so get in touch with us if you'd like some help!
 - Submitting bug reports. To report a bug or a security issue, you can [open a new GitHub issue](https://github.com/wl4g/sigbot/issues/new).
 - Speak up feature requests. Send feedback is a great way for us to understand your different use cases of SigBot better. If you want to share your experience with SigBot, or if you want to discuss any ideas, you can start a discussion on [GitHub discussions](https://github.com/wl4g/sigbot/discussions), chat with the SigBot team on [Slack](https://sigbot.com/slack), or you can tweet [@sigbot](https://twitter.com/sigbot) on Twitter.

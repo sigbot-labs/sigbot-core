@@ -1,5 +1,5 @@
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -23,6 +23,5 @@ pub mod context;
 pub mod llm;
 pub mod mgmt;
 pub mod modules;
-pub mod store;
-pub mod sys;
+pub mod storage;
 pub mod util;

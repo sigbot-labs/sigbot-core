@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error::{Result, UnsupportedSnafu};
+use crate::error::Result;
+
+use crate::error::UnsupportedSnafu;
 use std::time::Duration;
 
 /// Dummpy CPU profiler utility.

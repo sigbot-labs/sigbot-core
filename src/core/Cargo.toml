@@ -8,6 +8,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+common-context.workspace = true
+authguard-adapter-rust.workspace = true
 # Other modules dependencies.
 common-audit-log.workspace = true
 common-telemetry.workspace = true
@@ -26,7 +28,6 @@ uuid.workspace = true
 serde.workspace = true
 validator.workspace = true
 tokio.workspace = true
-tokio-cron-scheduler.workspace = true
 config.workspace = true
 chrono.workspace = true
 once_cell.workspace = true
@@ -37,21 +38,16 @@ anyhow.workspace = true
 dotenv.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
+serde_path_to_error = "0.1.20"
 regex.workspace = true
-openapi.workspace = true
-utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { workspace = true, features = ["axum"] }
-# utoipa-swagger-ui-vendored = { workspace = true}
 futures.workspace = true
-rust-embed.workspace = true
-mime_guess.workspace = true
 
 # Lang libs
 base64 = { workspace = true}
 hex = { workspace = true}
 
 # Database libs
-mongodb = { workspace = true }
+rust_decimal.workspace = true
 sqlx = { workspace = true, features = [
     "runtime-tokio-rustls",
     "sqlite",
@@ -65,11 +61,7 @@ openai.workspace = true
 langchain-rust.workspace = true
 pgvector.workspace = true
 # OAuth2 libs
-oauth2.workspace = true
-openidconnect.workspace = true
-jsonwebtoken.workspace = true
 url.workspace = true
-globset.workspace = true
 # Encrypt libs
 openssl = { workspace = true }
 rsa = { workspace = true }
@@ -78,7 +70,6 @@ sha2 = { workspace = true }
 moka = { workspace = true, features = ["future"] }
 redis = { workspace = true, features = ["tokio-comp", "cluster-async"] }
 # Ethers libs
-ethers = { workspace = true, features = ["abigen", "ws", "rustls"] }
 eyre = { workspace = true }
 # APM libs
 prometheus.workspace = true
@@ -112,4 +103,18 @@ path = "benches/bench_main.rs"
 harness = false
 
 [dev-dependencies]
+globset.workspace = true
+percent-encoding.workspace = true
 criterion.workspace = true
+
+[[test]]
+name = "authguard_integration"
+path = "tests/context/authguard_test.rs"
+
+[[test]]
+name = "scoped_query"
+path = "tests/storage/scoped_query_test.rs"
+
+[[test]]
+name = "mgmt_health"
+path = "tests/mgmt/health_test.rs"

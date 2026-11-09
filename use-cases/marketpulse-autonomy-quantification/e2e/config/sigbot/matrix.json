@@ -1,0 +1,37 @@
+{
+  "docker": [
+    "structure",
+    "schemas",
+    "infra",
+    "acl",
+    "database",
+    "rust-cache",
+    "rust-contracts",
+    "deployment",
+    "boundaries",
+    "rust-boundaries",
+    "rust-policy",
+    "rust-market",
+    "rust-extensions",
+    "rust-messaging",
+    "rust-effects",
+    "rust-owners",
+    "rust-groups",
+    "rust-resting",
+    "rust-export",
+    "rust-logs",
+    "runtime",
+    "workflow",
+    "recovery",
+    "replay",
+    "groups",
+    "logs",
+    "web"
+  ],
+  "kubernetes": [
+    "structure",
+    "deployment",
+    "kubernetes-prepare",
+    "rust-deployment"
+  ]
+}

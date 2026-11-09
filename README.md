@@ -4,24 +4,28 @@
 
 ## Introduction
 
-Sigbot is a lightweight, Rust-based AI-driven trading bot that dynamically generates strategy code via LLM. It consists of multiple components - **api-server**, **deployer**, **datafeed-ingestor**, **strategy-runner**, **backtest-runner**,**notification-forwarder**, **order-manager**, **wallet-manager** - working together to provide a robust, multi-tenant trading platform.
+Sigbot is a Rust-based, AI-assisted trading platform. Its shared platform plane is the **HTTP/A2A APIs**, **controller**, and **Web application**. The controller places isolated **backtest**, **datafeed**, **evaluator**, **exporter**, **logger**, **notifier**, **order**, **strategy**, and **wallet** components for each tenant and Workflow on Docker or Kubernetes workers. Exchange and Messager are embedded shared libraries rather than independently deployed services.
 
 ## Features
 
-- **Multi-tenant Architecture**: Support for managing tenants, users, and component deployments via Kubernetes or hosted environments;
-- **Dynamic Strategy Generation**: AI-powered strategy code generation using LangChain-based AI;
-- **Real-time Market Data Processing**: Ingest market data from multiple sources (Binance, Twitter, TruthSocial, Coinmarketcap, etc.) and publish via EMQx/Kafka;
-- **Historical Data Archiving**: Async archiving of market data to PostgreSQL/TimescaleDB for backtesting;
-- **Live & Backtest Trading**: Execute strategies in both live trading and backtest modes with position management;
-- **Multi-channel Notifications**: Forward trading signals and notifications to Email, Telegram, WeChat, and other platforms;
-- **Lightweight and Efficient**: Built with Rust async Axum framework for high performance;
+- **Tenant and Workflow isolation**: Authguard supplies platform identity and authorization; MQTT topics, storage ownership, and worker resources are scoped by `env`, `tenant_id`, and `workflow_id`.
+- **Deterministic strategy effects**: Strategies emit intents, bounded queries, and timers; they never submit orders directly.
+- **Real-time market and news ingestion**: Binance, Twitter/X, Truth Social, Federal Reserve, and Treasury facts retain source, event time, available time, sequence, and revision.
+- **Durable asynchronous processing**: EMQX QoS 1 persistent sessions plus transactional Inbox/Outbox provide replay, deduplication, and restart recovery.
+- **Three execution modes**: `live` uses real exchange APIs, `paper` uses a simulated exchange API, and `backtest` uses the isolated historical matching service.
+- **Authoritative financial state**: Order prechecks, Wallet reservations, immutable double-entry journals, rebuildable balances and positions, and venue reconciliation are separated by write ownership.
+- **Traceable evaluation and delivery**: LLM assessments separate facts from inference; logs archive to immutable S3 chunks; Email, Telegram, and in-app notifications retain idempotent delivery state.
+
+MCP exposure is generated from the HTTP OpenAPI schema by [mcpfather](https://github.com/flowgent-labs/mcpfather), deployed independently. Sigbot is a real integration case; see the [generation guide](docs/architecture/engine/mcp/overview.md). The built-in MCP server has been archived.
 
 ## Development
 
-- [Prerequisites for locally Development](./docs/devel/1.prerequisites-for-dev.md)
-- [Build and Test for locally Development](./docs/devel/2.build-and-test-for-dev.md)
+- [Documentation index](./docs/index.md)
+- [Coding-agent handoff and current evidence](./docs/development/HARDCOVER.md)
+- [Development prerequisites](./docs/runbooks/development-prerequisites.md)
+- [Build and test](./docs/runbooks/build-and-test.md)
 
 ## Deployment
 
-- [Deploy on Docker](./docs/deploy/build-and-deploy-on-docker.md)
-- [Deploy on Kubernetes](./docs/deploy/deploy-on-kubernetes.md)
+- [Deploy on Docker](./docs/runbooks/build-and-deploy-docker.md)
+- [Deploy on Kubernetes](./docs/runbooks/deploy-kubernetes.md)

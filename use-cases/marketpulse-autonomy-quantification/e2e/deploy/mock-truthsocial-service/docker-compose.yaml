@@ -1,0 +1,27 @@
+services:
+  mock-truthsocial:
+    build:
+      context: ../..
+      dockerfile: deploy/mock-truthsocial-service/Dockerfile
+    image: ${MARKETPULSE_TRUTHSOCIAL_IMAGE:?select the image catalog}
+    environment:
+      MARKETPULSE_MOCK_TOKEN: ${MARKETPULSE_MOCK_TOKEN:?required}
+      MARKETPULSE_PUBLIC_URL: ${MARKETPULSE_TRUTHSOCIAL_PUBLIC_URL:-http://127.0.0.1:18482}
+    ports:
+    - 127.0.0.1:18482:8080
+    mem_limit: 256m
+    cpus: '0.5'
+    read_only: true
+    tmpfs:
+    - /tmp:size=32m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"
+      interval: 5s
+      timeout: 3s
+      retries: 20

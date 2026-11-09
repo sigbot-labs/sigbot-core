@@ -1,0 +1,346 @@
+// SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
+//
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
+// is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// James Wong is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with James Wong.  If not, see <https://www.gnu.org/licenses/>.
+//
+// IMPORTANT: Any software that fully or partially contains or uses materials
+// covered by this license must also be released under the GNU GPL license.
+// This includes modifications and derived works.
+
+use crate::config::config::SqliteStorageProperties;
+use anyhow::Error;
+use common_telemetry::debug;
+use common_telemetry::error;
+use common_telemetry::info;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::Pool;
+use sqlx::Sqlite;
+use sqlx::SqlitePool;
+use std::any::Any;
+use std::fs;
+use std::marker::PhantomData;
+use std::path::Path;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+// 单例的 SQLite pool 管理器
+struct SQLitePoolManager {
+    pool: Arc<SqlitePool>,
+}
+
+static POOL_MANAGER: OnceCell<Arc<SQLitePoolManager>> = OnceCell::const_new();
+
+impl SQLitePoolManager {
+    async fn init(config: &SqliteStorageProperties) -> Result<Arc<Self>, Error> {
+        let dir = config.dir.clone().expect("Sqlite dir missing configured");
+        let db_dir = Path::new(&dir);
+        if !db_dir.exists() {
+            fs::create_dir_all(db_dir).map_err(|e| {
+                error!("Failed to create the sqlite database directory: {}", e);
+                e
+            })?;
+        }
+
+        let db_url: String = format!("sqlite://{}/sqlite.db", &dir).to_string();
+        if !Sqlite::database_exists(db_url.as_str()).await.unwrap_or(false) {
+            info!("Creating the sqlite database ...");
+            match Sqlite::create_database(db_url.as_str()).await {
+                Ok(_) => info!("The sqlite database created successfully."),
+                Err(error) => panic!("Error to create db: {}", error),
+            }
+        } else {
+            debug!("The sqlite database already exists, skip migration.");
+        }
+
+        match SqlitePool::connect(&db_url).await {
+            Ok(pool) => {
+                info!("Connected to the sqlite database to migration ...");
+                let pool = Self::run_migration(pool).await;
+                Ok(Arc::new(SQLitePoolManager { pool: Arc::new(pool) }))
+            }
+            Err(e) => {
+                error!("Failed to connect to the sqlite database to migration: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    async fn run_migration(pool: Pool<Sqlite>) -> Pool<Sqlite> {
+        let results = sqlx::migrate!("../../migration").run(&pool).await;
+        match results {
+            Ok(_) => info!("The sqlite database migrated successfully."),
+            Err(error) => {
+                panic!("Error to migrate the sqlite database: {}", error);
+            }
+        }
+        pool
+    }
+}
+
+//
+// const MIGRATION_INIT_SQL: &str = include_str!("../deployment/migrations/20240710083754_init.sql");
+pub struct SQLiteRepository<T: Any + Send + Sync> {
+    phantom: PhantomData<T>,
+    pool: Arc<SqlitePool>,
+}
+
+impl<T: Any + Send + Sync> SQLiteRepository<T> {
+    // see:https://tms-dev-blog.com/rust-sqlx-basics-with-sqlite/#Adding_a_migration_script
+    pub async fn get_or_init(config: &SqliteStorageProperties) -> Result<Self, Error> {
+        let config = config.clone();
+        let manager = POOL_MANAGER
+            .get_or_try_init(|| async move { SQLitePoolManager::init(&config).await })
+            .await?;
+        Ok(SQLiteRepository {
+            phantom: PhantomData,
+            pool: manager.pool.clone(),
+        })
+    }
+
+    pub fn get_pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+}
+
+#[macro_export]
+macro_rules! dynamic_sqlite_query {
+    ($bean:expr, $table:expr, $pool:expr, $order_by:expr, $page:expr, $($t:ty),+) => {
+          {
+              // Notice:
+              // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+              // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+              // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+              let serialized = serde_json::to_value(&$bean).unwrap();
+              let obj = serialized.as_object().unwrap();
+
+              let mut fields = Vec::new();
+              let mut params = Vec::new();
+              for (key, value) in obj {
+                let param = match value {
+                    serde_json::Value::String(value) if !value.is_empty() => {
+                        if key == "created_at" || key == "updated_at" {
+                            sigbot_utils::types::GenericValue::DateTime(chrono::DateTime::parse_from_rfc3339(value)?.with_timezone(&chrono::Utc))
+                        } else { sigbot_utils::types::GenericValue::String(value.clone()) }
+                    }
+                    serde_json::Value::Number(value) => {
+                        if let Some(value) = value.as_i64() { sigbot_utils::types::GenericValue::Int64(value) }
+                        else if let Some(value) = value.as_f64() { sigbot_utils::types::GenericValue::Float64(value) }
+                        else { continue; }
+                    }
+                    serde_json::Value::Bool(value) => sigbot_utils::types::GenericValue::Bool(*value),
+                    _ => continue,
+                };
+                fields.push(format!("{} = ?", key));
+                params.push(param);
+            }
+            let where_clause = if fields.is_empty() {
+                  "1=1".to_string()
+              } else {
+                  fields.join(" AND ")
+              };
+
+              // Queries to get total count.
+              let total_query = format!("SELECT COUNT(1) FROM {} WHERE {} AND del_flag = 0", $table, where_clause);
+              use sqlx::Row;
+              let mut operator = sqlx::query(&total_query);
+              for param in params.iter() {
+                  match param {
+                      sigbot_utils::types::GenericValue::Bool(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Int64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Float64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::String(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::DateTime(value) => operator = operator.bind(value),
+                      _ => unreachable!("query scalar type"),
+                  }
+              }
+              let total_count = operator.fetch_one($pool).await?.get::<i64, _>(0);
+
+              // Queries to get data.
+              let query = format!("SELECT * FROM {} WHERE {} AND del_flag = 0 ORDER BY {} LIMIT {} OFFSET {}",
+                    $table, where_clause, $order_by, $page.get_limit(), $page.get_offset());
+
+              let mut operator = sqlx::query_as::<_, $($t),+>(&query);
+              for param in params.iter() {
+                  match param {
+                      sigbot_utils::types::GenericValue::Bool(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Int64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::Float64(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::String(value) => operator = operator.bind(value),
+                      sigbot_utils::types::GenericValue::DateTime(value) => operator = operator.bind(value),
+                      _ => unreachable!("query scalar type"),
+                  }
+              }
+
+              match operator.fetch_all($pool).await {
+                  std::result::Result::Ok(result) => {
+                    let page = PageResponse::new(
+                        Some(total_count),
+                        Some($page.get_offset()),
+                        Some($page.get_limit()));
+                      Ok((page, result))
+                  },
+                  Err(error) => {
+                      Err(error.into())
+                  }
+              }
+          }
+    };
+}
+
+#[macro_export]
+macro_rules! dynamic_sqlite_upsert {
+    ($bean:expr, $table:expr, $pool:expr) => {{
+        use sigbot_utils::types::GenericValue;
+
+        let insert_by = $bean.base.created_by.clone();
+
+        // Notice:
+        // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+        // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+        // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+        let supplied_id = $bean.base.id;
+        $bean.base.pre_insert(insert_by).await;
+        if supplied_id.is_some() {
+            $bean.base.id = supplied_id;
+        }
+
+        let serialized = serde_json::to_value($bean).unwrap();
+        let obj = serialized.as_object().unwrap();
+
+        let mut fields = Vec::new();
+        let mut values = Vec::new();
+        let mut params = Vec::new();
+        for (key, value) in obj {
+            if !value.is_null() {
+                if value.is_boolean() {
+                    let v = value.as_bool().unwrap();
+                    fields.push(key.as_str());
+                    values.push("?");
+                    params.push(GenericValue::Bool(v));
+                } else if value.is_number() {
+                    let v = value.as_i64().unwrap();
+                    fields.push(key.as_str());
+                    values.push("?");
+                    params.push(GenericValue::Int64(v));
+                } else if value.is_string() {
+                    let v = value.as_str().unwrap_or("");
+                    if !v.is_empty() {
+                        fields.push(key.as_str());
+                        values.push("?");
+                        params.push(GenericValue::String(v.to_string()));
+                    }
+                }
+            }
+        }
+        if fields.is_empty() {
+            return Ok(-1);
+        }
+
+        let query = format!(
+            "INSERT OR IGNORE INTO {} ({}) VALUES ({})",
+            $table,
+            fields.join(","),
+            values.join(",")
+        );
+
+        let mut operator = sqlx::query(&query);
+        for param in params.iter() {
+            if let GenericValue::Bool(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Int64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::String(v) = param {
+                operator = operator.bind(v);
+            }
+        }
+
+        match operator.execute($pool).await {
+            std::result::Result::Ok(result) => {
+                if result.rows_affected() > 0 {
+                    return Ok(result.last_insert_rowid());
+                } else {
+                    return Ok(-1);
+                }
+            }
+            Err(e) => Err(Error::from(e)),
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! dynamic_sqlite_update {
+    ($bean:expr, $table:expr, $pool:expr) => {{
+        use sigbot_utils::types::GenericValue;
+
+        let updated_by = $bean.base.updated_by.clone();
+        $bean.base.pre_update(updated_by).await;
+
+        // Notice:
+        // 1. (SQLite) Because the ORM library is not used for the time being, the fields are dynamically
+        // parsed based on serde_json, so the #[serde(rename="xx")] annotation is effective.
+        // TODO: It is recommended to use an ORM framework, see: https://github.com/diesel-rs/diesel
+        let id = $bean.base.id.unwrap();
+        let serialized = serde_json::to_value($bean).unwrap();
+        let obj = serialized.as_object().unwrap();
+
+        let mut fields = Vec::new();
+        let mut params = Vec::new();
+        for (key, value) in obj {
+            if !value.is_null() {
+                if value.is_boolean() {
+                    let v = value.as_bool().unwrap();
+                    fields.push(format!("{} = ?", key));
+                    params.push(GenericValue::Bool(v));
+                } else if value.is_number() {
+                    let v = value.as_i64().unwrap();
+                    fields.push(format!("{} = ?", key));
+                    params.push(GenericValue::Int64(v));
+                } else if value.is_string() {
+                    let v = value.as_str().unwrap_or("");
+                    if !v.is_empty() {
+                        fields.push(format!("{} = ?", key));
+                        params.push(GenericValue::String(v.to_string()));
+                    }
+                }
+            }
+        }
+        if fields.is_empty() {
+            return Ok(0);
+        }
+
+        let query = format!("UPDATE {} SET {} WHERE id = ?", $table, fields.join(", "));
+        let mut operator = sqlx::query(&query);
+        for param in params.iter() {
+            if let GenericValue::Bool(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::Int64(v) = param {
+                operator = operator.bind(v);
+            } else if let GenericValue::String(v) = param {
+                operator = operator.bind(v);
+            }
+        }
+        operator = operator.bind(id);
+
+        match operator.execute($pool).await {
+            std::result::Result::Ok(result) => {
+                if result.rows_affected() > 0 {
+                    return Ok(id);
+                } else {
+                    return Ok(-1);
+                }
+            }
+            Err(e) => Err(Error::from(e)),
+        }
+    }};
+}

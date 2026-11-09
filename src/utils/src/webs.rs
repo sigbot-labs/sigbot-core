@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -18,14 +18,26 @@
 // covered by this license must also be released under the GNU GPL license.
 // This includes modifications and derived works.
 
-use axum::{
-    body::Body,
-    extract::Request,
-    http::{ header, HeaderMap, HeaderValue, Response },
-    response::{ IntoResponse, Redirect },
-};
+use axum::body::Body;
+
+use axum::extract::Request;
+
+use axum::http::header;
+
+use axum::http::HeaderMap;
+
+use axum::http::HeaderValue;
+
+use axum::http::Response;
+
+use axum::response::IntoResponse;
+
+use axum::response::Redirect;
 use hyper::StatusCode;
-use tower_cookies::{ cookie::{ time::Duration, CookieBuilder, SameSite }, Cookie };
+use tower_cookies::cookie::time::Duration;
+use tower_cookies::cookie::CookieBuilder;
+use tower_cookies::cookie::SameSite;
+use tower_cookies::Cookie;
 
 pub const APPLICATION_JSON_HEADER_VALUE: HeaderValue = HeaderValue::from_static("application/json");
 
@@ -37,7 +49,10 @@ pub fn create_cookie_headers(key: &str, value: &str) -> header::HeaderMap {
         .http_only(true)
         .same_site(SameSite::Strict)
         .build();
-    let header_value = cookie.to_string().parse::<HeaderValue>().expect("Failed to parse cookie");
+    let header_value = cookie
+        .to_string()
+        .parse::<HeaderValue>()
+        .expect("Failed to parse cookie");
     let mut headers = header::HeaderMap::new();
     headers.append(header::SET_COOKIE, header_value); // Will cover!
     headers
@@ -85,7 +100,7 @@ pub fn is_browser(headers: &HeaderMap) -> bool {
             headers
                 .get("User-Agent")
                 .and_then(|value| value.to_str().ok())
-                .unwrap_or("")
+                .unwrap_or(""),
         );
     user_agent.contains("Mozilla")
 }
@@ -96,7 +111,7 @@ pub fn response_redirect_or_json(
     cookies: Option<(Option<Cookie>, Option<Cookie>, Option<Cookie>)>,
     redirect_url: &str,
     message: &str,
-    json: &str
+    json: &str,
 ) -> Response<Body> {
     let mut response;
     if is_browser(headers) {
@@ -120,19 +135,12 @@ pub fn response_redirect_or_json(
         response = Redirect::to(_url.as_str()).into_response();
     } else {
         response = (status, json.to_string()).into_response();
-        response.headers_mut().insert(header::CONTENT_TYPE, APPLICATION_JSON_HEADER_VALUE);
+        response
+            .headers_mut()
+            .insert(header::CONTENT_TYPE, APPLICATION_JSON_HEADER_VALUE);
     }
     if let Some(tuple3) = cookies {
-        let mut cs = Vec::new();
-        if tuple3.0.is_some() {
-            cs.push(tuple3.0.unwrap());
-        }
-        if tuple3.1.is_some() {
-            cs.push(tuple3.1.unwrap());
-        }
-        if tuple3.2.is_some() {
-            cs.push(tuple3.2.unwrap());
-        }
+        let cs = [tuple3.0, tuple3.1, tuple3.2].into_iter().flatten().collect();
         add_cookies(&mut response, cs);
     }
     response

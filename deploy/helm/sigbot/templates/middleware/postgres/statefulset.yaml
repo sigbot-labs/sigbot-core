@@ -1,0 +1,57 @@
+{{- if .Values.middleware.postgres.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sigbot.fullname" . }}-postgres
+  labels:
+    {{- include "sigbot.labels" . | nindent 4 }}
+    sigbot.io/component: postgres
+spec:
+  serviceName: {{ include "sigbot.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      sigbot.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        sigbot.io/component: postgres
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch}
+      containers:
+        - name: postgresql
+          image: {{ include "sigbot.image" (dict "root" . "image" .Values.middleware.postgres.image) | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: POSTGRES_USER, value: {{ .Values.middleware.postgres.auth.username | quote }}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.middleware.postgres.auth.existingSecret }}, key: {{ .Values.middleware.postgres.auth.passwordKey }}}}
+            - {name: POSTGRES_DB, value: {{ .Values.middleware.postgres.auth.database | quote }}}
+            - {name: PGDATA, value: /home/postgres/pgdata/data/pgdata}
+          ports: [{name: postgresql, containerPort: 5432}]
+          volumeMounts:
+            - {name: extensions, mountPath: /docker-entrypoint-initdb.d/20-extensions.sql, subPath: 20-extensions.sql, readOnly: true}
+            - {name: data, mountPath: /home/postgres/pgdata/data}
+          resources: {{ toYaml .Values.middleware.postgres.resources | nindent 12 }}
+          livenessProbe: &pgProbe
+            exec: {command: [pg_isready, -U, {{ .Values.middleware.postgres.auth.username }}]}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            <<: *pgProbe
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: extensions
+          configMap: {name: {{ include "sigbot.fullname" . }}-postgres-extensions}
+        - name: data
+          {{- if .Values.middleware.postgres.persistence.enabled }}
+          persistentVolumeClaim: {claimName: {{ include "sigbot.fullname" . }}-postgres}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

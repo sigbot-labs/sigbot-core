@@ -15,7 +15,8 @@
 use common_error::ext::ErrorExt;
 use common_error::status_code::StatusCode;
 use common_macro::stack_trace_debug;
-use snafu::{Location, Snafu};
+use snafu::Location;
+use snafu::Snafu;
 use std::any::Any;
 
 #[derive(Snafu)]

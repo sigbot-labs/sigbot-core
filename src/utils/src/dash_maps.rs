@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GNU GENERAL PUBLIC LICENSE Version 3
 //
-// Copyleft (c) 2024 James Wong. This file is part of James Wong.
+// Copyright (c) 2027 James Wong. This file is part of James Wong.
 // is free software: you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the
 // Free Software Foundation, either version 3 of the License, or
@@ -34,20 +34,23 @@ use std::hash::Hash;
 ///
 /// # Example
 /// ```rust
-/// use sigbot_utils::maps::ConcurrentHashMap;
+/// # #[tokio::main]
+/// # async fn main() {
+/// use sigbot_utils::dash_maps::ConcurrentMap;
 ///
-/// let map = ConcurrentHashMap::<String, String>::new();
+/// let map = ConcurrentMap::<String, String>::new();
 ///
-/// map.compute_if_present("key".to_string(), |old_value| {
+/// map.compute_if_present("key".to_string(), |old_value| async move {
 ///     Some(format!("updated_{}", old_value))
 /// }).await;
 ///
-/// map.compute("key".to_string(), |old_value| {
+/// map.compute("key".to_string(), |old_value| async move {
 ///     match old_value {
 ///         Some(v) => Some(format!("updated_{}", v)),
 ///         None => Some("new_value".to_string()),
 ///     }
 /// }).await;
+/// # }
 /// ```
 pub struct ConcurrentMap<K, V> {
     inner: DashMap<K, V>,
@@ -75,11 +78,15 @@ where
     ///
     /// # Example
     /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// # let map = sigbot_utils::dash_maps::ConcurrentMap::<String, String>::new();
     /// // Similar to: map.computeIfPresent(key, (k, v) -> { ... insert into ... on conflict ... })
     /// map.compute_if_present("key".to_string(), |old_value| async move {
     ///     // Perform database-like INSERT ... ON CONFLICT logic
     ///     Some(format!("updated_{}", old_value))
     /// }).await;
+    /// # }
     /// ```
     pub async fn compute_if_present<F, Fut>(&self, key: K, creating_fn: F) -> Option<V>
     where
@@ -116,12 +123,16 @@ where
     ///
     /// # Example
     /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// # let map = sigbot_utils::dash_maps::ConcurrentMap::<String, String>::new();
     /// map.compute("key".to_string(), |old_value| async move {
     ///     match old_value {
     ///         Some(v) => Some(format!("updated_{}", v)),
     ///         None => Some("new_value".to_string()),
     ///     }
     /// }).await;
+    /// # }
     /// ```
     pub async fn compute<F, Fut>(&self, key: K, creating_fn: F) -> Option<V>
     where
@@ -271,12 +282,12 @@ pub mod tests {
         assert_eq!(map.get_async(&"key".to_string()).await.unwrap(), "value".to_string());
         assert_eq!(map.remove_async(&"key".to_string()).await.unwrap(), "value".to_string());
         assert_eq!(map.get_async(&"key".to_string()).await, None);
-        assert_eq!(map.contains_key_async(&"key".to_string()).await, false);
+        assert!(!map.contains_key_async(&"key".to_string()).await);
         assert_eq!(map.len_async().await, 0);
-        assert_eq!(map.is_empty_async().await, true);
+        assert!(map.is_empty_async().await);
         map.clear_async().await;
         assert_eq!(map.len_async().await, 0);
-        assert_eq!(map.is_empty_async().await, true);
+        assert!(map.is_empty_async().await);
     }
 
     #[test]
@@ -284,8 +295,8 @@ pub mod tests {
         let map = ConcurrentMap::new();
         assert_eq!(map.insert("key".to_string(), "value".to_string()), None);
         assert_eq!(map.get(&"key".to_string()).unwrap(), "value".to_string());
-        assert_eq!(map.contains_key(&"key".to_string()), true);
+        assert!(map.contains_key(&"key".to_string()));
         assert_eq!(map.len(), 1);
-        assert_eq!(map.is_empty(), false);
+        assert!(!map.is_empty());
     }
 }

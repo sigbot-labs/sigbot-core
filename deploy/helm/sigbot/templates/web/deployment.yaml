@@ -1,0 +1,63 @@
+{{- if .Values.sigbot.web.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigbot.fullname" . }}-web
+spec:
+  replicas: {{ .Values.sigbot.web.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sigbot.selectorLabels" . | nindent 6 }}
+      component: web
+  template:
+    metadata:
+      labels:
+        {{- include "sigbot.selectorLabels" . | nindent 8 }}
+        component: web
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 101, fsGroup: 101}
+      containers:
+        - name: web
+          image: {{ include "sigbot.image" (dict "root" . "image" .Values.sigbot.web.image) | quote }}
+          ports: [{name: http, containerPort: 8080}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            {{- toYaml .Values.sigbot.web.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigbot.fullname" . }}-web
+spec:
+  type: ClusterIP
+  ports: [{name: http, port: 8080, targetPort: http}]
+  selector:
+    {{- include "sigbot.selectorLabels" . | nindent 4 }}
+    component: web
+{{- if .Values.sigbot.api.gateway.enabled }}
+{{- if not .Values.sigbot.api.gateway.hostnames }}{{ fail "server.gateway.hostnames requires the real application hostname" }}{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "sigbot.fullname" . }}-web
+spec:
+  parentRefs:
+    - name: {{ .Values.sigbot.api.gateway.name }}
+      {{- with .Values.sigbot.api.gateway.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+  hostnames:
+    {{- toYaml .Values.sigbot.api.gateway.hostnames | nindent 4 }}
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      backendRefs:
+        - name: {{ include "sigbot.fullname" . }}-web
+          port: 8080
+{{- end }}
+{{- end }}
